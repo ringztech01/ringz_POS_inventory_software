@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#eef1f4; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#0f7d6a; text-decoration:none; }
+  a:hover { color:#0a6355; text-decoration:underline; }
+  * { box-sizing:border-box; }
+  input, button { font-family:inherit; }
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:26px;padding:40px 20px">
+  <div style="width:64px;height:64px;border-radius:999px;overflow:hidden;box-shadow:0 4px 12px -4px rgba(23,27,28,.2)">
+    <image-slot id="login-avatar" shape="circle" placeholder="Logo"></image-slot>
+  </div>
+
+  <div style="width:100%;max-width:544px;background:#fff;border-radius:16px;box-shadow:0 8px 28px -12px rgba(23,27,28,.16);padding:38px 40px 42px;display:flex;flex-direction:column;gap:26px">
+    <h1 style="margin:0;text-align:center;font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;letter-spacing:-.015em">Sign In</h1>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <label style="font-size:14px;font-weight:600;color:#363d3f">Email :<span style="color:#e0483d">*</span></label>
+      <input type="email" placeholder="Enter Email" style="height:50px;border:1px solid #dde2e3;border-radius:9px;padding:0 15px;font-size:15px;color:#171b1c;outline:none;transition:border-color .12s,box-shadow .12s" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:9px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+        <label style="font-size:14px;font-weight:600;color:#363d3f">Password:<span style="color:#e0483d">*</span></label>
+        <a href="#reset" style="font-size:14px;font-weight:500">Forgot Password ?</a>
+      </div>
+      <input type="password" placeholder="Enter Password" style="height:50px;border:1px solid #dde2e3;border-radius:9px;padding:0 15px;font-size:15px;color:#171b1c;outline:none;transition:border-color .12s,box-shadow .12s" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+    </div>
+
+    <button style="height:52px;margin-top:6px;border:none;border-radius:9px;background:#0f7d6a;color:#fff;font-size:16px;font-weight:600;cursor:pointer;transition:background .12s" style-hover="background:#0a6355">Login</button>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1200,&quot;height&quot;:760}}"></script>
+</body>
+</html>

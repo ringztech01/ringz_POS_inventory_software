@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="./image-slot.js"></script>
+<style>
+  body { margin:0; background:#eef1f4; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#0f7d6a; text-decoration:none; }
+  a:hover { color:#0a6355; }
+  * { box-sizing:border-box; }
+  input, select, textarea, button { font-family:inherit; }
+</style>
+</helmet>
+
+<div style="display:grid;grid-template-columns:620px minmax(0,1fr);gap:16px;padding:16px;min-width:1440px;min-height:100vh;align-items:start">
+
+  <!-- ===== LEFT: CART ===== -->
+  <section style="background:#fff;border-radius:16px;box-shadow:0 4px 16px -6px rgba(23,27,28,.12);display:flex;flex-direction:column;min-height:calc(100vh - 32px)">
+    <div style="display:flex;gap:12px;padding:16px 16px 0">
+      <div style="flex:1;display:flex;align-items:center;gap:12px;height:64px;border:1px solid #eceff0;border-radius:12px;padding:0 8px 0 16px;min-width:0">
+        <span style="color:#4d5659;display:flex"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5c0-2.6 2.2-4.2 5-4.2s5 1.6 5 4.2"/></svg></span>
+        <span style="flex:1;font-size:16px;font-weight:600;color:#171b1c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">direct-customer</span>
+        <button title="Add customer" style="width:48px;height:48px;flex:0 0 auto;border:none;border-radius:10px;background:#5a63ea;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#4a52d8"><svg width="19" height="19" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.3" cy="5.5" r="2.4"/><path d="M2 13.5c0-2.4 2-3.9 4.3-3.9 1 0 1.9.3 2.6.7"/><path d="M11.5 8v4M9.5 10h4"/></svg></button>
+      </div>
+      <div style="position:relative;width:230px">
+        <span style="position:absolute;left:14px;top:22px;color:#4d5659;display:flex;pointer-events:none"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 7.5 8 3l5.5 4.5"/><path d="M4 6.7V13h8V6.7"/></svg></span>
+        <select style="appearance:none;width:100%;height:64px;border:1px solid #eceff0;border-radius:12px;padding:0 40px 0 40px;font-size:16px;font-weight:600;background:#fff;cursor:pointer;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7"><option>Office</option><option>General Warehouse</option></select>
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.7" style="position:absolute;right:16px;top:25px;pointer-events:none"><path d="M4 6.5 8 10.5l4-4" /></svg>
+      </div>
+    </div>
+
+    <div style="padding:20px 20px 0">
+      <div style="display:grid;grid-template-columns:minmax(0,1.7fr) 130px 100px 100px 40px;column-gap:8px;align-items:center;padding-bottom:14px;border-bottom:1px solid #eceff0">
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#4d5659">PRODUCT</span>
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#4d5659;text-align:center">QTY</span>
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#4d5659">PRICE</span>
+        <span style="font-size:12px;font-weight:700;letter-spacing:.06em;color:#4d5659">SUB TOTAL</span>
+        <span></span>
+      </div>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:4px 20px 20px">
+      <sc-for list="{{ cart }}" as="line" hint-placeholder-count="2">
+        <div style="display:grid;grid-template-columns:minmax(0,1.7fr) 130px 100px 100px 40px;column-gap:8px;align-items:center;padding:16px 0;border-bottom:1px solid #f5f7f7">
+          <span style="display:flex;flex-direction:column;gap:7px;min-width:0">
+            <span style="font-size:15px;font-weight:600;color:#171b1c;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ line.name }}</span>
+            <span style="display:flex;align-items:center;gap:8px">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:600;background:#eef0fe;color:#5a63ea;padding:3px 9px;border-radius:6px">{{ line.code }}</span>
+              <button title="Edit item" style="width:24px;height:24px;flex:0 0 auto;border:none;background:transparent;cursor:pointer;color:#5a63ea;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M10.5 2.5 13.5 5.5l-7.5 7.5H3v-3z"/></svg></button>
+            </span>
+          </span>
+          <span style="display:flex;align-items:center;justify-content:center;gap:8px">
+            <button onClick="{{ line.dec }}" style="width:38px;height:38px;border:none;border-radius:9px;background:#eef0fe;color:#5a63ea;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s" style-hover="background:#dfe2fc">−</button>
+            <span style="min-width:20px;text-align:center;font-size:15px;font-weight:600">{{ line.qty }}</span>
+            <button onClick="{{ line.inc }}" style="width:38px;height:38px;border:none;border-radius:9px;background:#eef0fe;color:#5a63ea;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .12s" style-hover="background:#dfe2fc">+</button>
+          </span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#4d5659">{{ line.priceLabel }}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;font-weight:600">{{ line.subLabel }}</span>
+          <button onClick="{{ line.remove }}" title="Remove" style="width:36px;height:36px;justify-self:center;border:none;background:transparent;cursor:pointer;color:#e0483d;display:flex;align-items:center;justify-content:center;transition:color .12s" style-hover="color:#b3261e"><svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.8 4.5l.6 8.5h5.2l.6-8.5"/></svg></button>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="padding:0 20px 20px">
+      <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:24px;align-items:end">
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="position:relative">
+            <input placeholder="Tax" style="width:100%;height:52px;border:1px solid #eceff0;border-radius:12px;padding:0 44px 0 16px;font-size:15px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+            <span style="position:absolute;right:16px;top:16px;font-size:14px;font-weight:600;color:#97a1a4">%</span>
+          </div>
+          <div style="position:relative">
+            <input placeholder="Discount" style="width:100%;height:52px;border:1px solid #eceff0;border-radius:12px;padding:0 44px 0 16px;font-size:15px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+            <span style="position:absolute;right:16px;top:16px;font-size:13px;font-weight:600;color:#97a1a4">₦</span>
+          </div>
+          <div style="position:relative">
+            <input placeholder="Shipping" style="width:100%;height:52px;border:1px solid #eceff0;border-radius:12px;padding:0 44px 0 16px;font-size:15px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+            <span style="position:absolute;right:16px;top:16px;font-size:13px;font-weight:600;color:#97a1a4">₦</span>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;text-align:right">
+          <span style="font-size:19px;font-weight:500;color:#4d5659">Total QTY : <span style="font-weight:700;color:#171b1c">{{ totalQty }}</span></span>
+          <span style="font-size:19px;font-weight:500;color:#4d5659">Sub Total : <span style="font-weight:700;color:#171b1c">{{ subTotal }}</span></span>
+          <span style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.01em">Total : {{ total }}</span>
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:20px">
+        <button style="height:60px;border:none;border-radius:12px;background:#f2607a;color:#fff;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .12s" style-hover="background:#e64d69"><svg width="19" height="19" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M5.5 8V4.5a1 1 0 0 1 2 0V7m0 0V3.5a1 1 0 0 1 2 0V7m0-1a1 1 0 0 1 2 0v4c0 2-1.6 3.5-3.7 3.5S4 12 4 10V8.3a1 1 0 0 1 1.5-.9z"/></svg>Hold</button>
+        <button onClick="{{ reset }}" style="height:60px;border:none;border-radius:12px;background:#f0402f;color:#fff;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .12s" style-hover="background:#d8331f"><svg width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12.8 8a4.8 4.8 0 1 1-1.4-3.4"/><path d="M12.5 2.8v2.4h-2.4"/></svg>Reset</button>
+        <button style="height:60px;border:none;border-radius:12px;background:#1bb673;color:#fff;font-size:16px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;transition:background .12s" style-hover="background:#149961"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4.5" width="12" height="7" rx="1.5"/><circle cx="8" cy="8" r="1.7"/></svg>Pay Now</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== RIGHT: CATALOG ===== -->
+  <section style="background:#fff;border-radius:16px;box-shadow:0 4px 16px -6px rgba(23,27,28,.12);padding:16px;display:flex;flex-direction:column;gap:20px;min-height:calc(100vh - 32px)">
+    <div style="display:flex;gap:12px;align-items:center">
+      <div style="position:relative;flex:1">
+        <span style="position:absolute;left:18px;top:19px;color:#97a1a4;display:flex;pointer-events:none"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.2"/><path d="M10.2 10.2 13.5 13.5"/></svg></span>
+        <input placeholder="Scan/Search Product by Code Name" style="width:100%;height:60px;border:none;background:#f4f6f8;border-radius:12px;padding:0 20px 0 50px;font-size:17px;color:#4d5659;outline:none" style-focus="background:#fff;box-shadow:0 0 0 2px #d3ece7" />
+      </div>
+      <button title="Order list" style="position:relative;width:60px;height:60px;flex:0 0 auto;border:none;border-radius:12px;background:#f2607a;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#e64d69">
+        <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5.5 4.5h8M5.5 8h8M5.5 11.5h8M2.6 4.5h.01M2.6 8h.01M2.6 11.5h.01"/></svg>
+        <span style="position:absolute;top:-6px;right:-6px;min-width:22px;height:22px;padding:0 6px;border-radius:999px;background:#5a63ea;color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #fff">0</span>
+      </button>
+      <button title="Bag" style="width:60px;height:60px;flex:0 0 auto;border:none;border-radius:12px;background:#1bb673;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#149961"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3.5 5h9l-.7 8.5H4.2z"/><path d="M6 5V4a2 2 0 0 1 4 0v1"/></svg></button>
+      <button title="Fullscreen" style="width:60px;height:60px;flex:0 0 auto;border:none;border-radius:12px;background:#5a63ea;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#4a52d8"><svg width="21" height="21" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/></svg></button>
+      <button title="Calculator" style="width:60px;height:60px;flex:0 0 auto;border:none;border-radius:12px;background:#5a63ea;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#4a52d8"><svg width="21" height="21" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="3" y="2" width="10" height="12" rx="1.5"/><path d="M5.5 5h5M5.5 8h.01M8 8h.01M10.5 8h.01M5.5 10.5h.01M8 10.5h.01M10.5 10.5h.01"/></svg></button>
+      <button title="Dashboard" style="width:60px;height:60px;flex:0 0 auto;border:none;border-radius:12px;background:#5a63ea;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center" style-hover="background:#4a52d8"><svg width="21" height="21" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M3 11.5a5 5 0 1 1 10 0"/><path d="M8 8.5 10.5 6"/></svg></button>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div style="display:flex;gap:12px">
+        <button style="height:48px;padding:0 24px;border:none;border-radius:12px;background:#5a63ea;color:#fff;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#4a52d8">All Categories</button>
+        <button style="height:48px;padding:0 24px;border:none;border-radius:12px;background:#eef0f3;color:#4d5659;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#e2e5ea">Glow</button>
+      </div>
+      <div style="display:flex;gap:12px">
+        <button style="height:48px;padding:0 24px;border:none;border-radius:12px;background:#5a63ea;color:#fff;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#4a52d8">All Brands</button>
+        <button style="height:48px;padding:0 24px;border:none;border-radius:12px;background:#eef0f3;color:#4d5659;font-size:15px;font-weight:600;cursor:pointer" style-hover="background:#e2e5ea">GG</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:16px">
+      <sc-for list="{{ products }}" as="p" hint-placeholder-count="5">
+        <div style="border:1px solid #eceff0;border-radius:14px;overflow:hidden;box-shadow:0 2px 8px -4px rgba(23,27,28,.12);cursor:pointer;transition:box-shadow .14s,transform .14s" style-hover="box-shadow:0 8px 20px -8px rgba(90,99,234,.4);transform:translateY(-2px)">
+          <div style="position:relative;width:100%;height:150px;background:#f4f6f8">
+            <image-slot id="{{ p.slotId }}" shape="rect" placeholder="{{ p.name }}"></image-slot>
+            <span style="position:absolute;top:8px;left:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;background:#5a63ea;color:#fff;padding:4px 9px;border-radius:7px;pointer-events:none">{{ p.price }}</span>
+            <span style="position:absolute;top:8px;right:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:600;background:#2aa6e8;color:#fff;padding:4px 9px;border-radius:7px;pointer-events:none">{{ p.stock }} piece</span>
+          </div>
+          <div style="padding:12px 12px 14px;display:flex;flex-direction:column;gap:8px">
+            <span style="font-size:15px;font-weight:600;color:#171b1c;line-height:1.3;min-height:39px">{{ p.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#97a1a4">{{ p.code }}</span>
+          </div>
+        </div>
+      </sc-for>
+    </div>
+  </section>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:820}}">
+function money(n) {
+  return '₦' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+const PRODUCTS = [
+  { code: '001', name: 'FACE FAT AND DOUBLE CHIN', price: '₦3,490.00', stock: '2', slotId: 'pos-p-001' },
+  { code: '003uc', name: 'ultrasonic scrubber', price: '₦2,990.00', stock: '7', slotId: 'pos-p-003uc' },
+  { code: '001hs', name: 'intensive hair serum set', price: '₦2,490.00', stock: '94', slotId: 'pos-p-001hs' },
+  { code: '005cp', name: 'collagen powder', price: '₦1,690.00', stock: '110', slotId: 'pos-p-005cp' },
+  { code: '006lpc', name: 'lip care set', price: '₦1,790.00', stock: '100', slotId: 'pos-p-006lpc' }
+];
+
+class Component extends DCLogic {
+  state = {
+    cart: [
+      { id: 1, name: 'Intensive Hair Serum set', code: '001hs', price: 2490, qty: 1 },
+      { id: 2, name: 'Collagen Powder', code: '005cp', price: 1690, qty: 1 }
+    ]
+  };
+
+  componentDidMount() { this.paintIcons(); }
+  componentDidUpdate() { this.paintIcons(); }
+  paintIcons() {
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons(); } catch (e) {}
+    } else { setTimeout(() => this.paintIcons(), 200); }
+  }
+
+  setQty(id, d) {
+    this.setState(st => ({ cart: st.cart.map(l => l.id === id ? Object.assign({}, l, { qty: Math.max(1, l.qty + d) }) : l) }));
+  }
+
+  renderVals() {
+    const cart = this.state.cart.map(l => ({
+      name: l.name, code: l.code, qty: l.qty,
+      priceLabel: money(l.price),
+      subLabel: money(l.price * l.qty),
+      inc: () => this.setQty(l.id, 1),
+      dec: () => this.setQty(l.id, -1),
+      remove: () => this.setState(st => ({ cart: st.cart.filter(x => x.id !== l.id) }))
+    }));
+    const qty = this.state.cart.reduce((s, l) => s + l.qty, 0);
+    const sub = this.state.cart.reduce((s, l) => s + l.price * l.qty, 0);
+
+    return {
+      cart,
+      products: PRODUCTS,
+      totalQty: qty,
+      subTotal: money(sub),
+      total: money(sub),
+      reset: () => this.setState({ cart: [] })
+    };
+  }
+}
+</script>
+</body>
+</html>

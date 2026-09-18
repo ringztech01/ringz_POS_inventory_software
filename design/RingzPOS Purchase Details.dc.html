@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.446.0/dist/umd/lucide.min.js"></script>
+<style>
+  body { margin:0; background:#f5f7f7; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#0f7d6a; text-decoration:none; }
+  a:hover { color:#0a6355; text-decoration:underline; }
+  * { box-sizing:border-box; }
+  input, select, button { font-family:inherit; }
+  @keyframes elv-pop { from { opacity:0; transform:translateY(6px) scale(.98); } to { opacity:1; transform:none; } }
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;min-width:1440px">
+
+  <!-- SIDEBAR -->
+  <aside style="width:{{ sidebarWidth }};flex:0 0 auto;background:#fff;border-right:1px solid #eceff0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;transition:width .18s ease">
+    <div style="height:60px;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid #eceff0">
+      <div style="width:32px;height:32px;flex:0 0 auto;border-radius:9px;background:#0f7d6a;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px">R</div>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+        <span style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap">RingzPOS</span>
+      </sc-if>
+    </div>
+    <div style="padding:14px 12px 6px;flex:0 0 auto">
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:11px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+          <input placeholder="Search" style="width:100%;height:36px;border:1px solid #dde2e3;border-radius:8px;padding:0 10px 0 32px;font-size:13px;outline:none;background:#fafbfb" style-focus="border-color:#0f7d6a;background:#fff;box-shadow:0 0 0 3px #d3ece7" />
+        </div>
+      </sc-if>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:6px 12px 20px;display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="16">
+        <div>
+          <button onClick="{{ item.onClick }}" title="{{ item.label }}" style="width:100%;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border:none;border-radius:8px;background:{{ item.bg }};color:{{ item.fg }};font-size:13.5px;font-weight:{{ item.weight }};cursor:pointer;text-align:left;transition:background .12s" style-hover="background:#f5f7f7">
+            <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:18px;height:18px" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+            <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+              <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.label }}</span>
+            </sc-if>
+            <sc-if value="{{ item.showCaret }}" hint-placeholder-val="{{ false }}">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" style="flex:0 0 auto;transform:{{ item.caretRotate }};transition:transform .16s"><path d="M6 4l4 4-4 4" /></svg>
+            </sc-if>
+          </button>
+          <sc-if value="{{ item.showChildren }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 15px;padding-left:13px;border-left:1px solid #eceff0">
+              <sc-for list="{{ item.children }}" as="child" hint-placeholder-count="2">
+                <button onClick="{{ child.onClick }}" style="width:100%;text-align:left;height:34px;padding:0 10px;border:none;border-radius:6px;background:{{ child.bg }};color:{{ child.fg }};font-size:13px;font-weight:{{ child.weight }};cursor:pointer;white-space:nowrap" style-hover="background:#f5f7f7">{{ child.label }}</button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <!-- MAIN -->
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="height:60px;flex:0 0 auto;background:#fff;border-bottom:1px solid #eceff0;display:flex;align-items:center;gap:20px;padding:0 24px;box-shadow:0 2px 8px -1px rgba(23,27,28,.06);position:sticky;top:0;z-index:40">
+      <button onClick="{{ toggleSidebar }}" title="Collapse menu" style="width:38px;height:38px;flex:0 0 auto;border:1px solid #dde2e3;background:#fff;border-radius:8px;cursor:pointer;color:#4d5659;display:flex;align-items:center;justify-content:center" style-hover="background:#f5f7f7;color:#171b1c">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
+      </button>
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#97a1a4">Purchases /</span>
+        <span style="font-size:14.5px;font-weight:600;white-space:nowrap">Purchase Details</span>
+      </div>
+      <div style="position:relative;flex:1;max-width:420px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:12px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+        <input placeholder="Search anything — products, references, suppliers" style="width:100%;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px 0 34px;font-size:13.5px;outline:none;background:#fafbfb" style-focus="border-color:#0f7d6a;background:#fff;box-shadow:0 0 0 3px #d3ece7" />
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <button style="height:38px;padding:0 14px;display:flex;align-items:center;gap:8px;background:#0f7d6a;border:none;border-radius:8px;font-size:13.5px;font-weight:600;color:#fff;cursor:pointer" style-hover="background:#0a6355"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 3.5v9M3.5 8h9" /></svg>New</button>
+        <button style="height:38px;padding:0 14px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#0a6355;cursor:pointer" style-hover="background:#eff8f6;border-color:#86cbc0">POS</button>
+        <button title="Fullscreen" style="width:38px;height:38px;border:1px solid #dde2e3;background:#fff;border-radius:8px;cursor:pointer;color:#4d5659;display:flex;align-items:center;justify-content:center" style-hover="background:#f5f7f7;color:#171b1c">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" /></svg>
+        </button>
+        <div style="width:1px;height:26px;background:#eceff0"></div>
+        <button onClick="{{ toggleUserMenu }}" style="height:38px;padding:4px 10px 4px 4px;display:flex;align-items:center;gap:9px;background:transparent;border:1px solid transparent;border-radius:8px;cursor:pointer" style-hover="background:#f5f7f7;border-color:#eceff0">
+          <span style="width:30px;height:30px;border-radius:999px;background:#073b33;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center">A</span>
+          <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2">
+            <span style="font-size:13px;font-weight:600">admin</span>
+            <span style="font-size:11px;color:#6d777a">Administrator</span>
+          </span>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8"><path d="M4 6.5 8 10.5l4-4" /></svg>
+        </button>
+        <sc-if value="{{ userMenuOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;right:24px;top:54px;width:206px;background:#fff;border:1px solid #eceff0;border-radius:10px;box-shadow:0 8px 24px -6px rgba(23,27,28,.20);padding:6px;z-index:50;animation:elv-pop .12s ease-out">
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">My profile</button>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">Warehouse: Office</button>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">Settings</button>
+            <div style="height:1px;background:#eceff0;margin:5px 6px"></div>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#b3261e;cursor:pointer" style-hover="background:#fce8e6">Sign out</button>
+          </div>
+        </sc-if>
+      </div>
+    </header>
+
+    <main style="flex:1;padding:32px;display:flex;flex-direction:column;gap:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Purchase Details</h1>
+          <p style="margin:0;font-size:13.5px;color:#6d777a">Reference PU_1119 · received into Office</p>
+        </div>
+        <div style="display:flex;gap:10px">
+          <button style="height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;background:#eff8f6;border:1px solid #d3ece7;border-radius:8px;font-size:13.5px;font-weight:600;color:#0a6355;cursor:pointer;transition:background .12s" style-hover="background:#d3ece7"><i data-lucide="file-text" style="width:15px;height:15px"></i>Download PDF</button>
+          <button style="height:40px;padding:0 18px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;display:flex;align-items:center;gap:8px;transition:background .12s" style-hover="background:#f5f7f7"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg>Back</button>
+        </div>
+      </div>
+
+      <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);padding:32px;display:flex;flex-direction:column;gap:28px">
+
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;padding-bottom:4px">
+          <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Purchase details</span>
+          <span style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700;letter-spacing:-.015em">PU_1119</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px">
+          <div style="border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 18px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Supplier info</span>
+            </div>
+            <div style="padding:18px;display:flex;flex-direction:column;gap:12px">
+              <span style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:#171b1c"><span style="color:#0f7d6a;display:flex"><i data-lucide="user" style="width:15px;height:15px"></i></span>China</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#4d5659"><span style="color:#0f7d6a;display:flex"><i data-lucide="mail" style="width:15px;height:15px"></i></span>china@gmail.com</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#4d5659"><span style="color:#0f7d6a;display:flex"><i data-lucide="smartphone" style="width:15px;height:15px"></i></span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">0155555</span></span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#4d5659"><span style="color:#0f7d6a;display:flex"><i data-lucide="map-pin" style="width:15px;height:15px"></i></span>china</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 18px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Company info</span>
+            </div>
+            <div style="padding:18px;display:flex;flex-direction:column;gap:12px">
+              <span style="display:flex;align-items:center;gap:10px;font-size:14px;font-weight:600;color:#171b1c"><span style="color:#0f7d6a;display:flex"><i data-lucide="building-2" style="width:15px;height:15px"></i></span>RingzPOS</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#4d5659"><span style="color:#0f7d6a;display:flex"><i data-lucide="mail" style="width:15px;height:15px"></i></span>support@ringzpos.com</span>
+              <span style="display:flex;align-items:center;gap:10px;font-size:13.5px;color:#4d5659"><span style="color:#0f7d6a;display:flex"><i data-lucide="smartphone" style="width:15px;height:15px"></i></span><span style="font-family:'IBM Plex Mono',monospace;font-size:13px">01708750611</span></span>
+              <span style="display:flex;align-items:flex-start;gap:10px;font-size:13.5px;color:#4d5659;line-height:1.5"><span style="color:#0f7d6a;display:flex;padding-top:2px"><i data-lucide="map-pin" style="width:15px;height:15px"></i></span>Sector: 10, Road: 06, Uttara, Dhaka, Bangladesh.</span>
+            </div>
+          </div>
+
+          <div style="border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+            <div style="padding:14px 18px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Purchase info</span>
+            </div>
+            <div style="padding:18px;display:flex;flex-direction:column;gap:14px">
+              <span style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;color:#363d3f;width:86px">Reference</span><span style="font-family:'IBM Plex Mono',monospace;font-size:12px;font-weight:500;background:#f5f7f7;border:1px solid #dde2e3;color:#363d3f;padding:4px 9px;border-radius:6px">PU_1119</span></span>
+              <span style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;color:#363d3f;width:86px">Status</span><span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#e2f4ec;color:#0b6146"><span style="width:6px;height:6px;border-radius:999px;background:#10805c"></span>Received</span></span>
+              <span style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;color:#363d3f;width:86px">Warehouse</span><span style="font-size:13.5px;color:#4d5659">Office</span></span>
+              <span style="display:flex;align-items:center;gap:10px"><span style="font-size:13px;font-weight:600;color:#363d3f;width:86px">Payment</span><span style="display:inline-flex;align-items:center;font-size:12px;font-weight:600;padding:5px 11px;border-radius:999px;background:#eff8f6;color:#0a6355">Cash</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;flex-direction:column;gap:12px">
+          <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Order summary</span>
+          <div style="border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+            <div style="overflow-x:auto">
+              <div style="min-width:1000px">
+                <div style="display:grid;grid-template-columns:minmax(220px,1.4fr) 150px 110px 140px 130px 130px 150px;column-gap:16px;align-items:center;padding:0 20px;height:44px;background:#fafbfb;border-bottom:1px solid #eceff0;white-space:nowrap">
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Product</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Net unit cost</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Quantity</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Unit cost</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Discount</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Tax</span>
+                  <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Subtotal</span>
+                </div>
+                <sc-for list="{{ lines }}" as="row" hint-placeholder-count="1">
+                  <div style="display:grid;grid-template-columns:minmax(220px,1.4fr) 150px 110px 140px 130px 130px 150px;column-gap:16px;align-items:center;padding:0 20px;height:60px;border-bottom:1px solid #f5f7f7;white-space:nowrap;transition:background .12s" style-hover="background:#f5f7f7">
+                    <span style="display:flex;align-items:center;gap:10px;min-width:0">
+                      <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:600;color:#171b1c">{{ row.code }}</span>
+                      <span style="font-size:12px;font-weight:600;background:#e2f4ec;color:#0b6146;padding:4px 9px;border-radius:6px;overflow:hidden;text-overflow:ellipsis">{{ row.name }}</span>
+                    </span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;font-weight:600">{{ row.net }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;color:#363d3f">{{ row.qty }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;color:#4d5659">{{ row.unit }}</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;color:#4d5659">₦0.00</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;color:#4d5659">₦0.00</span>
+                    <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;text-align:right;font-weight:600">{{ row.subtotal }}</span>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;justify-content:flex-end">
+          <div style="width:420px;border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #eceff0">
+              <span style="font-size:13.5px;color:#4d5659">Order Tax</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">₦0.00 (0.00%)</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #eceff0">
+              <span style="font-size:13.5px;color:#4d5659">Discount</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">₦0.00</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #eceff0">
+              <span style="font-size:13.5px;color:#4d5659">Shipping</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">₦0.00</span>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 18px;background:#eff8f6">
+              <span style="font-size:14px;font-weight:600;color:#0a6355">Grand Total</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:600;color:#0a6355">₦4,930.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <footer style="display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #dde2e3;margin-top:auto">
+        <span style="font-size:12.5px;color:#97a1a4">All Rights Reserved (C) 2026 <a href="#top">RingzPOS</a></span>
+        <span style="font-size:12.5px;color:#97a1a4">v1.0</span>
+      </footer>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;sidebarStartCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+const ICONS = {
+  dashboard: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>',
+  products: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5 8 2.5l5.5 3v5L8 13.5l-5.5-3z"/><path d="M2.5 5.5 8 8.5l5.5-3M8 8.5v5"/></svg>',
+  adjustments: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5h10M3 8h10M3 11.5h10"/><circle cx="6" cy="4.5" r="1.3" fill="#fff"/><circle cx="10" cy="8" r="1.3" fill="#fff"/><circle cx="5" cy="11.5" r="1.3" fill="#fff"/></svg>',
+  quotations: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2.5" width="10" height="11" rx="1.5"/><path d="M5.5 6h5M5.5 8.5h5M5.5 11h3"/></svg>',
+  purchases: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2.5h1.8l1.5 7.5h6.9l1.3-5.5H5"/><circle cx="6.5" cy="12.6" r="1.1"/><circle cx="11.5" cy="12.6" r="1.1"/></svg>',
+  sales: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 2.5h3l6.5 6.5-3.5 3.5L2.5 6z"/><circle cx="5" cy="5" r="1"/></svg>',
+  transfers: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 5.5h9M9 3l2.5 2.5L9 8M13.5 10.5h-9M7 8l-2.5 2.5L7 13"/></svg>',
+  expenses: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4.5" width="12" height="7" rx="1.5"/><circle cx="8" cy="8" r="1.7"/></svg>',
+  peoples: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.2" cy="5.5" r="2.2"/><path d="M2.5 13c0-2.2 1.7-3.6 3.7-3.6S9.9 10.8 9.9 13"/><path d="M10.5 4.2a2 2 0 0 1 0 3.6M11.5 13c0-1.5-.4-2.5-1.1-3.2 1.9-.3 3.3 1 3.3 3.2"/></svg>',
+  roles: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 3.5 3.6v4.1c0 3 1.9 5 4.5 6.3 2.6-1.3 4.5-3.3 4.5-6.3V3.6z"/><path d="M6 8l1.6 1.6L10.5 6.5"/></svg>',
+  warehouse: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6.5 8 2.5l6 4v7H2z"/><rect x="6" y="9.5" width="4" height="4"/></svg>',
+  reports: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 13.5h11"/><path d="M4.5 13.5V8M7.5 13.5V4.5M10.5 13.5V10M13 13.5V6.5"/></svg>',
+  currencies: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 3.5v9M11.5 3.5v9M4.5 3.5l7 9M3 7h10M3 9.5h10"/></svg>',
+  languages: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M4.5 6.5h4M6.5 6.5v4M9.5 10.5l1.6-4 1.6 4M10.2 9.2h2"/></svg>',
+  templates: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2.5h5l3 3v8H4z"/><path d="M9 2.5v3h3"/></svg>',
+  settings: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>'
+};
+
+const NAV = [
+  { key: 'Dashboard', icon: 'dashboard' },
+  { key: 'Products', icon: 'products', children: ['Products', 'Product Categories', 'Brands', 'Units', 'Base Units', 'Print Barcode'] },
+  { key: 'Adjustments', icon: 'adjustments' },
+  { key: 'Quotations', icon: 'quotations' },
+  { key: 'Purchases', icon: 'purchases', children: ['Purchases', 'Purchases Returns'] },
+  { key: 'Sales', icon: 'sales', children: ['Sales', 'Sales Returns'] },
+  { key: 'Transfers', icon: 'transfers' },
+  { key: 'Expenses', icon: 'expenses', children: ['Expenses', 'Expense Categories'] },
+  { key: 'Peoples', icon: 'peoples', children: ['Suppliers', 'Customers', 'Users'] },
+  { key: 'Roles/Permissions', icon: 'roles' },
+  { key: 'Warehouse', icon: 'warehouse' },
+  { key: 'Reports', icon: 'reports' },
+  { key: 'Currencies', icon: 'currencies' },
+  { key: 'Languages', icon: 'languages' },
+  { key: 'Templates', icon: 'templates', children: ['Sale Template', 'Purchase Template'] },
+  { key: 'Settings', icon: 'settings' }
+];
+
+const LINES = [
+  { code: '005cp', name: 'collagen powder', net: '₦493.00', qty: '10', unit: '₦493.00', subtotal: '₦4,930.00' }
+];
+
+class Component extends DCLogic {
+  state = { collapsed: false, openGroup: 'Purchases', active: 'Purchases', userMenuOpen: false };
+
+  componentDidMount() {
+    if (this.props.sidebarStartCollapsed) this.setState({ collapsed: true });
+    this.paintIcons();
+  }
+
+  componentDidUpdate() { this.paintIcons(); }
+
+  paintIcons() {
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons(); } catch (e) {}
+    } else {
+      setTimeout(() => this.paintIcons(), 200);
+    }
+  }
+
+  renderVals() {
+    const { collapsed, openGroup, active } = this.state;
+    const expanded = !collapsed;
+
+    const nav = NAV.map(item => {
+      const isActive = active === item.key || (item.children || []).indexOf(active) > -1;
+      const open = expanded && openGroup === item.key;
+      return {
+        label: item.key,
+        icon: { __html: ICONS[item.icon] },
+        bg: isActive && !open ? '#eff8f6' : (open ? '#f5f7f7' : 'transparent'),
+        fg: isActive ? '#0a6355' : '#4d5659',
+        weight: isActive ? '600' : '500',
+        showCaret: expanded && !!item.children,
+        caretRotate: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        showChildren: open && !!item.children,
+        onClick: () => this.setState(st => ({
+          openGroup: item.children ? (st.openGroup === item.key ? null : item.key) : null,
+          active: item.children ? st.active : item.key,
+          userMenuOpen: false
+        })),
+        children: (item.children || []).map(c => ({
+          label: c,
+          bg: active === c ? '#eff8f6' : 'transparent',
+          fg: active === c ? '#0a6355' : '#4d5659',
+          weight: active === c ? '600' : '400',
+          onClick: () => this.setState({ active: c, userMenuOpen: false })
+        }))
+      };
+    });
+
+    return {
+      expanded,
+      sidebarWidth: collapsed ? '72px' : '248px',
+      toggleSidebar: () => this.setState(st => ({ collapsed: !st.collapsed, openGroup: null })),
+      nav,
+      lines: LINES,
+      userMenuOpen: this.state.userMenuOpen,
+      toggleUserMenu: () => this.setState(st => ({ userMenuOpen: !st.userMenuOpen }))
+    };
+  }
+}
+</script>
+</body>
+</html>

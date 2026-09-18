@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous" />
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.446.0/dist/umd/lucide.min.js"></script>
+<style>
+  body { margin:0; background:#f5f7f7; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  a { color:#0f7d6a; text-decoration:none; }
+  a:hover { color:#0a6355; text-decoration:underline; }
+  * { box-sizing:border-box; }
+  input, select, textarea, button { font-family:inherit; }
+  @keyframes elv-pop { from { opacity:0; transform:translateY(6px) scale(.98); } to { opacity:1; transform:none; } }
+</style>
+</helmet>
+
+<div style="display:flex;min-height:100vh;min-width:1440px">
+
+  <aside style="width:{{ sidebarWidth }};flex:0 0 auto;background:#fff;border-right:1px solid #eceff0;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;transition:width .18s ease">
+    <div style="height:60px;flex:0 0 auto;display:flex;align-items:center;gap:12px;padding:0 16px;border-bottom:1px solid #eceff0">
+      <div style="width:32px;height:32px;flex:0 0 auto;border-radius:9px;background:#0f7d6a;display:flex;align-items:center;justify-content:center;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px">R</div>
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+        <span style="font-family:'Space Grotesk',sans-serif;font-size:17px;font-weight:700;letter-spacing:-.01em;white-space:nowrap">RingzPOS</span>
+      </sc-if>
+    </div>
+    <div style="padding:14px 12px 6px;flex:0 0 auto">
+      <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+        <div style="position:relative">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:11px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+          <input placeholder="Search" style="width:100%;height:36px;border:1px solid #dde2e3;border-radius:8px;padding:0 10px 0 32px;font-size:13px;outline:none;background:#fafbfb" style-focus="border-color:#0f7d6a;background:#fff;box-shadow:0 0 0 3px #d3ece7" />
+        </div>
+      </sc-if>
+    </div>
+    <nav style="flex:1;overflow-y:auto;padding:6px 12px 20px;display:flex;flex-direction:column;gap:2px">
+      <sc-for list="{{ nav }}" as="item" hint-placeholder-count="16">
+        <div>
+          <button onClick="{{ item.onClick }}" title="{{ item.label }}" style="width:100%;display:flex;align-items:center;gap:12px;height:40px;padding:0 12px;border:none;border-radius:8px;background:{{ item.bg }};color:{{ item.fg }};font-size:13.5px;font-weight:{{ item.weight }};cursor:pointer;text-align:left;transition:background .12s" style-hover="background:#f5f7f7">
+            <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:18px;height:18px" dangerouslySetInnerHTML="{{ item.icon }}"></span>
+            <sc-if value="{{ expanded }}" hint-placeholder-val="{{ true }}">
+              <span style="flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ item.label }}</span>
+            </sc-if>
+            <sc-if value="{{ item.showCaret }}" hint-placeholder-val="{{ false }}">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.8" style="flex:0 0 auto;transform:{{ item.caretRotate }};transition:transform .16s"><path d="M6 4l4 4-4 4" /></svg>
+            </sc-if>
+          </button>
+          <sc-if value="{{ item.showChildren }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 15px;padding-left:13px;border-left:1px solid #eceff0">
+              <sc-for list="{{ item.children }}" as="child" hint-placeholder-count="3">
+                <button onClick="{{ child.onClick }}" style="width:100%;text-align:left;height:34px;padding:0 10px;border:none;border-radius:6px;background:{{ child.bg }};color:{{ child.fg }};font-size:13px;font-weight:{{ child.weight }};cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:9px" style-hover="background:#f5f7f7">
+                  <span style="flex:0 0 auto;display:flex;align-items:center;justify-content:center;width:16px;height:16px" dangerouslySetInnerHTML="{{ child.icon }}"></span>
+                  {{ child.label }}
+                </button>
+              </sc-for>
+            </div>
+          </sc-if>
+        </div>
+      </sc-for>
+    </nav>
+  </aside>
+
+  <div style="flex:1;min-width:0;display:flex;flex-direction:column">
+    <header style="height:60px;flex:0 0 auto;background:#fff;border-bottom:1px solid #eceff0;display:flex;align-items:center;gap:20px;padding:0 24px;box-shadow:0 2px 8px -1px rgba(23,27,28,.06);position:sticky;top:0;z-index:40">
+      <button onClick="{{ toggleSidebar }}" title="Collapse menu" style="width:38px;height:38px;flex:0 0 auto;border:1px solid #dde2e3;background:#fff;border-radius:8px;cursor:pointer;color:#4d5659;display:flex;align-items:center;justify-content:center" style-hover="background:#f5f7f7;color:#171b1c">
+        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M2.5 4h11M2.5 8h11M2.5 12h11" /></svg>
+      </button>
+      <div style="display:flex;align-items:center;gap:12px;min-width:0">
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#97a1a4">Peoples /</span>
+        <span style="font-size:14.5px;font-weight:600;white-space:nowrap">{{ crumb }}</span>
+      </div>
+      <div style="position:relative;flex:1;max-width:420px">
+        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:12px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+        <input placeholder="Search anything — people, phones, emails" style="width:100%;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px 0 34px;font-size:13.5px;outline:none;background:#fafbfb" style-focus="border-color:#0f7d6a;background:#fff;box-shadow:0 0 0 3px #d3ece7" />
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+        <button onClick="{{ goCreate }}" style="height:38px;padding:0 14px;display:flex;align-items:center;gap:8px;background:#0f7d6a;border:none;border-radius:8px;font-size:13.5px;font-weight:600;color:#fff;cursor:pointer" style-hover="background:#0a6355"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 3.5v9M3.5 8h9" /></svg>New</button>
+        <button style="height:38px;padding:0 14px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:13px;font-weight:700;letter-spacing:.04em;color:#0a6355;cursor:pointer" style-hover="background:#eff8f6;border-color:#86cbc0">POS</button>
+        <button title="Fullscreen" style="width:38px;height:38px;border:1px solid #dde2e3;background:#fff;border-radius:8px;cursor:pointer;color:#4d5659;display:flex;align-items:center;justify-content:center" style-hover="background:#f5f7f7;color:#171b1c">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10" /></svg>
+        </button>
+        <div style="width:1px;height:26px;background:#eceff0"></div>
+        <button onClick="{{ toggleUserMenu }}" style="height:38px;padding:4px 10px 4px 4px;display:flex;align-items:center;gap:9px;background:transparent;border:1px solid transparent;border-radius:8px;cursor:pointer" style-hover="background:#f5f7f7;border-color:#eceff0">
+          <span style="width:30px;height:30px;border-radius:999px;background:#073b33;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center">A</span>
+          <span style="display:flex;flex-direction:column;align-items:flex-start;line-height:1.2">
+            <span style="font-size:13px;font-weight:600">admin</span>
+            <span style="font-size:11px;color:#6d777a">Administrator</span>
+          </span>
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8"><path d="M4 6.5 8 10.5l4-4" /></svg>
+        </button>
+        <sc-if value="{{ userMenuOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;right:24px;top:54px;width:206px;background:#fff;border:1px solid #eceff0;border-radius:10px;box-shadow:0 8px 24px -6px rgba(23,27,28,.20);padding:6px;z-index:50;animation:elv-pop .12s ease-out">
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">My profile</button>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">Warehouse: Office</button>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7">Settings</button>
+            <div style="height:1px;background:#eceff0;margin:5px 6px"></div>
+            <button style="width:100%;text-align:left;background:transparent;border:none;padding:9px 10px;border-radius:6px;font-size:13.5px;color:#b3261e;cursor:pointer" style-hover="background:#fce8e6">Sign out</button>
+          </div>
+        </sc-if>
+      </div>
+    </header>
+
+    <main style="flex:1;padding:32px;display:flex;flex-direction:column;gap:24px">
+
+      <!-- ===== SUPPLIERS LIST ===== -->
+      <sc-if value="{{ showSuppliers }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Suppliers</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">1 supplier</p>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:13.5px;font-weight:600;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7"><i data-lucide="upload" style="width:15px;height:15px"></i>Import Suppliers</button>
+              <button onClick="{{ goCreate }}" style="height:40px;padding:0 18px;background:#0f7d6a;border:none;border-radius:8px;font-size:13.5px;font-weight:600;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#0a6355"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 3.5v9M3.5 8h9" /></svg>Create Supplier</button>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);overflow:hidden">
+            <div style="padding:18px 20px;border-bottom:1px solid #eceff0">
+              <div style="position:relative;width:340px">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:12px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+                <input placeholder="Search" style="width:100%;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px 0 34px;font-size:13.5px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:44px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Supplier</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Phone number</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Created on</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Action</span>
+            </div>
+            <sc-for list="{{ suppliers }}" as="row" hint-placeholder-count="1">
+              <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:68px;border-bottom:1px solid #f5f7f7;transition:background .12s" style-hover="background:#f5f7f7">
+                <span style="display:flex;flex-direction:column;line-height:1.35;min-width:0">
+                  <a href="#top" style="font-size:14px;font-weight:600">{{ row.name }}</a>
+                  <span style="font-size:13px;color:#6d777a">{{ row.email }}</span>
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">{{ row.phone }}</span>
+                <span style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0a6355;background:#eff8f6;border:1px solid #d3ece7;padding:5px 10px;border-radius:8px;justify-self:start;line-height:1.35"><span>{{ row.time }}</span><span>{{ row.date }}</span></span>
+                <span style="justify-self:end;display:flex;gap:6px">
+                  <button title="Edit supplier" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#eff8f6;color:#0f7d6a;border-color:#86cbc0"><i data-lucide="pencil" style="width:15px;height:15px"></i></button>
+                  <button title="Delete supplier" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#fce8e6;color:#b3261e;border-color:#f0c4c1"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
+                </span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:13px;color:#4d5659">Records per page</span>
+                <div style="position:relative">
+                  <select style="appearance:none;height:34px;border:1px solid #dde2e3;border-radius:8px;padding:0 32px 0 12px;font-size:13px;background:#fff;cursor:pointer;outline:none"><option>10</option><option>25</option></select>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8" style="position:absolute;right:10px;top:11px;pointer-events:none"><path d="M4 6.5 8 10.5l4-4" /></svg>
+                </div>
+                <span style="font-size:13px;color:#6d777a">1–1 of 1</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4M4.5 4v8" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4M11.5 4v8" /></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== CUSTOMERS LIST ===== -->
+      <sc-if value="{{ showCustomers }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Customers</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">1 customer</p>
+            </div>
+            <div style="display:flex;gap:10px">
+              <button style="height:40px;padding:0 16px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:13.5px;font-weight:600;color:#363d3f;cursor:pointer" style-hover="background:#f5f7f7"><i data-lucide="upload" style="width:15px;height:15px"></i>Import Customers</button>
+              <button onClick="{{ goCreate }}" style="height:40px;padding:0 18px;background:#0f7d6a;border:none;border-radius:8px;font-size:13.5px;font-weight:600;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#0a6355"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 3.5v9M3.5 8h9" /></svg>Create Customer</button>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);overflow:hidden">
+            <div style="padding:18px 20px;border-bottom:1px solid #eceff0">
+              <div style="position:relative;width:340px">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:12px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+                <input placeholder="Search" style="width:100%;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px 0 34px;font-size:13.5px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:44px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Customer</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Phone number</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Created on</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Action</span>
+            </div>
+            <sc-for list="{{ customers }}" as="row" hint-placeholder-count="1">
+              <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:68px;border-bottom:1px solid #f5f7f7;transition:background .12s" style-hover="background:#f5f7f7">
+                <span style="display:flex;flex-direction:column;line-height:1.35;min-width:0">
+                  <a href="#top" style="font-size:14px;font-weight:600">{{ row.name }}</a>
+                  <span style="font-size:13px;color:#6d777a">{{ row.email }}</span>
+                </span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">{{ row.phone }}</span>
+                <span style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0a6355;background:#eff8f6;border:1px solid #d3ece7;padding:5px 10px;border-radius:8px;justify-self:start;line-height:1.35"><span>{{ row.time }}</span><span>{{ row.date }}</span></span>
+                <span style="justify-self:end;display:flex;gap:6px">
+                  <button title="Edit customer" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#eff8f6;color:#0f7d6a;border-color:#86cbc0"><i data-lucide="pencil" style="width:15px;height:15px"></i></button>
+                  <button title="Delete customer" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#fce8e6;color:#b3261e;border-color:#f0c4c1"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
+                </span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:13px;color:#4d5659">Records per page</span>
+                <div style="position:relative">
+                  <select style="appearance:none;height:34px;border:1px solid #dde2e3;border-radius:8px;padding:0 32px 0 12px;font-size:13px;background:#fff;cursor:pointer;outline:none"><option>10</option><option>25</option></select>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8" style="position:absolute;right:10px;top:11px;pointer-events:none"><path d="M4 6.5 8 10.5l4-4" /></svg>
+                </div>
+                <span style="font-size:13px;color:#6d777a">1–1 of 1</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4M4.5 4v8" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4M11.5 4v8" /></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== USERS LIST ===== -->
+      <sc-if value="{{ showUsers }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:24px">
+          <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Users</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">1 user</p>
+            </div>
+            <button onClick="{{ goCreate }}" style="height:40px;padding:0 18px;background:#0f7d6a;border:none;border-radius:8px;font-size:13.5px;font-weight:600;color:#fff;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#0a6355"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M8 3.5v9M3.5 8h9" /></svg>Create User</button>
+          </div>
+
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);overflow:hidden">
+            <div style="padding:18px 20px;border-bottom:1px solid #eceff0">
+              <div style="position:relative;width:340px">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.6" style="position:absolute;left:12px;top:11px"><circle cx="7" cy="7" r="4.2" /><path d="M10.2 10.2 13.5 13.5" /></svg>
+                <input placeholder="Search" style="width:100%;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px 0 34px;font-size:13.5px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:44px;background:#fafbfb;border-bottom:1px solid #eceff0">
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">User</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Role</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Phone number</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Created on</span>
+              <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a;text-align:right">Action</span>
+            </div>
+            <sc-for list="{{ users }}" as="row" hint-placeholder-count="1">
+              <div style="display:grid;grid-template-columns:minmax(240px,1fr) 200px 180px 180px 110px;column-gap:16px;align-items:center;padding:0 20px;height:68px;border-bottom:1px solid #f5f7f7;transition:background .12s" style-hover="background:#f5f7f7">
+                <span style="display:flex;align-items:center;gap:12px;min-width:0">
+                  <span style="width:38px;height:38px;flex:0 0 auto;border-radius:999px;background:#073b33;color:#fff;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px;display:flex;align-items:center;justify-content:center">{{ row.initials }}</span>
+                  <span style="display:flex;flex-direction:column;line-height:1.35;min-width:0">
+                    <a href="#top" style="font-size:14px;font-weight:600">{{ row.name }}</a>
+                    <span style="font-size:13px;color:#6d777a">{{ row.email }}</span>
+                  </span>
+                </span>
+                <span style="font-size:13.5px;color:#363d3f">{{ row.role }}</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:13px;color:#363d3f">{{ row.phone }}</span>
+                <span style="display:inline-flex;flex-direction:column;align-items:center;gap:1px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#0a6355;background:#eff8f6;border:1px solid #d3ece7;padding:5px 10px;border-radius:8px;justify-self:start;line-height:1.35"><span>{{ row.time }}</span><span>{{ row.date }}</span></span>
+                <span style="justify-self:end;display:flex;gap:6px">
+                  <button title="Edit user" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#eff8f6;color:#0f7d6a;border-color:#86cbc0"><i data-lucide="pencil" style="width:15px;height:15px"></i></button>
+                  <button title="Delete user" style="width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:#fff;border:1px solid #dde2e3;border-radius:8px;cursor:pointer;color:#4d5659;transition:background .12s" style-hover="background:#fce8e6;color:#b3261e;border-color:#f0c4c1"><i data-lucide="trash-2" style="width:15px;height:15px"></i></button>
+                </span>
+              </div>
+            </sc-for>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px">
+              <div style="display:flex;align-items:center;gap:12px">
+                <span style="font-size:13px;color:#4d5659">Records per page</span>
+                <div style="position:relative">
+                  <select style="appearance:none;height:34px;border:1px solid #dde2e3;border-radius:8px;padding:0 32px 0 12px;font-size:13px;background:#fff;cursor:pointer;outline:none"><option>10</option><option>25</option></select>
+                  <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8" style="position:absolute;right:10px;top:11px;pointer-events:none"><path d="M4 6.5 8 10.5l4-4" /></svg>
+                </div>
+                <span style="font-size:13px;color:#6d777a">1–1 of 1</span>
+              </div>
+              <div style="display:flex;gap:6px">
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4M4.5 4v8" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4" /></svg></button>
+                <button style="width:34px;height:34px;border:1px solid #dde2e3;background:#fff;border-radius:8px;color:#97a1a4;cursor:not-allowed;display:flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 4l4 4-4 4M11.5 4v8" /></svg></button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== CREATE SUPPLIER ===== -->
+      <sc-if value="{{ showSupplierForm }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Create Supplier</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">Fields marked <span style="color:#b3261e">*</span> are required.</p>
+            </div>
+            <button onClick="{{ goBack }}" style="height:40px;padding:0 18px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#f5f7f7"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg>Back</button>
+          </div>
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);padding:32px;display:flex;flex-direction:column;gap:24px">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 32px">
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Name <span style="color:#b3261e">*</span></label><input placeholder="Enter Name" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Email <span style="color:#b3261e">*</span></label><input placeholder="Enter Email" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Phone Number <span style="color:#b3261e">*</span></label><input placeholder="Phone Number" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;font-family:'IBM Plex Mono',monospace;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Country <span style="color:#b3261e">*</span></label><input placeholder="Enter Country" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">City <span style="color:#b3261e">*</span></label><input placeholder="Enter City" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Address <span style="color:#b3261e">*</span></label><input placeholder="Enter Address" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:12px;padding-top:24px;border-top:1px solid #eceff0">
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 20px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;transition:background .12s" style-hover="background:#f5f7f7">Cancel</button>
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 24px;background:#0f7d6a;border:none;border-radius:8px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;transition:background .12s" style-hover="background:#0a6355">Save supplier</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== CREATE CUSTOMER ===== -->
+      <sc-if value="{{ showCustomerForm }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Create Customer</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">Fields marked <span style="color:#b3261e">*</span> are required.</p>
+            </div>
+            <button onClick="{{ goBack }}" style="height:40px;padding:0 18px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#f5f7f7"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg>Back</button>
+          </div>
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);padding:32px;display:flex;flex-direction:column;gap:24px">
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 32px">
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Name <span style="color:#b3261e">*</span></label><input placeholder="Enter Name" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Email <span style="color:#b3261e">*</span></label><input placeholder="Enter Email" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Phone Number <span style="color:#b3261e">*</span></label><input placeholder="Enter Phone Number" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;font-family:'IBM Plex Mono',monospace;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">DOB</label><div style="position:relative"><input value="03/06/2026" style="width:100%;height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 40px 0 12px;font-size:14px;font-family:'IBM Plex Mono',monospace;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.5" style="position:absolute;right:12px;top:12px"><rect x="2.5" y="3.5" width="11" height="10" rx="1.5" /><path d="M2.5 6.5h11M5.5 2.5v2M10.5 2.5v2" /></svg></div></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Country <span style="color:#b3261e">*</span></label><input placeholder="Enter Country" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">City <span style="color:#b3261e">*</span></label><input placeholder="Enter City" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:8px;max-width:calc(50% - 16px)"><label style="font-size:13px;font-weight:600;color:#363d3f">Address <span style="color:#b3261e">*</span></label><textarea placeholder="Enter Address" style="min-height:110px;border:1px solid #dde2e3;border-radius:8px;padding:10px 12px;font-size:14px;outline:none;resize:vertical" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7"></textarea></div>
+            <div style="display:flex;justify-content:flex-end;gap:12px;padding-top:24px;border-top:1px solid #eceff0">
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 20px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;transition:background .12s" style-hover="background:#f5f7f7">Cancel</button>
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 24px;background:#0f7d6a;border:none;border-radius:8px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;transition:background .12s" style-hover="background:#0a6355">Save customer</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <!-- ===== CREATE USER ===== -->
+      <sc-if value="{{ showUserForm }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;gap:20px">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+            <div style="display:flex;flex-direction:column;gap:6px">
+              <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:700;letter-spacing:-.015em">Create User</h1>
+              <p style="margin:0;font-size:13.5px;color:#6d777a">Fields marked <span style="color:#b3261e">*</span> are required.</p>
+            </div>
+            <button onClick="{{ goBack }}" style="height:40px;padding:0 18px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;display:flex;align-items:center;gap:8px" style-hover="background:#f5f7f7"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M10 4 6 8l4 4" /></svg>Back</button>
+          </div>
+          <div style="background:#fff;border:1px solid #eceff0;border-radius:12px;box-shadow:0 1px 2px rgba(23,27,28,.06);padding:32px;display:flex;flex-direction:column;gap:24px">
+            <div style="display:flex;flex-direction:column;gap:12px">
+              <label style="font-size:13px;font-weight:600;color:#363d3f">Change Image</label>
+              <div style="position:relative;width:96px;height:96px">
+                <div style="width:96px;height:96px;border-radius:999px;background:#dfe9ea;border:1px solid #cdd9da;display:flex;align-items:end;justify-content:center;overflow:hidden;color:#8aa0a2">
+                  <svg width="60" height="60" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="8.5" r="4"/><path d="M4 22c0-4.4 3.6-7 8-7s8 2.6 8 7z"/></svg>
+                </div>
+                <button title="Change image" style="position:absolute;right:-2px;top:-2px;width:28px;height:28px;border-radius:999px;background:#fff;border:1px solid #dde2e3;box-shadow:0 1px 3px rgba(23,27,28,.14);cursor:pointer;color:#4d5659;display:flex;align-items:center;justify-content:center" style-hover="background:#eff8f6;color:#0f7d6a;border-color:#86cbc0"><i data-lucide="pencil" style="width:13px;height:13px"></i></button>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 32px">
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">First Name <span style="color:#b3261e">*</span></label><input placeholder="Enter First Name" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Last Name <span style="color:#b3261e">*</span></label><input placeholder="Enter Last Name" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Email <span style="color:#b3261e">*</span></label><input value="admin@gmail.com" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Phone Number <span style="color:#b3261e">*</span></label><input placeholder="Enter Phone Number" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;font-family:'IBM Plex Mono',monospace;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Password <span style="color:#b3261e">*</span></label><input type="password" value="password1234" style="height:40px;border:1px solid #86cbc0;background:#eff8f6;border-radius:8px;padding:0 12px;font-size:14px;letter-spacing:2px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Confirm Password <span style="color:#b3261e">*</span></label><input type="password" placeholder="Enter Confirm Password" style="height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:14px;outline:none" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" /></div>
+              <div style="display:flex;flex-direction:column;gap:8px"><label style="font-size:13px;font-weight:600;color:#363d3f">Role <span style="color:#b3261e">*</span></label><div style="position:relative"><select style="appearance:none;width:100%;height:40px;border:1px solid #dde2e3;border-radius:8px;padding:0 36px 0 12px;font-size:14px;background:#fff;cursor:pointer;outline:none;color:#6d777a" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7"><option>Choose Role</option><option>Administrator</option><option>Manager</option><option>Cashier</option></select><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#6d777a" stroke-width="1.8" style="position:absolute;right:12px;top:13px;pointer-events:none"><path d="M4 6.5 8 10.5l4-4" /></svg></div></div>
+            </div>
+            <div style="display:flex;justify-content:flex-end;gap:12px;padding-top:24px;border-top:1px solid #eceff0">
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 20px;background:#fff;border:1px solid #dde2e3;border-radius:8px;font-size:14px;font-weight:600;color:#363d3f;cursor:pointer;transition:background .12s" style-hover="background:#f5f7f7">Cancel</button>
+              <button onClick="{{ goBack }}" style="height:40px;padding:0 24px;background:#0f7d6a;border:none;border-radius:8px;font-size:14px;font-weight:600;color:#fff;cursor:pointer;transition:background .12s" style-hover="background:#0a6355">Save user</button>
+            </div>
+          </div>
+        </div>
+      </sc-if>
+
+      <footer style="display:flex;align-items:center;justify-content:space-between;padding-top:12px;border-top:1px solid #dde2e3;margin-top:auto">
+        <span style="font-size:12.5px;color:#97a1a4">All Rights Reserved (C) 2026 <a href="#top">RingzPOS</a></span>
+        <span style="font-size:12.5px;color:#97a1a4">v1.0</span>
+      </footer>
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;suppliers&quot;,&quot;supplier-create&quot;,&quot;customers&quot;,&quot;customer-create&quot;,&quot;users&quot;,&quot;user-create&quot;],&quot;default&quot;:&quot;suppliers&quot;,&quot;tsType&quot;:&quot;'suppliers'|'supplier-create'|'customers'|'customer-create'|'users'|'user-create'&quot;,&quot;section&quot;:&quot;Page&quot;},&quot;sidebarStartCollapsed&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Shell&quot;}}">
+const ICONS = {
+  dashboard: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="2" y="2" width="5" height="5" rx="1"/><rect x="9" y="2" width="5" height="5" rx="1"/><rect x="2" y="9" width="5" height="5" rx="1"/><rect x="9" y="9" width="5" height="5" rx="1"/></svg>',
+  products: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2.5 5.5 8 2.5l5.5 3v5L8 13.5l-5.5-3z"/><path d="M2.5 5.5 8 8.5l5.5-3M8 8.5v5"/></svg>',
+  adjustments: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 4.5h10M3 8h10M3 11.5h10"/><circle cx="6" cy="4.5" r="1.3" fill="#fff"/><circle cx="10" cy="8" r="1.3" fill="#fff"/><circle cx="5" cy="11.5" r="1.3" fill="#fff"/></svg>',
+  quotations: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="2.5" width="10" height="11" rx="1.5"/><path d="M5.5 6h5M5.5 8.5h5M5.5 11h3"/></svg>',
+  purchases: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2.5h1.8l1.5 7.5h6.9l1.3-5.5H5"/><circle cx="6.5" cy="12.6" r="1.1"/><circle cx="11.5" cy="12.6" r="1.1"/></svg>',
+  sales: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 2.5h1.8l1.5 7.5h6.9l1.3-5.5H5"/><circle cx="6.5" cy="12.6" r="1.1"/><circle cx="11.5" cy="12.6" r="1.1"/></svg>',
+  transfers: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 5.5h9M9 3l2.5 2.5L9 8M13.5 10.5h-9M7 8l-2.5 2.5L7 13"/></svg>',
+  expenses: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="4.5" width="12" height="7" rx="1.5"/><circle cx="8" cy="8" r="1.7"/></svg>',
+  peoples: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="6.2" cy="5.5" r="2.2"/><path d="M2.5 13c0-2.2 1.7-3.6 3.7-3.6S9.9 10.8 9.9 13"/><path d="M10.5 4.2a2 2 0 0 1 0 3.6M11.5 13c0-1.5-.4-2.5-1.1-3.2 1.9-.3 3.3 1 3.3 3.2"/></svg>',
+  roles: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2 3.5 3.6v4.1c0 3 1.9 5 4.5 6.3 2.6-1.3 4.5-3.3 4.5-6.3V3.6z"/><path d="M6 8l1.6 1.6L10.5 6.5"/></svg>',
+  warehouse: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 6.5 8 2.5l6 4v7H2z"/><rect x="6" y="9.5" width="4" height="4"/></svg>',
+  reports: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 13.5h11"/><path d="M4.5 13.5V8M7.5 13.5V4.5M10.5 13.5V10M13 13.5V6.5"/></svg>',
+  currencies: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4.5 3.5v9M11.5 3.5v9M4.5 3.5l7 9M3 7h10M3 9.5h10"/></svg>',
+  languages: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="12" height="10" rx="1.5"/><path d="M4.5 6.5h4M6.5 6.5v4M9.5 10.5l1.6-4 1.6 4M10.2 9.2h2"/></svg>',
+  templates: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 2.5h5l3 3v8H4z"/><path d="M9 2.5v3h3"/></svg>',
+  settings: '<svg width="17" height="17" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="2.2"/><path d="M8 1.8v1.6M8 12.6v1.6M1.8 8h1.6M12.6 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1"/></svg>',
+  supplier: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1.5 4.5h7v6h-7z"/><path d="M8.5 6.5h3l2 2v2h-5z"/><circle cx="4" cy="11.5" r="1.1"/><circle cx="11" cy="11.5" r="1.1"/></svg>',
+  customer: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="5.5" cy="5.5" r="2"/><path d="M2 13c0-2 1.5-3.4 3.5-3.4S9 11 9 13"/><circle cx="11" cy="6" r="1.6"/><path d="M10 13c0-1.4-.3-2.3-.9-3 1.7-.3 3.4.9 3.4 3"/></svg>',
+  user: '<svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="5.5" r="2.6"/><path d="M3 13.5c0-2.6 2.2-4.2 5-4.2s5 1.6 5 4.2"/></svg>'
+};
+
+const NAV = [
+  { key: 'Dashboard', icon: 'dashboard' },
+  { key: 'Products', icon: 'products', children: ['Products', 'Product Categories', 'Brands', 'Units', 'Base Units', 'Print Barcode'] },
+  { key: 'Adjustments', icon: 'adjustments' },
+  { key: 'Quotations', icon: 'quotations' },
+  { key: 'Purchases', icon: 'purchases', children: ['Purchases', 'Purchases Returns'] },
+  { key: 'Sales', icon: 'sales', children: ['Sales', 'Sales Returns'] },
+  { key: 'Transfers', icon: 'transfers' },
+  { key: 'Expenses', icon: 'expenses', children: ['Expenses', 'Expense Categories'] },
+  { key: 'Peoples', icon: 'peoples', children: [
+    { label: 'Suppliers', icon: 'supplier' },
+    { label: 'Customers', icon: 'customer' },
+    { label: 'Users', icon: 'user' }
+  ] },
+  { key: 'Roles/Permissions', icon: 'roles' },
+  { key: 'Warehouse', icon: 'warehouse' },
+  { key: 'Reports', icon: 'reports' },
+  { key: 'Currencies', icon: 'currencies' },
+  { key: 'Languages', icon: 'languages' },
+  { key: 'Templates', icon: 'templates', children: ['Sale Template', 'Purchase Template'] },
+  { key: 'Settings', icon: 'settings' }
+];
+
+const SUPPLIERS = [{ name: 'China', email: 'china@gmail.com', phone: '0155555', time: '6:16 AM', date: '02/02/2024' }];
+const CUSTOMERS = [{ name: 'direct-customer', email: 'customer@ringzpos.com', phone: '123456789', time: '11:52 AM', date: '04/11/2023' }];
+const USERS = [{ name: 'Raihan Shak', email: 'raihan@gmail.com', role: 'Manager', phone: '01678039025', initials: 'RS', time: '7:27 PM', date: '01/02/2024' }];
+
+const TAB_META = {
+  Suppliers: { list: 'suppliers', form: 'supplier-create' },
+  Customers: { list: 'customers', form: 'customer-create' },
+  Users: { list: 'users', form: 'user-create' }
+};
+
+class Component extends DCLogic {
+  state = {
+    view: 'suppliers',
+    collapsed: false,
+    openGroup: 'Peoples',
+    active: 'Suppliers',
+    userMenuOpen: false
+  };
+
+  componentDidMount() {
+    if (this.props.startView) {
+      const v = this.props.startView;
+      const activeMap = {
+        suppliers: 'Suppliers', 'supplier-create': 'Suppliers',
+        customers: 'Customers', 'customer-create': 'Customers',
+        users: 'Users', 'user-create': 'Users'
+      };
+      this.setState({ view: v, active: activeMap[v] || 'Suppliers' });
+    }
+    if (this.props.sidebarStartCollapsed) this.setState({ collapsed: true });
+    this.paintIcons();
+  }
+
+  componentDidUpdate() { this.paintIcons(); }
+
+  paintIcons() {
+    if (window.lucide && window.lucide.createIcons) {
+      try { window.lucide.createIcons(); } catch (e) {}
+    } else {
+      setTimeout(() => this.paintIcons(), 200);
+    }
+  }
+
+  renderVals() {
+    const { collapsed, openGroup, active, view } = this.state;
+    const expanded = !collapsed;
+
+    const nav = NAV.map(item => {
+      const childLabels = (item.children || []).map(c => typeof c === 'string' ? c : c.label);
+      const isActive = active === item.key || childLabels.indexOf(active) > -1;
+      const open = expanded && openGroup === item.key;
+      return {
+        label: item.key,
+        icon: { __html: ICONS[item.icon] },
+        bg: isActive && !open ? '#eff8f6' : (open ? '#f5f7f7' : 'transparent'),
+        fg: isActive ? '#0a6355' : '#4d5659',
+        weight: isActive ? '600' : '500',
+        showCaret: expanded && !!item.children,
+        caretRotate: open ? 'rotate(90deg)' : 'rotate(0deg)',
+        showChildren: open && !!item.children,
+        onClick: () => this.setState(st => ({
+          openGroup: item.children ? (st.openGroup === item.key ? null : item.key) : null,
+          active: item.children ? st.active : item.key,
+          userMenuOpen: false
+        })),
+        children: (item.children || []).map(c => {
+          const label = typeof c === 'string' ? c : c.label;
+          const meta = TAB_META[label];
+          return {
+            label,
+            icon: { __html: (typeof c === 'string' ? '' : ICONS[c.icon]) || '' },
+            bg: active === label ? '#eff8f6' : 'transparent',
+            fg: active === label ? '#0a6355' : '#4d5659',
+            weight: active === label ? '600' : '400',
+            onClick: () => this.setState({ active: label, view: meta ? meta.list : view, userMenuOpen: false })
+          };
+        })
+      };
+    });
+
+    const meta = TAB_META[active] || TAB_META.Suppliers;
+
+    return {
+      expanded,
+      sidebarWidth: collapsed ? '72px' : '248px',
+      toggleSidebar: () => this.setState(st => ({ collapsed: !st.collapsed, openGroup: null })),
+      nav,
+      suppliers: SUPPLIERS,
+      customers: CUSTOMERS,
+      users: USERS,
+      showSuppliers: view === 'suppliers',
+      showCustomers: view === 'customers',
+      showUsers: view === 'users',
+      showSupplierForm: view === 'supplier-create',
+      showCustomerForm: view === 'customer-create',
+      showUserForm: view === 'user-create',
+      crumb: {
+        suppliers: 'Suppliers', 'supplier-create': 'Create Supplier',
+        customers: 'Customers', 'customer-create': 'Create Customer',
+        users: 'Users', 'user-create': 'Create User'
+      }[view] || 'Suppliers',
+      goCreate: () => this.setState({ view: meta.form, userMenuOpen: false }),
+      goBack: () => this.setState({ view: meta.list, userMenuOpen: false }),
+      userMenuOpen: this.state.userMenuOpen,
+      toggleUserMenu: () => this.setState(st => ({ userMenuOpen: !st.userMenuOpen }))
+    };
+  }
+}
+</script>
+</body>
+</html>
