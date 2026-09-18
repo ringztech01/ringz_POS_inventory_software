@@ -36,11 +36,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    async jwt({ token, user }) {
+    async jwt({ token, user, trigger, session }) {
       if (user?.id) {
         token.id = user.id;
         token.role = user.role;
       }
+
+      // Triggered by useSession().update(...) — e.g. after a profile edit —
+      // so open tabs pick up the new name/email/avatar without a re-login.
+      if (trigger === "update" && session) {
+        if (typeof session.name === "string") token.name = session.name;
+        if (typeof session.email === "string") token.email = session.email;
+        if (typeof session.image === "string") token.picture = session.image;
+      }
+
       return token;
     },
     async session({ session, token }) {
