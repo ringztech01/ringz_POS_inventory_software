@@ -24,6 +24,27 @@ async function main() {
 
   console.log(`Seeded admin user: ${admin.email} (id: ${admin.id})`);
   console.log(`Initial password: ${ADMIN_PASSWORD} — change this after first login.`);
+
+  // The walk-in customer the POS uses when no specific customer is
+  // selected. Protected server-side (see app/(dashboard)/customers/actions.ts)
+  // so it can't be deleted or renamed. No unique field to upsert against, so
+  // find-or-create instead.
+  const existingDirectCustomer = await prisma.customer.findFirst({ where: { isDefault: true } });
+  const directCustomer =
+    existingDirectCustomer ??
+    (await prisma.customer.create({
+      data: {
+        name: "direct-customer",
+        email: "customer@ringzpos.com",
+        phoneNumber: "123456789",
+        country: "",
+        city: "",
+        address: "",
+        isDefault: true,
+      },
+    }));
+
+  console.log(`Seeded direct-customer: ${directCustomer.id}`);
 }
 
 main()

@@ -25,3 +25,54 @@ model User {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+model Warehouse {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phoneNumber String
+  country     String
+  city        String
+  zipCode     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([deletedAt])
+}
+
+model Supplier {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phoneNumber String
+  country     String
+  city        String
+  address     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([deletedAt])
+}
+
+model Customer {
+  id          String    @id @default(cuid())
+  name        String
+  email       String
+  phoneNumber String
+  dateOfBirth DateTime?
+  country     String
+  city        String
+  address     String
+  // The seeded walk-in customer the POS uses when no specific customer is
+  // selected. See prisma/seed.ts and the guards in
+  // app/(dashboard)/customers/actions.ts — this record can't be deleted or
+  // renamed, checked server-side via this flag, not just hidden in the UI.
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  @@index([deletedAt])
+}
