@@ -5,7 +5,7 @@ import { ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, ChevronDown } f
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS } from "@/components/layout/theme";
 
-const PER_PAGE_OPTIONS = [10, 25];
+const DEFAULT_PER_PAGE_OPTIONS = [10, 25];
 
 function NavButton({
   onClick,
@@ -49,11 +49,13 @@ export default function Pagination({
   perPage,
   total,
   totalPages,
+  perPageOptions = DEFAULT_PER_PAGE_OPTIONS,
 }: {
   page: number;
   perPage: number;
   total: number;
   totalPages: number;
+  perPageOptions?: number[];
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -91,7 +93,7 @@ export default function Pagination({
               outline: "none",
             }}
           >
-            {PER_PAGE_OPTIONS.map((option) => (
+            {perPageOptions.map((option) => (
               <option key={option} value={option}>
                 {option}
               </option>

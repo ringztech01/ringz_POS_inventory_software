@@ -4,6 +4,11 @@ export const PERMISSIONS = {
   MANAGE_WAREHOUSES: "manage_warehouses",
   MANAGE_SUPPLIERS: "manage_suppliers",
   MANAGE_CUSTOMERS: "manage_customers",
+  MANAGE_USERS: "manage_users",
+  MANAGE_PRODUCT_CATEGORIES: "manage_product_categories",
+  MANAGE_PRODUCTS: "manage_products",
+  MANAGE_ADJUSTMENTS: "manage_adjustments",
+  MANAGE_PURCHASES: "manage_purchases",
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -15,8 +20,28 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 // for a DB-backed lookup; call sites (hasPermission(role, permission)) don't
 // need to change.
 const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
-  ADMIN: [PERMISSIONS.MANAGE_WAREHOUSES, PERMISSIONS.MANAGE_SUPPLIERS, PERMISSIONS.MANAGE_CUSTOMERS],
-  MANAGER: [PERMISSIONS.MANAGE_WAREHOUSES, PERMISSIONS.MANAGE_SUPPLIERS, PERMISSIONS.MANAGE_CUSTOMERS],
+  // Managing staff accounts (creating/editing/deleting Users, assigning
+  // roles) is more sensitive than the other modules, so — unlike Warehouses/
+  // Suppliers/Customers — this is ADMIN-only, not also granted to MANAGER.
+  ADMIN: [
+    PERMISSIONS.MANAGE_WAREHOUSES,
+    PERMISSIONS.MANAGE_SUPPLIERS,
+    PERMISSIONS.MANAGE_CUSTOMERS,
+    PERMISSIONS.MANAGE_USERS,
+    PERMISSIONS.MANAGE_PRODUCT_CATEGORIES,
+    PERMISSIONS.MANAGE_PRODUCTS,
+    PERMISSIONS.MANAGE_ADJUSTMENTS,
+    PERMISSIONS.MANAGE_PURCHASES,
+  ],
+  MANAGER: [
+    PERMISSIONS.MANAGE_WAREHOUSES,
+    PERMISSIONS.MANAGE_SUPPLIERS,
+    PERMISSIONS.MANAGE_CUSTOMERS,
+    PERMISSIONS.MANAGE_PRODUCT_CATEGORIES,
+    PERMISSIONS.MANAGE_PRODUCTS,
+    PERMISSIONS.MANAGE_ADJUSTMENTS,
+    PERMISSIONS.MANAGE_PURCHASES,
+  ],
   CASHIER: [],
 };
 

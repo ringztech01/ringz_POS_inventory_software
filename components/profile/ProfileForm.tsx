@@ -15,6 +15,7 @@ import type { Role } from "@prisma/client";
 import { Pencil, User as UserIcon, ChevronDown } from "lucide-react";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
+import { ROLE_LABELS } from "@/lib/roles";
 import { updateProfile } from "@/app/(dashboard)/profile/actions";
 import { initialProfileActionState, type ProfileActionState } from "@/app/(dashboard)/profile/types";
 
@@ -25,12 +26,6 @@ type ProfileUser = {
   phoneNumber: string | null;
   image: string | null;
   role: Role;
-};
-
-const ROLE_LABELS: Record<Role, string> = {
-  ADMIN: "Administrator",
-  MANAGER: "Manager",
-  CASHIER: "Cashier",
 };
 
 function inputStyle(focused: boolean): CSSProperties {

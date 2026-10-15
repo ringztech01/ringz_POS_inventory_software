@@ -36,9 +36,9 @@ export const NAV: NavItem[] = [
     icon: Package,
     children: [
       { label: "Products", href: "/products" },
-      { label: "Product Categories", href: "/products/categories" },
-      { label: "Brands", href: "/products/brands" },
-      { label: "Units", href: "/products/units" },
+      { label: "Product Categories", href: "/product-categories" },
+      { label: "Brands", href: "/brands" },
+      { label: "Units", href: "/units" },
       { label: "Base Units", href: "/products/base-units" },
       { label: "Print Barcode", href: "/products/print-barcode" },
     ],

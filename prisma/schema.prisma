@@ -13,17 +13,57 @@ enum Role {
   CASHIER
 }
 
+enum TaxType {
+  EXCLUSIVE
+  INCLUSIVE
+}
+
+enum AdjustmentItemType {
+  ADDITION
+  SUBTRACTION
+}
+
+enum PurchaseStatus {
+  PENDING
+  ORDERED
+  RECEIVED
+}
+
+enum DiscountType {
+  FIXED
+  PERCENTAGE
+}
+
+enum PaymentType {
+  CASH
+  BANK_TRANSFER
+  CARD
+  CHEQUE
+}
+
+enum PaymentStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
 model User {
-  id          String   @id @default(cuid())
+  id          String    @id @default(cuid())
   firstName   String
   lastName    String
-  email       String   @unique
+  email       String    @unique
   password    String
   phoneNumber String?
   image       String?
-  role        Role     @default(CASHIER)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  role        Role      @default(CASHIER)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  adjustments Adjustment[]
+  purchases   Purchase[]
+
+  @@index([deletedAt])
 }
 
 model Warehouse {
@@ -37,6 +77,10 @@ model Warehouse {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
+
+  stocks      ProductStock[]
+  adjustments Adjustment[]
+  purchases   Purchase[]
 
   @@index([deletedAt])
 }
@@ -53,7 +97,198 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
+  stocks    ProductStock[]
+  purchases Purchase[]
+
   @@index([deletedAt])
+}
+
+model Category {
+  id        String    @id @default(cuid())
+  name      String
+  logo      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+model Brand {
+  id        String    @id @default(cuid())
+  name      String
+  logo      String?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+model Unit {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  products Product[]
+
+  @@index([deletedAt])
+}
+
+model Product {
+  id                 String    @id @default(cuid())
+  name               String
+  code               String    @unique
+  price              Decimal   @db.Decimal(12, 2)
+  // Default net unit cost for purchase lines; not yet on the Product form.
+  cost               Decimal?  @db.Decimal(12, 2)
+  categoryId         String
+  brandId            String
+  unitId             String
+  stockAlert         Int?
+  orderTax           Decimal?  @db.Decimal(5, 2)
+  taxType            TaxType
+  quantityLimitation Int?
+  notes              String?   @db.Text
+  // Array of uploaded image paths; the first entry is the list thumbnail.
+  // MySQL has no native array column, so this is stored as JSON.
+  images             Json?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  category        Category         @relation(fields: [categoryId], references: [id])
+  brand           Brand            @relation(fields: [brandId], references: [id])
+  unit            Unit             @relation(fields: [unitId], references: [id])
+  stocks          ProductStock[]
+  adjustmentItems AdjustmentItem[]
+  purchaseItems   PurchaseItem[]
+
+  @@index([deletedAt])
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([unitId])
+}
+
+// The current stock balance for one product in one warehouse — exactly one
+// row per (productId, warehouseId) pair, never a movement ledger. Every
+// change (initial stock on product create, Adjustments, eventually
+// Purchases/Sales/Transfers) goes through lib/stock.ts's increase/decrease
+// helpers, which upsert this row inside a transaction. "In stock" for a
+// product is the sum of its rows across warehouses (groupBy/_sum), and the
+// per-warehouse breakdown is just these rows directly.
+model ProductStock {
+  id          String   @id @default(cuid())
+  productId   String
+  warehouseId String
+  supplierId  String?
+  quantity    Int
+  status      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product   Product   @relation(fields: [productId], references: [id])
+  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  supplier  Supplier? @relation(fields: [supplierId], references: [id])
+
+  @@unique([productId, warehouseId])
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([supplierId])
+}
+
+model Adjustment {
+  id          String    @id @default(cuid())
+  reference   String    @unique
+  warehouseId String
+  date        DateTime
+  notes       String?   @db.Text
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
+  items     AdjustmentItem[]
+
+  @@index([deletedAt])
+  @@index([warehouseId])
+}
+
+model AdjustmentItem {
+  id           String             @id @default(cuid())
+  adjustmentId String
+  productId    String
+  quantity     Int
+  type         AdjustmentItemType
+
+  adjustment Adjustment @relation(fields: [adjustmentId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+
+  @@index([adjustmentId])
+  @@index([productId])
+}
+
+model Purchase {
+  id             String         @id @default(cuid())
+  reference      String         @unique
+  supplierId     String
+  warehouseId    String
+  date           DateTime
+  status         PurchaseStatus
+  // Order-level money. orderTax is a percentage; the rest are Naira amounts.
+  orderTax       Decimal        @default(0) @db.Decimal(5, 2)
+  orderTaxAmount Decimal        @default(0) @db.Decimal(12, 2)
+  discount       Decimal        @default(0) @db.Decimal(12, 2)
+  shipping       Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal     Decimal        @db.Decimal(12, 2)
+  paymentType    PaymentType    @default(CASH)
+  paymentStatus  PaymentStatus  @default(UNPAID)
+  notes          String?        @db.Text
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  supplier  Supplier       @relation(fields: [supplierId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
+  createdBy User           @relation(fields: [createdById], references: [id])
+  items     PurchaseItem[]
+
+  @@index([deletedAt])
+  @@index([supplierId])
+  @@index([warehouseId])
+  @@index([date])
+}
+
+model PurchaseItem {
+  id           String       @id @default(cuid())
+  purchaseId   String
+  productId    String
+  quantity     Int
+  purchaseUnit String
+  // Unit cost as entered; subtotal and amounts are recomputed server-side
+  // through lib/pricing.ts and stored for display/reporting.
+  netUnitCost  Decimal      @db.Decimal(12, 2)
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([purchaseId])
+  @@index([productId])
 }
 
 model Customer {

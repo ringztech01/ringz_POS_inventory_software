@@ -26,7 +26,7 @@ export async function changePassword(formData: FormData): Promise<ChangePassword
 
   const { currentPassword, newPassword } = parsed.data;
 
-  const user = await prisma.user.findUnique({ where: { id: session.user.id } });
+  const user = await prisma.user.findFirst({ where: { id: session.user.id, deletedAt: null } });
   if (!user) {
     return { status: "error", message: "Account not found." };
   }

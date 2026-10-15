@@ -20,6 +20,7 @@ export default function IconActionButton({
   tone = "default",
   baseColor,
   disabled,
+  size = 32,
 }: {
   // A rendered icon element (e.g. <Eye size={15} />), not a component
   // reference — this can be passed from a Server Component parent into this
@@ -32,14 +33,15 @@ export default function IconActionButton({
   tone?: Tone;
   baseColor?: string;
   disabled?: boolean;
+  size?: number;
 }) {
   const hover = useToggleState();
   const hoverStyle = TONE_HOVER[tone];
   const isHovered = hover.value && !disabled;
 
   const style = {
-    width: 32,
-    height: 32,
+    width: size,
+    height: size,
     display: "flex",
     alignItems: "center",
     justifyContent: "center",

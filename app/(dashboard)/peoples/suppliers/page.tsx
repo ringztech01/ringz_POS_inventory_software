@@ -64,10 +64,9 @@ export default async function SupplierListPage({
           border: `1px solid ${COLORS.border}`,
           borderRadius: 12,
           boxShadow: "0 1px 2px rgba(23,27,28,.06)",
-          overflow: "hidden",
         }}
       >
-        <div style={{ padding: "18px 20px", borderBottom: `1px solid ${COLORS.border}` }}>
+        <div style={{ padding: "18px 20px", borderBottom: `1px solid ${COLORS.border}`, borderRadius: "12px 12px 0 0" }}>
           <Suspense fallback={null}>
             <SearchInput />
           </Suspense>
