@@ -7,7 +7,11 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum Role {
+// LEGACY — the old fixed role on User.role, kept until the follow-up
+// migration (after Role / User.roleId is confirmed). Renamed from `Role` so
+// the Role model below can take that name; MySQL stores enums inline, so the
+// rename changes no SQL.
+enum UserRole {
   ADMIN
   MANAGER
   CASHIER
@@ -47,6 +51,22 @@ enum PaymentStatus {
   PAID
 }
 
+// Sale returns have their own lifecycle (from the design). Stock comes back
+// into the warehouse only while RECEIVED or COMPLETED; PENDING moves none.
+enum SaleReturnStatus {
+  PENDING
+  RECEIVED
+  COMPLETED
+}
+
+// In-transit rule: a transfer moves stock (From → To) only while COMPLETED.
+// PENDING and SENT are paperwork only — nothing leaves From until Completed.
+enum TransferStatus {
+  PENDING
+  SENT
+  COMPLETED
+}
+
 model User {
   id          String    @id @default(cuid())
   firstName   String
@@ -55,15 +75,57 @@ model User {
   password    String
   phoneNumber String?
   image       String?
-  role        Role      @default(CASHIER)
+  // LEGACY (see UserRole) — replaced by roleId; dropped in a follow-up
+  // migration once every user's mapping is confirmed.
+  role        UserRole  @default(CASHIER)
+  // Nullable until that follow-up migration makes it required.
+  roleId      String?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  adjustments Adjustment[]
-  purchases   Purchase[]
+  userRole           Role?               @relation(fields: [roleId], references: [id])
+  adjustments        Adjustment[]
+  purchases          Purchase[]
+  purchaseReturns    PurchaseReturn[]
+  sales              Sale[]
+  salePayments       SalePayment[]
+  saleReturns        SaleReturn[]
+  saleReturnPayments SaleReturnPayment[]
+  transfers          Transfer[]
+  expenses           Expense[]
 
   @@index([deletedAt])
+  @@index([roleId])
+}
+
+// A named set of permissions (Roles & Permissions). The seeded admin role is
+// isSystem: it implicitly has every permission and can't be deleted.
+model Role {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isSystem  Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  permissions RolePermission[]
+  users       User[]
+
+  @@index([deletedAt])
+}
+
+// One granted permission. `permission` is one of the strings in
+// lib/permissions.ts (PERMISSIONS) — validated there, stored as text so the
+// list can grow without a migration.
+model RolePermission {
+  id         String @id @default(cuid())
+  roleId     String
+  permission String
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permission])
 }
 
 model Warehouse {
@@ -78,9 +140,15 @@ model Warehouse {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  stocks      ProductStock[]
-  adjustments Adjustment[]
-  purchases   Purchase[]
+  stocks          ProductStock[]
+  adjustments     Adjustment[]
+  purchases       Purchase[]
+  purchaseReturns PurchaseReturn[]
+  sales           Sale[]
+  saleReturns     SaleReturn[]
+  transfersOut    Transfer[]       @relation("TransferFrom")
+  transfersIn     Transfer[]       @relation("TransferTo")
+  expenses        Expense[]
 
   @@index([deletedAt])
 }
@@ -97,8 +165,9 @@ model Supplier {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  stocks    ProductStock[]
-  purchases Purchase[]
+  stocks          ProductStock[]
+  purchases       Purchase[]
+  purchaseReturns PurchaseReturn[]
 
   @@index([deletedAt])
 }
@@ -163,12 +232,16 @@ model Product {
   updatedAt          DateTime  @updatedAt
   deletedAt          DateTime?
 
-  category        Category         @relation(fields: [categoryId], references: [id])
-  brand           Brand            @relation(fields: [brandId], references: [id])
-  unit            Unit             @relation(fields: [unitId], references: [id])
-  stocks          ProductStock[]
-  adjustmentItems AdjustmentItem[]
-  purchaseItems   PurchaseItem[]
+  category            Category             @relation(fields: [categoryId], references: [id])
+  brand               Brand                @relation(fields: [brandId], references: [id])
+  unit                Unit                 @relation(fields: [unitId], references: [id])
+  stocks              ProductStock[]
+  adjustmentItems     AdjustmentItem[]
+  purchaseItems       PurchaseItem[]
+  purchaseReturnItems PurchaseReturnItem[]
+  saleItems           SaleItem[]
+  saleReturnItems     SaleReturnItem[]
+  transferItems       TransferItem[]
 
   @@index([deletedAt])
   @@index([categoryId])
@@ -257,10 +330,11 @@ model Purchase {
   updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  supplier  Supplier       @relation(fields: [supplierId], references: [id])
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  createdBy User           @relation(fields: [createdById], references: [id])
+  supplier  Supplier         @relation(fields: [supplierId], references: [id])
+  warehouse Warehouse        @relation(fields: [warehouseId], references: [id])
+  createdBy User             @relation(fields: [createdById], references: [id])
   items     PurchaseItem[]
+  returns   PurchaseReturn[]
 
   @@index([deletedAt])
   @@index([supplierId])
@@ -291,6 +365,350 @@ model PurchaseItem {
   @@index([productId])
 }
 
+// A return of purchased goods to the supplier — the outbound mirror of
+// Purchase. While RECEIVED it takes stock OUT of its warehouse (a Purchase
+// puts stock in); see lib/purchase-stock.ts for the reconciliation.
+model PurchaseReturn {
+  id             String         @id @default(cuid())
+  reference      String         @unique
+  supplierId     String
+  warehouseId    String
+  // Optional link to the purchase being returned against.
+  purchaseId     String?
+  date           DateTime
+  status         PurchaseStatus
+  // Order-level money. orderTax is a percentage; the rest are Naira amounts.
+  orderTax       Decimal        @default(0) @db.Decimal(5, 2)
+  orderTaxAmount Decimal        @default(0) @db.Decimal(12, 2)
+  discount       Decimal        @default(0) @db.Decimal(12, 2)
+  shipping       Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal     Decimal        @db.Decimal(12, 2)
+  paid           Decimal        @default(0) @db.Decimal(12, 2)
+  due            Decimal        @db.Decimal(12, 2)
+  paymentType    PaymentType    @default(CASH)
+  notes          String?        @db.Text
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  supplier  Supplier             @relation(fields: [supplierId], references: [id])
+  warehouse Warehouse            @relation(fields: [warehouseId], references: [id])
+  purchase  Purchase?            @relation(fields: [purchaseId], references: [id])
+  createdBy User                 @relation(fields: [createdById], references: [id])
+  items     PurchaseReturnItem[]
+
+  @@index([deletedAt])
+  @@index([supplierId])
+  @@index([warehouseId])
+  @@index([purchaseId])
+  @@index([date])
+}
+
+model PurchaseReturnItem {
+  id           String       @id @default(cuid())
+  returnId     String
+  productId    String
+  quantity     Int
+  purchaseUnit String
+  // Unit cost as entered; subtotal and amounts are recomputed server-side
+  // through lib/pricing.ts, exactly as for PurchaseItem.
+  netUnitCost  Decimal      @db.Decimal(12, 2)
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  // Named purchaseReturn (not "return") to keep the client field readable.
+  purchaseReturn PurchaseReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product        Product        @relation(fields: [productId], references: [id])
+
+  @@index([returnId])
+  @@index([productId])
+}
+
+// A sale to a customer. While RECEIVED it takes stock OUT of its warehouse
+// (same status rule and reconciliation as Purchases, direction "out").
+//
+// paid / due / paymentStatus / paymentType are derived from the sale's
+// active SalePayment rows vs grandTotal (computePaymentState) and stored only
+// so the list can show and sum them — they are never typed in directly.
+model Sale {
+  id             String         @id @default(cuid())
+  reference      String         @unique
+  customerId     String
+  warehouseId    String
+  date           DateTime
+  status         PurchaseStatus
+  // Order-level money. orderTax is a percentage; the rest are Naira amounts.
+  orderTax       Decimal        @default(0) @db.Decimal(5, 2)
+  orderTaxAmount Decimal        @default(0) @db.Decimal(12, 2)
+  discount       Decimal        @default(0) @db.Decimal(12, 2)
+  shipping       Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal     Decimal        @db.Decimal(12, 2)
+  paid           Decimal        @default(0) @db.Decimal(12, 2)
+  due            Decimal        @db.Decimal(12, 2)
+  paymentStatus  PaymentStatus  @default(UNPAID)
+  // Type of the latest active payment (list column); null until paid.
+  paymentType    PaymentType?
+  notes          String?        @db.Text
+  createdById    String
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  deletedAt      DateTime?
+
+  customer  Customer      @relation(fields: [customerId], references: [id])
+  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
+  createdBy User          @relation(fields: [createdById], references: [id])
+  items     SaleItem[]
+  payments  SalePayment[]
+  returns   SaleReturn[]
+
+  @@index([deletedAt])
+  @@index([customerId])
+  @@index([warehouseId])
+  @@index([date])
+}
+
+model SaleItem {
+  id           String       @id @default(cuid())
+  saleId       String
+  productId    String
+  quantity     Int
+  saleUnit     String
+  // Unit price as entered (defaults to Product.price); subtotal and amounts
+  // are recomputed server-side through lib/pricing.ts.
+  netUnitPrice Decimal      @db.Decimal(12, 2)
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  sale        Sale             @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  product     Product          @relation(fields: [productId], references: [id])
+  returnLines SaleReturnItem[]
+
+  @@index([saleId])
+  @@index([productId])
+}
+
+// One payment against a sale; a sale can have several. Soft-deleted rows
+// don't count towards paid.
+model SalePayment {
+  id          String      @id @default(cuid())
+  saleId      String
+  amount      Decimal     @db.Decimal(12, 2)
+  paymentType PaymentType
+  date        DateTime
+  notes       String?     @db.Text
+  createdById String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
+
+  sale      Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdBy User @relation(fields: [createdById], references: [id])
+
+  @@index([saleId])
+  @@index([deletedAt])
+}
+
+// A customer returning goods from a sale. Always created from a sale: the
+// customer and warehouse are copied from it and never chosen on the form.
+// While RECEIVED or COMPLETED it puts stock back INTO the warehouse (the
+// reverse of a sale).
+//
+// paid / due / paymentStatus describe the REFUND owed to the customer —
+// derived from the active SaleReturnPayment rows vs grandTotal with
+// computePaymentState, never typed in.
+model SaleReturn {
+  id             String           @id @default(cuid())
+  reference      String           @unique
+  // Required for every new return; nullable at the DB level per spec.
+  saleId         String?
+  customerId     String
+  warehouseId    String
+  date           DateTime
+  status         SaleReturnStatus
+  // Order-level money. orderTax is a percentage; the rest are Naira amounts.
+  orderTax       Decimal          @default(0) @db.Decimal(5, 2)
+  orderTaxAmount Decimal          @default(0) @db.Decimal(12, 2)
+  discount       Decimal          @default(0) @db.Decimal(12, 2)
+  shipping       Decimal          @default(0) @db.Decimal(12, 2)
+  grandTotal     Decimal          @db.Decimal(12, 2)
+  paid           Decimal          @default(0) @db.Decimal(12, 2)
+  due            Decimal          @db.Decimal(12, 2)
+  paymentStatus  PaymentStatus    @default(UNPAID)
+  notes          String?          @db.Text
+  createdById    String
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  deletedAt      DateTime?
+
+  sale      Sale?               @relation(fields: [saleId], references: [id])
+  customer  Customer            @relation(fields: [customerId], references: [id])
+  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
+  createdBy User                @relation(fields: [createdById], references: [id])
+  items     SaleReturnItem[]
+  payments  SaleReturnPayment[]
+
+  @@index([deletedAt])
+  @@index([saleId])
+  @@index([customerId])
+  @@index([warehouseId])
+  @@index([date])
+}
+
+model SaleReturnItem {
+  id           String       @id @default(cuid())
+  returnId     String
+  productId    String
+  // The original sale line being returned. RESTRICT: a sale line with return
+  // history is never deleted (Sales edit updates lines in place).
+  saleItemId   String
+  quantity     Int
+  saleUnit     String
+  // Unit price as on the sale line (or edited in the line modal); amounts are
+  // recomputed server-side through lib/pricing.ts.
+  netUnitPrice Decimal      @db.Decimal(12, 2)
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  saleReturn SaleReturn @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  product    Product    @relation(fields: [productId], references: [id])
+  saleItem   SaleItem   @relation(fields: [saleItemId], references: [id])
+
+  @@index([returnId])
+  @@index([productId])
+  @@index([saleItemId])
+}
+
+// One refund paid to the customer against a sale return (same pattern as
+// SalePayment). Soft-deleted rows don't count towards paid.
+model SaleReturnPayment {
+  id           String      @id @default(cuid())
+  saleReturnId String
+  amount       Decimal     @db.Decimal(12, 2)
+  paymentType  PaymentType
+  date         DateTime
+  notes        String?     @db.Text
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  createdBy  User       @relation(fields: [createdById], references: [id])
+
+  @@index([saleReturnId])
+  @@index([deletedAt])
+}
+
+// Moves stock between two warehouses. No supplier, customer or payment.
+// Money columns mirror the other documents (valued at cost).
+model Transfer {
+  id              String         @id @default(cuid())
+  reference       String         @unique
+  fromWarehouseId String
+  toWarehouseId   String
+  date            DateTime
+  status          TransferStatus
+  // Order-level money. orderTax is a percentage; the rest are Naira amounts.
+  orderTax        Decimal        @default(0) @db.Decimal(5, 2)
+  orderTaxAmount  Decimal        @default(0) @db.Decimal(12, 2)
+  discount        Decimal        @default(0) @db.Decimal(12, 2)
+  shipping        Decimal        @default(0) @db.Decimal(12, 2)
+  grandTotal      Decimal        @db.Decimal(12, 2)
+  notes           String?        @db.Text
+  createdById     String
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  deletedAt       DateTime?
+
+  fromWarehouse Warehouse      @relation("TransferFrom", fields: [fromWarehouseId], references: [id])
+  toWarehouse   Warehouse      @relation("TransferTo", fields: [toWarehouseId], references: [id])
+  createdBy     User           @relation(fields: [createdById], references: [id])
+  items         TransferItem[]
+
+  @@index([deletedAt])
+  @@index([fromWarehouseId])
+  @@index([toWarehouseId])
+  @@index([date])
+}
+
+model TransferItem {
+  id           String       @id @default(cuid())
+  transferId   String
+  productId    String
+  quantity     Int
+  transferUnit String
+  // Unit cost as entered (defaults to Product.cost); subtotal and amounts
+  // are recomputed server-side through lib/pricing.ts.
+  netUnitCost  Decimal      @db.Decimal(12, 2)
+  discountType DiscountType @default(FIXED)
+  discount     Decimal      @default(0) @db.Decimal(12, 2)
+  taxType      TaxType      @default(EXCLUSIVE)
+  orderTax     Decimal      @default(0) @db.Decimal(5, 2)
+  taxAmount    Decimal      @default(0) @db.Decimal(12, 2)
+  subtotal     Decimal      @db.Decimal(12, 2)
+
+  transfer Transfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  product  Product  @relation(fields: [productId], references: [id])
+
+  @@index([transferId])
+  @@index([productId])
+}
+
+// Name-only lookup for expenses (managed like Product Categories / Brands,
+// but without a logo).
+model ExpenseCategory {
+  id        String    @id @default(cuid())
+  name      String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  expenses Expense[]
+
+  @@index([deletedAt])
+}
+
+// An expense paid from a warehouse (RingzPOS Expenses design: reference,
+// date, warehouse, category, title, amount, details). The Expenses module
+// builds its CRUD on this; Expense Categories use it to block deleting a
+// category that's still in use.
+model Expense {
+  id                String    @id @default(cuid())
+  reference         String    @unique
+  date              DateTime
+  warehouseId       String
+  expenseCategoryId String
+  title             String
+  amount            Decimal   @db.Decimal(12, 2)
+  details           String?   @db.Text
+  createdById       String
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
+
+  warehouse       Warehouse       @relation(fields: [warehouseId], references: [id])
+  expenseCategory ExpenseCategory @relation(fields: [expenseCategoryId], references: [id])
+  createdBy       User            @relation(fields: [createdById], references: [id])
+
+  @@index([deletedAt])
+  @@index([warehouseId])
+  @@index([expenseCategoryId])
+  @@index([date])
+}
+
 model Customer {
   id          String    @id @default(cuid())
   name        String
@@ -308,6 +726,9 @@ model Customer {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
+
+  sales       Sale[]
+  saleReturns SaleReturn[]
 
   @@index([deletedAt])
 }

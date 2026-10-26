@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { Role } from "@prisma/client";
 
 export const createUserSchema = z
   .object({
@@ -9,7 +8,8 @@ export const createUserSchema = z
     phoneNumber: z.string().trim().min(1, "Phone number is required.").max(30),
     password: z.string().min(8, "Password must be at least 8 characters."),
     confirmPassword: z.string().min(1, "Please confirm the password."),
-    role: z.nativeEnum(Role, { message: "Please choose a role." }),
+    // A Role id; the action re-reads it and requires an active role.
+    roleId: z.string({ message: "Please choose a role." }).trim().min(1, "Please choose a role."),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: "Password and confirmation do not match.",
@@ -28,7 +28,8 @@ export const updateUserSchema = z
     phoneNumber: z.string().trim().min(1, "Phone number is required.").max(30),
     password: z.string().trim().optional(),
     confirmPassword: z.string().trim().optional(),
-    role: z.nativeEnum(Role, { message: "Please choose a role." }),
+    // A Role id; the action re-reads it and requires an active role.
+    roleId: z.string({ message: "Please choose a role." }).trim().min(1, "Please choose a role."),
   })
   .refine((data) => !data.password || data.password.length >= 8, {
     message: "Password must be at least 8 characters.",

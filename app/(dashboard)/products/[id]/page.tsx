@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import { FONTS } from "@/components/layout/theme";
 import DetailView from "@/components/ui/DetailView";
 import ProductImageGallery from "@/components/products/ProductImageGallery";
@@ -23,6 +25,9 @@ export default async function ProductViewPage({ params }: { params: Promise<{ id
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_PRODUCTS);
+  if (denied) return denied;
 
   const { id } = await params;
   const product = await getProductById(id);

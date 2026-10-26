@@ -11,11 +11,9 @@ import {
   type ReactNode,
 } from "react";
 import { useSession } from "next-auth/react";
-import type { Role } from "@prisma/client";
 import { Pencil, User as UserIcon, ChevronDown } from "lucide-react";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
-import { ROLE_LABELS } from "@/lib/roles";
 import { updateProfile } from "@/app/(dashboard)/profile/actions";
 import { initialProfileActionState, type ProfileActionState } from "@/app/(dashboard)/profile/types";
 
@@ -25,7 +23,8 @@ type ProfileUser = {
   email: string;
   phoneNumber: string | null;
   image: string | null;
-  role: Role;
+  // The assigned Role's name (display only).
+  roleName: string;
 };
 
 function inputStyle(focused: boolean): CSSProperties {
@@ -289,7 +288,7 @@ export default function ProfileForm({ user }: { user: ProfileUser }) {
             <div style={{ position: "relative" }}>
               <select
                 disabled
-                value={user.role}
+                value={user.roleName}
                 onChange={() => {}}
                 style={{
                   appearance: "none",
@@ -304,7 +303,7 @@ export default function ProfileForm({ user }: { user: ProfileUser }) {
                   cursor: "not-allowed",
                 }}
               >
-                <option value={user.role}>{ROLE_LABELS[user.role]}</option>
+                <option value={user.roleName}>{user.roleName}</option>
               </select>
               <ChevronDown
                 size={14}

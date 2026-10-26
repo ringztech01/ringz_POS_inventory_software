@@ -14,7 +14,8 @@ const PUBLIC_USER_SELECT = {
   email: true,
   phoneNumber: true,
   image: true,
-  role: true,
+  roleId: true,
+  userRole: { select: { name: true, deletedAt: true } },
   createdAt: true,
 } satisfies Prisma.UserSelect;
 

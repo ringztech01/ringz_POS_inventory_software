@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { Role } from "@prisma/client";
+import { UserRole } from "@prisma/client";
 import { prisma } from "../lib/db";
 
 const ADMIN_EMAIL = "ringztech01@gmail.com";
@@ -18,7 +18,9 @@ async function main() {
       password: hashedPassword,
       phoneNumber: "+2348012345678",
       image: "https://ui-avatars.com/api/?name=System+Administrator",
-      role: Role.ADMIN,
+      role: UserRole.ADMIN,
+      // The isSystem admin role (seeded by the add_roles_permissions migration).
+      userRole: { connect: { name: "Administrator" } },
     },
   });
 

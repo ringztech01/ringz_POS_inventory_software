@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import CustomerForm from "@/components/customers/CustomerForm";
 import { createCustomer } from "../actions";
 
@@ -11,9 +12,8 @@ export default async function CreateCustomerPage() {
     redirect("/");
   }
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_CUSTOMERS)) {
-    redirect("/peoples/customers");
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_CUSTOMERS);
+  if (denied) return denied;
 
   return <CustomerForm action={createCustomer} />;
 }

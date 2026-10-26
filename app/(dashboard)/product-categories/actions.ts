@@ -2,26 +2,16 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { saveCategoryLogo } from "@/lib/uploads";
 import { categorySchema } from "@/lib/validations/category";
 import { countActiveProductsInCategory } from "./queries";
 import type { CategoryActionState } from "./types";
 
-async function requireManageProductCategories(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_PRODUCT_CATEGORIES)) {
-    return { error: "You don't have permission to manage product categories." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageProductCategories = () => requirePermission(PERMISSIONS.MANAGE_PRODUCT_CATEGORIES);
 
 async function saveUploadedLogo(formData: FormData, idForFilename: string): Promise<{ path?: string; error?: string }> {
   const logoFile = formData.get("logo");

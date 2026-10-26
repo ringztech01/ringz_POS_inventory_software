@@ -68,3 +68,37 @@ export async function decreaseStock(
     throw new InsufficientStockError(params.productName, params.warehouseName, current, params.quantity);
   }
 }
+
+// Transfers: moves `quantity` of one product from one warehouse to another,
+// inside the caller's transaction. Total system stock never changes — the
+// amount taken out and the amount put in are the SAME variable, never
+// computed separately.
+//
+//   1. From: decreaseStock checks the From quantity inside the transaction
+//      and decrements it in one conditional UPDATE (… WHERE quantity >= qty);
+//      if From holds less, it throws InsufficientStockError and the caller's
+//      whole transaction rolls back.
+//   2. To: increaseStock upsert-increments by that same quantity.
+//
+// In-transit rule: a transfer only moves stock while its status is
+// COMPLETED. PENDING and SENT are paperwork — callers never call this for
+// them (see lib/transfer-stock.ts). Undoing a move (edit/delete of a
+// Completed transfer) is a move in the opposite direction:
+// moveStock(tx, product, to, from, qty).
+export async function moveStock(
+  tx: TxClient,
+  productId: string,
+  fromWarehouseId: string,
+  toWarehouseId: string,
+  quantity: number,
+  names: { productName: string; fromName: string },
+): Promise<void> {
+  await decreaseStock(tx, {
+    productId,
+    warehouseId: fromWarehouseId,
+    quantity,
+    productName: names.productName,
+    warehouseName: names.fromName,
+  });
+  await increaseStock(tx, { productId, warehouseId: toWarehouseId, quantity });
+}

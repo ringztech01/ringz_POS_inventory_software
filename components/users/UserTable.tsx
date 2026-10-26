@@ -6,7 +6,6 @@ import EmptyState from "@/components/ui/EmptyState";
 import IconActionButton from "@/components/ui/IconActionButton";
 import DeleteUserButton from "./DeleteUserButton";
 import { formatDateTime, getInitials } from "@/lib/format";
-import { ROLE_LABELS } from "@/lib/roles";
 import type { PublicUser } from "@/app/(dashboard)/peoples/users/queries";
 
 const GRID_COLUMNS = "minmax(240px,1fr) 200px 180px 180px 110px";
@@ -99,7 +98,7 @@ export default function UserTable({ users, currentUserId }: { users: PublicUser[
                   <span style={{ fontSize: 13, color: COLORS.slateMid }}>{user.email}</span>
                 </span>
               </span>
-              <span style={{ fontSize: 13.5, color: COLORS.text }}>{ROLE_LABELS[user.role]}</span>
+              <span style={{ fontSize: 13.5, color: COLORS.text }}>{user.userRole && !user.userRole.deletedAt ? user.userRole.name : "—"}</span>
               <span style={{ fontFamily: FONTS.mono, fontSize: 13, color: COLORS.text }}>{user.phoneNumber}</span>
               <StatusChip time={time} date={date} />
               <span style={{ justifySelf: "end", display: "flex", gap: 6 }}>

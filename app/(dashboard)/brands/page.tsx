@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import BrandsInteractive from "@/components/brands/BrandsInteractive";
 import { getBrandList } from "./queries";
 
@@ -18,6 +20,9 @@ export default async function BrandsPage({ searchParams }: { searchParams: Promi
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_BRANDS);
+  if (denied) return denied;
 
   const params = await searchParams;
   const q = params.q?.trim() || "";

@@ -9,6 +9,14 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 
 export type SelectOption = { value: string; label: string };
 
+// Local calendar date as YYYY-MM-DD (a date input's default). toISOString()
+// would give the UTC date — "yesterday" just after midnight in Lagos (UTC+1).
+export function todayInputValue(): string {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+}
+
 // Money/percent fields accept digits with up to 2 decimals while typing;
 // anything else is rejected at the keystroke rather than parsed later.
 export function isDecimalInput(value: string): boolean {

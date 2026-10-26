@@ -4,24 +4,15 @@ import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { can, requirePermission } from "@/lib/auth/permissions.server";
 import { generateReference } from "@/lib/reference";
 import { increaseStock, decreaseStock, InsufficientStockError } from "@/lib/stock";
 import { adjustmentSchema } from "@/lib/validations/adjustment";
 import type { AdjustmentActionState, AdjustmentProductSearchResult } from "./types";
 
-async function requireManageAdjustments(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_ADJUSTMENTS)) {
-    return { error: "You don't have permission to manage adjustments." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageAdjustments = () => requirePermission(PERMISSIONS.MANAGE_ADJUSTMENTS);
 
 // Read-only, so only a session is required — no Manage Adjustments check
 // here, that's enforced on the actual save/delete mutations.
@@ -29,8 +20,7 @@ export async function searchProductsForAdjustment(
   warehouseId: string,
   query: string,
 ): Promise<AdjustmentProductSearchResult[]> {
-  const session = await auth();
-  if (!session?.user) {
+  if (!(await can(PERMISSIONS.MANAGE_ADJUSTMENTS))) {
     return [];
   }
 

@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import UnitsInteractive from "@/components/units/UnitsInteractive";
 import { getUnitList } from "./queries";
 
@@ -18,6 +20,9 @@ export default async function UnitsPage({ searchParams }: { searchParams: Promis
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_UNITS);
+  if (denied) return denied;
 
   const params = await searchParams;
   const q = params.q?.trim() || "";

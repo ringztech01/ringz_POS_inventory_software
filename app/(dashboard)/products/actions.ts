@@ -3,27 +3,17 @@
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { saveProductImage } from "@/lib/uploads";
 import { increaseStock } from "@/lib/stock";
 import { productSchema, initialStockSchema } from "@/lib/validations/product";
 import { countProductReferences } from "./queries";
 import type { ProductActionState } from "./types";
 
-async function requireManageProducts(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_PRODUCTS)) {
-    return { error: "You don't have permission to manage products." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageProducts = () => requirePermission(PERMISSIONS.MANAGE_PRODUCTS);
 
 async function saveUploadedImages(
   formData: FormData,

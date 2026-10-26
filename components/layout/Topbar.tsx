@@ -8,6 +8,7 @@ import { Menu, Search, Plus, Maximize, ChevronDown, User as UserIcon, KeyRound, 
 import { useSidebar } from "./sidebar-context";
 import { useToggleState } from "./hooks";
 import { resolveBreadcrumb } from "./nav-data";
+import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { COLORS, FONTS } from "./theme";
 
 function IconButton({
@@ -98,7 +99,9 @@ function UserMenuItem({
   );
 }
 
-export default function Topbar() {
+// `permissions`: the current user's set (UX only). POS shows with Manage Pos Screen.
+export default function Topbar({ permissions }: { permissions: Permission[] }) {
+  const canPos = permissions.includes(PERMISSIONS.MANAGE_POS_SCREEN);
   const pathname = usePathname() || "/dashboard";
   const { toggleCollapsed } = useSidebar();
   const { data: session } = useSession();
@@ -213,6 +216,7 @@ export default function Topbar() {
           New
         </button>
 
+        {canPos && (
         <button
           type="button"
           onMouseEnter={posHover.on}
@@ -232,6 +236,7 @@ export default function Topbar() {
         >
           POS
         </button>
+        )}
 
         <IconButton title="Fullscreen">
           <Maximize size={16} strokeWidth={1.6} />

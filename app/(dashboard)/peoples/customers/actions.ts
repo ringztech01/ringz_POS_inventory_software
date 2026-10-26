@@ -1,25 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { customerSchema } from "@/lib/validations/customer";
 import { isCustomerInUse } from "./queries";
 import type { CustomerActionState } from "./types";
 
-async function requireManageCustomers(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_CUSTOMERS)) {
-    return { error: "You don't have permission to manage customers." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageCustomers = () => requirePermission(PERMISSIONS.MANAGE_CUSTOMERS);
 
 function parseCustomerFormData(formData: FormData) {
   return customerSchema.safeParse({

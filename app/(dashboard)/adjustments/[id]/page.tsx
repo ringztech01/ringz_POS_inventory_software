@@ -1,6 +1,8 @@
 import type { ReactNode } from "react";
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import { FONTS } from "@/components/layout/theme";
 import DetailView from "@/components/ui/DetailView";
 import AdjustmentItemsTable from "@/components/adjustments/AdjustmentItemsTable";
@@ -17,6 +19,9 @@ export default async function AdjustmentViewPage({ params }: { params: Promise<{
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_ADJUSTMENTS);
+  if (denied) return denied;
 
   const { id } = await params;
   const adjustment = await getAdjustmentById(id);

@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, ChevronRight } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
-import { NAV, type NavItem, type NavChild, isPathActive } from "./nav-data";
+import { type NavItem, type NavChild, isPathActive, findActiveChild, visibleNav } from "./nav-data";
+import type { Permission } from "@/lib/permissions";
 import { useToggleState } from "./hooks";
 import { COLORS, FONTS } from "./theme";
 
-function NavChildRow({ child, pathname }: { child: NavChild; pathname: string }) {
+function NavChildRow({ child, active }: { child: NavChild; active: boolean }) {
   const hover = useToggleState();
-  const active = isPathActive(pathname, child.href);
 
   return (
     <Link
@@ -138,7 +138,11 @@ function NavRow({ item, expanded }: { item: NavItem; expanded: boolean }) {
           }}
         >
           {item.children!.map((child) => (
-            <NavChildRow key={child.href} child={child} pathname={pathname} />
+            <NavChildRow
+              key={child.href}
+              child={child}
+              active={child.href === findActiveChild(pathname, item.children!)?.href}
+            />
           ))}
         </div>
       )}
@@ -146,7 +150,9 @@ function NavRow({ item, expanded }: { item: NavItem; expanded: boolean }) {
   );
 }
 
-export default function Sidebar() {
+// `permissions`: the current user's set (from the layout, read from the DB).
+// Items they lack are hidden — UX only; pages and actions enforce access.
+export default function Sidebar({ permissions }: { permissions: Permission[] }) {
   const { collapsed } = useSidebar();
   const expanded = !collapsed;
   const search = useToggleState();
@@ -227,7 +233,7 @@ export default function Sidebar() {
       )}
 
       <nav style={{ flex: 1, overflowY: "auto", padding: "6px 12px 20px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {NAV.map((item) => (
+        {visibleNav(new Set(permissions)).map((item) => (
           <NavRow key={item.key} item={item} expanded={expanded} />
         ))}
       </nav>

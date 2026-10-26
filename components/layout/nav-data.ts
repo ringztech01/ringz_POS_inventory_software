@@ -17,8 +17,11 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
+import { PERMISSIONS, type Permission } from "@/lib/permissions";
 
-export type NavChild = { label: string; href: string };
+// createTitle / editTitle: breadcrumb title on the child's /create and
+// /[id]/edit pages (default: label).
+export type NavChild = { label: string; href: string; createTitle?: string; editTitle?: string };
 
 export type NavItem = {
   key: string;
@@ -26,6 +29,13 @@ export type NavItem = {
   icon: LucideIcon;
   href?: string;
   children?: NavChild[];
+  // Breadcrumb section for a top-level item (default "RingzPOS").
+  section?: string;
+  // Breadcrumb title on its /create and /[id]/edit pages, and on its own
+  // pages (default: the item's label).
+  createTitle?: string;
+  editTitle?: string;
+  crumbTitle?: string;
 };
 
 export const NAV: NavItem[] = [
@@ -63,14 +73,14 @@ export const NAV: NavItem[] = [
       { label: "Sales Returns", href: "/sales/returns" },
     ],
   },
-  { key: "transfers", label: "Transfers", icon: ArrowLeftRight, href: "/transfers" },
+  { key: "transfers", label: "Transfers", icon: ArrowLeftRight, href: "/transfers", section: "Inventory", createTitle: "Create Transfer" },
   {
     key: "expenses",
     label: "Expenses",
     icon: Receipt,
     children: [
-      { label: "Expenses", href: "/expenses" },
-      { label: "Expense Categories", href: "/expenses/categories" },
+      { label: "Expenses", href: "/expenses", createTitle: "Create Expense", editTitle: "Edit Expense" },
+      { label: "Expense Categories", href: "/expense-categories" },
     ],
   },
   {
@@ -83,7 +93,16 @@ export const NAV: NavItem[] = [
       { label: "Users", href: "/peoples/users" },
     ],
   },
-  { key: "roles", label: "Roles/Permissions", icon: ShieldCheck, href: "/roles" },
+  {
+    key: "roles",
+    label: "Roles/Permissions",
+    icon: ShieldCheck,
+    href: "/roles",
+    section: "Access",
+    crumbTitle: "Roles",
+    createTitle: "Create Role",
+    editTitle: "Edit Role",
+  },
   { key: "warehouse", label: "Warehouse", icon: Warehouse, href: "/warehouse" },
   { key: "reports", label: "Reports", icon: BarChart3, href: "/reports" },
   { key: "currencies", label: "Currencies", icon: Coins, href: "/currencies" },
@@ -100,8 +119,65 @@ export const NAV: NavItem[] = [
   { key: "settings", label: "Settings", icon: Settings, href: "/settings" },
 ];
 
+// Nav item (by href) → the permission that shows it. UX only — every page and
+// action enforces its own permission server-side (lib/auth). Hrefs not listed
+// here (e.g. Templates, which no permission covers yet) are always shown.
+export const NAV_PERMISSIONS: Partial<Record<string, Permission>> = {
+  "/dashboard": PERMISSIONS.MANAGE_DASHBOARD,
+  "/products": PERMISSIONS.MANAGE_PRODUCTS,
+  "/product-categories": PERMISSIONS.MANAGE_PRODUCT_CATEGORIES,
+  "/brands": PERMISSIONS.MANAGE_BRANDS,
+  "/units": PERMISSIONS.MANAGE_UNITS,
+  "/products/base-units": PERMISSIONS.MANAGE_UNITS,
+  "/products/print-barcode": PERMISSIONS.MANAGE_PRODUCTS,
+  "/adjustments": PERMISSIONS.MANAGE_ADJUSTMENTS,
+  "/quotations": PERMISSIONS.MANAGE_QUOTATIONS,
+  "/purchases": PERMISSIONS.MANAGE_PURCHASE,
+  "/purchases/returns": PERMISSIONS.MANAGE_PURCHASE_RETURN,
+  "/sales": PERMISSIONS.MANAGE_SALE,
+  "/sales/returns": PERMISSIONS.MANAGE_SALE_RETURN,
+  "/transfers": PERMISSIONS.MANAGE_TRANSFERS,
+  "/expenses": PERMISSIONS.MANAGE_EXPENSES,
+  "/expense-categories": PERMISSIONS.MANAGE_EXPENSE_CATEGORIES,
+  "/peoples/suppliers": PERMISSIONS.MANAGE_SUPPLIERS,
+  "/peoples/customers": PERMISSIONS.MANAGE_CUSTOMERS,
+  "/peoples/users": PERMISSIONS.MANAGE_USERS,
+  "/roles": PERMISSIONS.MANAGE_ROLES,
+  "/warehouse": PERMISSIONS.MANAGE_WAREHOUSES,
+  "/reports": PERMISSIONS.MANAGE_REPORTS,
+  "/currencies": PERMISSIONS.MANAGE_CURRENCY,
+  "/languages": PERMISSIONS.MANAGE_LANGUAGE,
+  "/settings": PERMISSIONS.MANAGE_SETTING,
+};
+
+const allowed = (href: string, permissions: ReadonlySet<Permission>) => {
+  const needed = NAV_PERMISSIONS[href];
+  return !needed || permissions.has(needed);
+};
+
+// The nav the user may see: items and children they have the permission for;
+// a group shows if any of its children does.
+export function visibleNav(permissions: ReadonlySet<Permission>): NavItem[] {
+  return NAV.flatMap((item) => {
+    if (item.children?.length) {
+      const children = item.children.filter((child) => allowed(child.href, permissions));
+      return children.length > 0 ? [{ ...item, children }] : [];
+    }
+    return !item.href || allowed(item.href, permissions) ? [item] : [];
+  });
+}
+
 export function isPathActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+// The most specific child matching the path (longest href). Needed because
+// sibling routes can nest: /purchases/returns also starts with /purchases,
+// and only "Purchase Returns" should be active there.
+export function findActiveChild(pathname: string, children: NavChild[]): NavChild | undefined {
+  return children
+    .filter((child) => isPathActive(pathname, child.href))
+    .sort((a, b) => b.href.length - a.href.length)[0];
 }
 
 export function findOpenGroupForPath(pathname: string): string | null {
@@ -116,10 +192,26 @@ export function findOpenGroupForPath(pathname: string): string | null {
 export function resolveBreadcrumb(pathname: string): { section: string; title: string } {
   for (const item of NAV) {
     if (item.children?.length) {
-      const child = item.children.find((c) => isPathActive(pathname, c.href));
-      if (child) return { section: item.label, title: child.label };
+      const child = findActiveChild(pathname, item.children);
+      if (child) {
+        const rest = pathname.slice(child.href.length);
+        const title =
+          child.createTitle && rest === "/create"
+            ? child.createTitle
+            : child.editTitle && /^\/[^/]+\/edit$/.test(rest)
+              ? child.editTitle
+              : child.label;
+        return { section: item.label, title };
+      }
     } else if (item.href && isPathActive(pathname, item.href)) {
-      return { section: "RingzPOS", title: item.label };
+      const rest = pathname.slice(item.href.length);
+      const title =
+        item.createTitle && rest === "/create"
+          ? item.createTitle
+          : item.editTitle && /^\/[^/]+\/edit$/.test(rest)
+            ? item.editTitle
+            : (item.crumbTitle ?? item.label);
+      return { section: item.section ?? "RingzPOS", title };
     }
   }
   const lastSegment = pathname.split("/").filter(Boolean).pop() ?? "dashboard";

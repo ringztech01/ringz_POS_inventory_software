@@ -1,18 +1,58 @@
 import type { LucideIcon } from "lucide-react";
 import type { ReactNode } from "react";
 import { Image as ImageIcon, Pencil } from "lucide-react";
+import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import EmptyState from "@/components/ui/EmptyState";
 import IconActionButton from "@/components/ui/IconActionButton";
 
 const GRID_COLUMNS = "40px minmax(240px,1fr) 160px 120px";
+// Name-only lists (Expense Categories design): Name | Action.
+const NAME_ONLY_COLUMNS = "minmax(240px,1fr) 100px";
 
 export type MasterDataRow = {
   id: string;
   name: string;
   logo?: string | null;
-  products: number;
+  // The count column (Products); unused by name-only lists.
+  products?: number;
 };
+
+const headerLabel = {
+  fontSize: 11.5,
+  fontWeight: 600,
+  letterSpacing: ".08em",
+  textTransform: "uppercase",
+  color: COLORS.slateMid,
+} as const;
+
+// One row of a name-only list: 60px, hover tint, 32px action buttons.
+function NameOnlyRow({ name, actions }: { name: string; actions: ReactNode }) {
+  const hover = useToggleState();
+
+  return (
+    <div
+      onMouseEnter={hover.on}
+      onMouseLeave={hover.off}
+      style={{
+        display: "grid",
+        gridTemplateColumns: NAME_ONLY_COLUMNS,
+        columnGap: 16,
+        alignItems: "center",
+        padding: "0 20px",
+        height: 60,
+        borderBottom: `1px solid ${COLORS.bgApp}`,
+        transition: "background .12s",
+        background: hover.value ? COLORS.bgApp : "transparent",
+      }}
+    >
+      <span style={{ fontSize: 14, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+        {name}
+      </span>
+      <span style={{ justifySelf: "end", display: "flex", gap: 6 }}>{actions}</span>
+    </div>
+  );
+}
 
 function Checkbox() {
   return (
@@ -69,6 +109,8 @@ export default function MasterDataTable<T extends MasterDataRow>({
   onEdit,
   renderDelete,
   showLogo = true,
+  nameOnly = false,
+  editTitle = "Edit",
 }: {
   items: T[];
   columnLabel: string;
@@ -77,9 +119,51 @@ export default function MasterDataTable<T extends MasterDataRow>({
   onEdit: (item: T) => void;
   renderDelete: (item: T) => ReactNode;
   showLogo?: boolean;
+  // Name | Action only — no checkbox, logo or count column.
+  nameOnly?: boolean;
+  editTitle?: string;
 }) {
   if (items.length === 0) {
     return <EmptyState icon={emptyIcon} message={emptyMessage} />;
+  }
+
+  if (nameOnly) {
+    return (
+      <div>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: NAME_ONLY_COLUMNS,
+            columnGap: 16,
+            alignItems: "center",
+            padding: "0 20px",
+            height: 44,
+            background: COLORS.bgInput,
+            borderBottom: `1px solid ${COLORS.border}`,
+          }}
+        >
+          <span style={headerLabel}>{columnLabel}</span>
+          <span style={{ ...headerLabel, textAlign: "right" }}>Action</span>
+        </div>
+        {items.map((item) => (
+          <NameOnlyRow
+            key={item.id}
+            name={item.name}
+            actions={
+              <>
+                <IconActionButton
+                  icon={<Pencil size={15} strokeWidth={1.8} />}
+                  title={editTitle}
+                  size={32}
+                  onClick={() => onEdit(item)}
+                />
+                {renderDelete(item)}
+              </>
+            }
+          />
+        ))}
+      </div>
+    );
   }
 
   return (

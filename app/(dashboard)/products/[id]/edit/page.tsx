@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import ProductForm from "@/components/products/ProductForm";
 import { getProductById, getProductFormOptions, getProductStockBreakdown } from "../../queries";
 
@@ -11,6 +13,10 @@ export default async function EditProductPage({ params }: { params: Promise<{ id
   }
 
   const { id } = await params;
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_PRODUCTS);
+  if (denied) return denied;
+
   const product = await getProductById(id);
 
   if (!product) {

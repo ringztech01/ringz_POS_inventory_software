@@ -9,6 +9,7 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 import PrimaryButton from "@/components/ui/PrimaryButton";
 import GhostButton from "@/components/ui/GhostButton";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
+import QtyInput from "@/components/ui/QtyInput";
 import { createAdjustment, searchProductsForAdjustment } from "@/app/(dashboard)/adjustments/actions";
 import type { AdjustmentProductSearchResult, AdjustmentFieldName, FormOption } from "@/app/(dashboard)/adjustments/types";
 
@@ -520,21 +521,11 @@ export default function AdjustmentForm({ warehouses }: { warehouses: FormOption[
                         >
                           <Minus size={13} strokeWidth={2} />
                         </button>
-                        <input
+                        <QtyInput
                           value={item.qty}
-                          readOnly
-                          style={{
-                            width: 48,
-                            height: 32,
-                            border: `1px solid ${COLORS.borderStrong}`,
-                            borderLeft: "none",
-                            borderRight: "none",
-                            textAlign: "center",
-                            fontFamily: FONTS.mono,
-                            fontSize: 13,
-                            outline: "none",
-                            background: "#fff",
-                          }}
+                          onChange={(qty) => setItemQty(item.productId, qty)}
+                          ariaLabel={`Quantity for ${item.name}`}
+                          hasError={overStock}
                         />
                         <button
                           type="button"

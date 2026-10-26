@@ -10,6 +10,8 @@ import {
   MinusCircle,
 } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
+import { PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
 import SalesPurchasesChart from "@/components/dashboard/SalesPurchasesChart";
 import DonutCard from "@/components/dashboard/DonutCard";
 import TopSellingMayCard from "@/components/dashboard/TopSellingMayCard";
@@ -46,7 +48,10 @@ const SECONDARY_STATS: SecondaryStat[] = [
   { Icon: MinusCircle, label: "Today total expense", iconBg: "#fce8e6", iconColor: COLORS.danger, valueColor: COLORS.danger },
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const denied = await pageGuard(PERMISSIONS.MANAGE_DASHBOARD);
+  if (denied) return denied;
+
   return (
     <>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4,minmax(0,1fr))", gap: 20 }}>

@@ -1,15 +1,10 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import PurchaseForm from "@/components/purchases/PurchaseForm";
-import { getActiveSuppliers, getActiveWarehouses, getPurchaseForEdit } from "../../queries";
-import type { FormOption } from "../../types";
-
-// Keeps the purchase's own warehouse/supplier selectable even if it has
-// since been soft-deleted (it's then missing from the active list).
-function withCurrent(options: FormOption[], current: FormOption): FormOption[] {
-  return options.some((option) => option.id === current.id) ? options : [...options, current];
-}
+import { getActiveSuppliers, getActiveWarehouses, getPurchaseForEdit, withCurrentOption } from "../../queries";
+import { getPurchaseStockForProducts, searchProductsForPurchase, updatePurchase } from "../../actions";
 
 export default async function EditPurchasePage({ params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
@@ -20,9 +15,8 @@ export default async function EditPurchasePage({ params }: { params: Promise<{ i
 
   const { id } = await params;
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_PURCHASES)) {
-    redirect(`/purchases/${id}`);
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_PURCHASE);
+  if (denied) return denied;
 
   const [purchase, warehouses, suppliers] = await Promise.all([
     getPurchaseForEdit(id),
@@ -38,10 +32,16 @@ export default async function EditPurchasePage({ params }: { params: Promise<{ i
   return (
     <PurchaseForm
       mode="edit"
-      purchaseId={purchase.id}
+      noun="Purchase"
+      listHref="/purchases"
+      stockDirection="in"
       initial={purchase.initial}
-      warehouses={withCurrent(warehouses, purchase.warehouse)}
-      suppliers={withCurrent(suppliers, purchase.supplier)}
+      warehouses={withCurrentOption(warehouses, purchase.warehouse)}
+      parties={withCurrentOption(suppliers, purchase.party)}
+      searchAction={searchProductsForPurchase}
+      stockAction={getPurchaseStockForProducts}
+      // Bound server action: the id is fixed here, never taken from the form.
+      saveAction={updatePurchase.bind(null, purchase.id)}
     />
   );
 }

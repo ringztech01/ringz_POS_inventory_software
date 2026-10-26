@@ -1,15 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { Eye, FileText, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
-import type { PurchaseStatus } from "@prisma/client";
+import { CircleDollarSign, Eye, FileText, MoreHorizontal, Pencil, ShoppingCart, Trash2 } from "lucide-react";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS } from "@/components/layout/theme";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
-import { deletePurchase } from "@/app/(dashboard)/purchases/actions";
+import SalePaymentsModal from "@/components/sales/SalePaymentsModal";
+import type { PurchaseActionState } from "@/app/(dashboard)/purchases/types";
 
 const menuItemStyle: CSSProperties = {
   width: "100%",
@@ -33,6 +33,7 @@ function MenuItem({
   download,
   onClick,
   danger,
+  disabled,
   icon,
   children,
 }: {
@@ -40,14 +41,16 @@ function MenuItem({
   download?: boolean;
   onClick?: () => void;
   danger?: boolean;
+  disabled?: boolean;
   icon: ReactNode;
   children: ReactNode;
 }) {
   const hover = useToggleState();
   const style: CSSProperties = {
     ...menuItemStyle,
-    color: danger ? COLORS.danger : COLORS.text,
-    background: hover.value ? (danger ? COLORS.dangerBg : COLORS.bgApp) : "transparent",
+    color: disabled ? COLORS.slateLight : danger ? COLORS.danger : COLORS.text,
+    background: hover.value && !disabled ? (danger ? COLORS.dangerBg : COLORS.bgApp) : "transparent",
+    cursor: disabled ? "not-allowed" : "pointer",
   };
   const hoverProps = { onMouseEnter: hover.on, onMouseLeave: hover.off };
 
@@ -71,41 +74,72 @@ function MenuItem({
   }
 
   return (
-    <button type="button" style={style} onClick={onClick} {...hoverProps}>
+    <button type="button" style={style} onClick={onClick} disabled={disabled} {...hoverProps}>
       {icon}
       {children}
     </button>
   );
 }
 
-// The menu is absolutely positioned against the table row (which is
-// position:relative), matching the design's right:16px / top:44px.
+// Extra items a module adds between "Download PDF" and "Edit" (e.g. Sales:
+// Show Payments, Create Sale Return). Icons are named, not passed as
+// components, because the table that builds these is a server component.
+const EXTRA_ICONS = { "circle-dollar-sign": CircleDollarSign, "shopping-cart": ShoppingCart } as const;
+
+// Modals an extra item can open for the row's document (named for the same
+// server→client reason as the icons).
+const EXTRA_MODALS = { payments: SalePaymentsModal } as const;
+
+export type RowMenuExtraItem = {
+  label: string;
+  icon: keyof typeof EXTRA_ICONS;
+  href?: string;
+  modal?: keyof typeof EXTRA_MODALS;
+  // Shown greyed out (e.g. while its feature isn't built yet).
+  disabled?: boolean;
+};
+
+// Row ⋯ menu for purchase documents (Purchases, Purchase Returns): View,
+// Download PDF, Edit and Delete, all under `basePath`. The menu is absolutely
+// positioned against the table row (which is position:relative), matching the
+// design's right:16px / top:44px.
 export default function PurchaseRowMenu({
   id,
   reference,
-  status,
-  warehouseName,
+  basePath,
+  noun,
+  deleteMessage,
+  deleteAction,
+  extraItems = [],
 }: {
   id: string;
   reference: string;
-  status: PurchaseStatus;
-  warehouseName: string;
+  // e.g. "/purchases" or "/purchases/returns"
+  basePath: string;
+  // e.g. "Purchase" or "Purchase Return" — used in labels and toasts.
+  noun: string;
+  deleteMessage: string;
+  // Server action; the Delete item is disabled until a module provides one.
+  deleteAction?: (id: string) => Promise<PurchaseActionState>;
+  extraItems?: RowMenuExtraItem[];
 }) {
   const router = useRouter();
   const { value: isOpen, on: open, off: close } = useToggleState();
   const { value: isConfirmOpen, on: openConfirm, off: closeConfirm } = useToggleState();
   const [isPending, startTransition] = useTransition();
+  const [openModal, setOpenModal] = useState<keyof typeof EXTRA_MODALS | null>(null);
   const trigger = useToggleState();
   const containerRef = useRef<HTMLDivElement>(null);
 
   function handleConfirmDelete() {
+    if (!deleteAction) return;
     startTransition(async () => {
-      // The server re-checks the permission and re-reads the purchase.
-      const result = await deletePurchase(id);
+      // The server re-checks the permission and re-reads the document.
+      const result = await deleteAction(id);
       closeConfirm();
 
       if (result.ok) {
-        toast.success(`Purchase ${reference} deleted.`);
+        toast.success(`${noun} ${reference} deleted.`);
         router.refresh();
       } else {
         toast.error(result.error ?? "Something went wrong.");
@@ -181,37 +215,57 @@ export default function PurchaseRowMenu({
             animation: "elv-pop .12s ease-out",
           }}
         >
-          <MenuItem href={`/purchases/${id}`} onClick={close} icon={<Eye {...iconProps} />}>
-            View Purchase
+          <MenuItem href={`${basePath}/${id}`} onClick={close} icon={<Eye {...iconProps} />}>
+            View {noun}
           </MenuItem>
-          <MenuItem href={`/purchases/${id}/pdf`} download onClick={close} icon={<FileText {...iconProps} />}>
+          <MenuItem href={`${basePath}/${id}/pdf`} download onClick={close} icon={<FileText {...iconProps} />}>
             Download PDF
           </MenuItem>
-          <MenuItem href={`/purchases/${id}/edit`} onClick={close} icon={<Pencil {...iconProps} />}>
-            Edit Purchase
+          {extraItems.map((item) => {
+            const Icon = EXTRA_ICONS[item.icon];
+            return (
+              <MenuItem
+                key={item.label}
+                href={item.disabled ? undefined : item.href}
+                disabled={item.disabled}
+                onClick={() => {
+                  close();
+                  if (item.modal && !item.disabled) setOpenModal(item.modal);
+                }}
+                icon={<Icon {...iconProps} />}
+              >
+                {item.label}
+              </MenuItem>
+            );
+          })}
+          <MenuItem href={`${basePath}/${id}/edit`} onClick={close} icon={<Pencil {...iconProps} />}>
+            Edit {noun}
           </MenuItem>
           <div style={{ height: 1, background: COLORS.border, margin: "5px 6px" }} />
           <MenuItem
             danger
+            disabled={!deleteAction}
             onClick={() => {
               close();
               openConfirm();
             }}
             icon={<Trash2 {...iconProps} />}
           >
-            Delete Purchase
+            Delete {noun}
           </MenuItem>
         </div>
       )}
 
+      {openModal &&
+        (() => {
+          const Modal = EXTRA_MODALS[openModal];
+          return <Modal documentId={id} onClose={() => setOpenModal(null)} />;
+        })()}
+
       {isConfirmOpen && (
         <ConfirmDeleteModal
-          title="Delete purchase"
-          message={
-            status === "RECEIVED"
-              ? `Are you sure you want to delete "${reference}"? This also removes the stock it added to ${warehouseName}.`
-              : `Are you sure you want to delete "${reference}"? It hasn't added any stock, so stock levels won't change.`
-          }
+          title={`Delete ${noun.toLowerCase()}`}
+          message={deleteMessage}
           onCancel={closeConfirm}
           onConfirm={handleConfirmDelete}
           pending={isPending}

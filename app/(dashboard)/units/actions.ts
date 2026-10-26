@@ -1,28 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { unitSchema } from "@/lib/validations/unit";
 import { countActiveProductsInUnit } from "./queries";
 import type { UnitActionState } from "./types";
 
-async function requireManageProducts(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_PRODUCTS)) {
-    return { error: "You don't have permission to manage products." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageUnits = () => requirePermission(PERMISSIONS.MANAGE_UNITS);
 
 export async function createUnit(formData: FormData): Promise<UnitActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageUnits();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }
@@ -40,7 +30,7 @@ export async function createUnit(formData: FormData): Promise<UnitActionState> {
 }
 
 export async function updateUnit(id: string, formData: FormData): Promise<UnitActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageUnits();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }
@@ -63,7 +53,7 @@ export async function updateUnit(id: string, formData: FormData): Promise<UnitAc
 }
 
 export async function deleteUnit(id: string): Promise<UnitActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageUnits();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }

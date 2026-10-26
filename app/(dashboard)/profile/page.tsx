@@ -18,7 +18,7 @@ export default async function ProfilePage() {
       email: true,
       phoneNumber: true,
       image: true,
-      role: true,
+      userRole: { select: { name: true, deletedAt: true } },
     },
   });
 
@@ -26,5 +26,6 @@ export default async function ProfilePage() {
     redirect("/");
   }
 
-  return <ProfileForm user={user} />;
+  const { userRole, ...rest } = user;
+  return <ProfileForm user={{ ...rest, roleName: userRole && !userRole.deletedAt ? userRole.name : "No role" }} />;
 }

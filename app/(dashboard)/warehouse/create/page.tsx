@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import WarehouseForm from "@/components/warehouse/WarehouseForm";
 import { createWarehouse } from "../actions";
 
@@ -11,9 +12,8 @@ export default async function CreateWarehousePage() {
     redirect("/");
   }
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_WAREHOUSES)) {
-    redirect("/warehouse");
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_WAREHOUSES);
+  if (denied) return denied;
 
   return <WarehouseForm action={createWarehouse} />;
 }

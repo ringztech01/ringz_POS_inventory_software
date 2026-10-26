@@ -3,13 +3,18 @@
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { Role } from "@prisma/client";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { saveAvatarImage } from "@/lib/uploads";
 import { createUserSchema, updateUserSchema } from "@/lib/validations/user";
 import type { UserActionState } from "./types";
+
+// Re-read the chosen role server-side: it must exist and be active.
+async function findActiveRole(roleId: string) {
+  return prisma.role.findFirst({ where: { id: roleId, deletedAt: null }, select: { id: true } });
+}
 
 async function saveUploadedImage(formData: FormData, idForFilename: string): Promise<{ path?: string; error?: string }> {
   const imageFile = formData.get("image");
@@ -24,18 +29,8 @@ async function saveUploadedImage(formData: FormData, idForFilename: string): Pro
   }
 }
 
-async function requireManageUsers(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_USERS)) {
-    return { error: "You don't have permission to manage users." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageUsers = () => requirePermission(PERMISSIONS.MANAGE_USERS);
 
 export async function createUser(formData: FormData): Promise<UserActionState> {
   const authCheck = await requireManageUsers();
@@ -50,14 +45,18 @@ export async function createUser(formData: FormData): Promise<UserActionState> {
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
-    role: formData.get("role"),
+    roleId: formData.get("roleId"),
   });
 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  const { firstName, lastName, email, phoneNumber, password, role } = parsed.data;
+  const { firstName, lastName, email, phoneNumber, password, roleId } = parsed.data;
+
+  if (!(await findActiveRole(roleId))) {
+    return { status: "error", message: "That role no longer exists. Choose another one." };
+  }
 
   // Checked against every user regardless of soft-delete status: the email
   // column has a hard unique constraint at the DB level that isn't aware of
@@ -84,7 +83,7 @@ export async function createUser(formData: FormData): Promise<UserActionState> {
       email,
       phoneNumber,
       password: hashedPassword,
-      role,
+      roleId,
       ...(imagePath ? { image: imagePath } : {}),
     },
   });
@@ -114,14 +113,31 @@ export async function updateUser(id: string, formData: FormData): Promise<UserAc
     phoneNumber: formData.get("phoneNumber"),
     password: formData.get("password"),
     confirmPassword: formData.get("confirmPassword"),
-    role: formData.get("role"),
+    roleId: formData.get("roleId"),
   });
 
   if (!parsed.success) {
     return { status: "error", message: parsed.error.issues[0]?.message ?? "Invalid input." };
   }
 
-  const { firstName, lastName, email, phoneNumber, password, role } = parsed.data;
+  const { firstName, lastName, email, phoneNumber, password, roleId } = parsed.data;
+
+  if (!(await findActiveRole(roleId))) {
+    return { status: "error", message: "That role no longer exists. Choose another one." };
+  }
+
+  // Demoting the last admin (moving them off the isSystem Administrator role)
+  // is refused, like deleting them: someone must always be able to manage
+  // Users and Roles.
+  const adminRole = await prisma.role.findFirst({ where: { isSystem: true }, select: { id: true } });
+  if (adminRole && existing.roleId === adminRole.id && roleId !== adminRole.id) {
+    const otherAdminCount = await prisma.user.count({
+      where: { roleId: adminRole.id, deletedAt: null, id: { not: id } },
+    });
+    if (otherAdminCount === 0) {
+      return { status: "error", message: "The last remaining admin can't be moved off the Administrator role." };
+    }
+  }
 
   if (email !== existing.email) {
     // Checked against every user regardless of soft-delete status — see the
@@ -148,7 +164,7 @@ export async function updateUser(id: string, formData: FormData): Promise<UserAc
       lastName,
       email,
       phoneNumber,
-      role,
+      roleId,
       ...(hashedPassword ? { password: hashedPassword } : {}),
       ...(imagePath ? { image: imagePath } : {}),
     },
@@ -180,11 +196,12 @@ export async function deleteUser(id: string): Promise<UserActionState> {
 
   // The last remaining admin can never be deleted — without at least one
   // admin, no one could manage Users, Roles, or anything else admin-only
-  // ever again. Count every OTHER non-deleted admin; if there are none,
-  // this is the last one.
-  if (existing.role === Role.ADMIN) {
+  // ever again. "Admin" = assigned the isSystem (Administrator) role. Count
+  // every OTHER non-deleted admin; if there are none, this is the last one.
+  const adminRole = await prisma.role.findFirst({ where: { isSystem: true }, select: { id: true } });
+  if (adminRole && existing.roleId === adminRole.id) {
     const otherAdminCount = await prisma.user.count({
-      where: { role: Role.ADMIN, deletedAt: null, id: { not: id } },
+      where: { roleId: adminRole.id, deletedAt: null, id: { not: id } },
     });
 
     if (otherAdminCount === 0) {

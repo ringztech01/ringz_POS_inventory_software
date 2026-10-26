@@ -36,7 +36,9 @@ function rangeLabel(from: string, to: string): string {
   return "";
 }
 
-export default function PurchaseFilters({ warehouses }: { warehouses: FormOption[] }) {
+// Without `warehouses` the panel is date range only (e.g. Transfers, which
+// search warehouse names instead).
+export default function PurchaseFilters({ warehouses }: { warehouses?: FormOption[] }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -203,29 +205,31 @@ export default function PurchaseFilters({ warehouses }: { warehouses: FormOption
             </label>
           </div>
 
-          <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-            <span style={labelStyle}>Warehouse</span>
-            <div style={{ position: "relative" }}>
-              <select
-                value={warehouse}
-                onChange={(e) => setWarehouse(e.target.value)}
-                style={{ ...fieldStyle, appearance: "none", padding: "0 32px 0 12px", cursor: "pointer" }}
-              >
-                <option value="">All warehouses</option>
-                {warehouses.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.name}
-                  </option>
-                ))}
-              </select>
-              <ChevronDown
-                size={13}
-                strokeWidth={1.8}
-                color={COLORS.slateMid}
-                style={{ position: "absolute", right: 12, top: 13, pointerEvents: "none" }}
-              />
-            </div>
-          </label>
+          {warehouses && (
+            <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+              <span style={labelStyle}>Warehouse</span>
+              <div style={{ position: "relative" }}>
+                <select
+                  value={warehouse}
+                  onChange={(e) => setWarehouse(e.target.value)}
+                  style={{ ...fieldStyle, appearance: "none", padding: "0 32px 0 12px", cursor: "pointer" }}
+                >
+                  <option value="">All warehouses</option>
+                  {warehouses.map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown
+                  size={13}
+                  strokeWidth={1.8}
+                  color={COLORS.slateMid}
+                  style={{ position: "absolute", right: 12, top: 13, pointerEvents: "none" }}
+                />
+              </div>
+            </label>
+          )}
 
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <button

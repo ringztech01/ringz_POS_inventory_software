@@ -1,4 +1,6 @@
 import { Suspense } from "react";
+import { PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
 import { Plus } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import PrimaryButton from "@/components/ui/PrimaryButton";
@@ -21,6 +23,9 @@ export default async function WarehouseListPage({
 }: {
   searchParams: Promise<WarehousePageSearchParams>;
 }) {
+  const denied = await pageGuard(PERMISSIONS.MANAGE_WAREHOUSES);
+  if (denied) return denied;
+
   const params = await searchParams;
   const q = params.q?.trim() || "";
   const page = Math.max(1, Number(params.page) || 1);

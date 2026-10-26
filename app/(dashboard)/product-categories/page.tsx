@@ -1,5 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import ProductCategoriesInteractive from "@/components/categories/ProductCategoriesInteractive";
 import { getCategoryList } from "./queries";
 
@@ -22,6 +24,9 @@ export default async function ProductCategoriesPage({
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_PRODUCT_CATEGORIES);
+  if (denied) return denied;
 
   const params = await searchParams;
   const q = params.q?.trim() || "";

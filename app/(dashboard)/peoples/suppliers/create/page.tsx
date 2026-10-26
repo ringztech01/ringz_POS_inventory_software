@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import SupplierForm from "@/components/suppliers/SupplierForm";
 import { createSupplier } from "../actions";
 
@@ -11,9 +12,8 @@ export default async function CreateSupplierPage() {
     redirect("/");
   }
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_SUPPLIERS)) {
-    redirect("/peoples/suppliers");
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_SUPPLIERS);
+  if (denied) return denied;
 
   return <SupplierForm action={createSupplier} />;
 }

@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import CustomerForm from "@/components/customers/CustomerForm";
 import { getCustomerById } from "../../queries";
 import { updateCustomer } from "../../actions";
@@ -12,9 +13,8 @@ export default async function EditCustomerPage({ params }: { params: Promise<{ i
     redirect("/");
   }
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_CUSTOMERS)) {
-    redirect("/peoples/customers");
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_CUSTOMERS);
+  if (denied) return denied;
 
   const { id } = await params;
   const customer = await getCustomerById(id);

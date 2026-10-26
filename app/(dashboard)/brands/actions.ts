@@ -2,26 +2,16 @@
 
 import { randomUUID } from "crypto";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { saveBrandLogo } from "@/lib/uploads";
 import { brandSchema } from "@/lib/validations/brand";
 import { countActiveProductsInBrand } from "./queries";
 import type { BrandActionState } from "./types";
 
-async function requireManageProducts(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_PRODUCTS)) {
-    return { error: "You don't have permission to manage products." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageBrands = () => requirePermission(PERMISSIONS.MANAGE_BRANDS);
 
 async function saveUploadedLogo(formData: FormData, idForFilename: string): Promise<{ path?: string; error?: string }> {
   const logoFile = formData.get("logo");
@@ -37,7 +27,7 @@ async function saveUploadedLogo(formData: FormData, idForFilename: string): Prom
 }
 
 export async function createBrand(formData: FormData): Promise<BrandActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageBrands();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }
@@ -68,7 +58,7 @@ export async function createBrand(formData: FormData): Promise<BrandActionState>
 }
 
 export async function updateBrand(id: string, formData: FormData): Promise<BrandActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageBrands();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }
@@ -105,7 +95,7 @@ export async function updateBrand(id: string, formData: FormData): Promise<Brand
 }
 
 export async function deleteBrand(id: string): Promise<BrandActionState> {
-  const authCheck = await requireManageProducts();
+  const authCheck = await requireManageBrands();
   if (authCheck.error) {
     return { ok: false, error: authCheck.error };
   }

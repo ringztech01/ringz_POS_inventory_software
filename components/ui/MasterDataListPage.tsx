@@ -27,6 +27,11 @@ export default function MasterDataListPage<T extends MasterDataRow>({
   renderDelete,
   renderModal,
   showLogo = true,
+  showFilters = true,
+  nameOnly = false,
+  editTitle,
+  perPageOptions,
+  showPageNumbers,
 }: {
   title: string;
   entityNameSingular: string;
@@ -43,6 +48,13 @@ export default function MasterDataListPage<T extends MasterDataRow>({
   renderDelete: (item: T) => ReactNode;
   renderModal: (modal: MasterDataModalState<T>, close: () => void) => ReactNode;
   showLogo?: boolean;
+  // Expense Categories design: search only (no Filters button), a Name |
+  // Action table, and numbered pages with 10/25/50 per page.
+  showFilters?: boolean;
+  nameOnly?: boolean;
+  editTitle?: string;
+  perPageOptions?: number[];
+  showPageNumbers?: boolean;
 }) {
   const [modal, setModal] = useState<MasterDataModalState<T> | null>(null);
 
@@ -93,6 +105,7 @@ export default function MasterDataListPage<T extends MasterDataRow>({
           <Suspense fallback={null}>
             <SearchInput />
           </Suspense>
+          {showFilters && (
           <button
             type="button"
             style={{
@@ -113,6 +126,7 @@ export default function MasterDataListPage<T extends MasterDataRow>({
             <Filter size={14} strokeWidth={1.6} />
             Filters
           </button>
+          )}
         </div>
 
         <MasterDataTable
@@ -123,10 +137,19 @@ export default function MasterDataListPage<T extends MasterDataRow>({
           onEdit={(item) => setModal({ item })}
           renderDelete={renderDelete}
           showLogo={showLogo}
+          nameOnly={nameOnly}
+          editTitle={editTitle}
         />
 
         <Suspense fallback={null}>
-          <Pagination page={page} perPage={perPage} total={total} totalPages={totalPages} />
+          <Pagination
+            page={page}
+            perPage={perPage}
+            total={total}
+            totalPages={totalPages}
+            perPageOptions={perPageOptions}
+            showPageNumbers={showPageNumbers}
+          />
         </Suspense>
       </div>
 

@@ -1,25 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS } from "@/lib/permissions";
+import { requirePermission } from "@/lib/auth/permissions.server";
 import { warehouseSchema } from "@/lib/validations/warehouse";
 import { isWarehouseInUse } from "./queries";
 import type { WarehouseActionState } from "./types";
 
-async function requireManageWarehouses(): Promise<{ error: string } | { error?: undefined }> {
-  const session = await auth();
-  if (!session?.user) {
-    return { error: "You must be signed in to do that." };
-  }
-
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_WAREHOUSES)) {
-    return { error: "You don't have permission to manage warehouses." };
-  }
-
-  return {};
-}
+// Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
+const requireManageWarehouses = () => requirePermission(PERMISSIONS.MANAGE_WAREHOUSES);
 
 function parseWarehouseFormData(formData: FormData) {
   return warehouseSchema.safeParse({

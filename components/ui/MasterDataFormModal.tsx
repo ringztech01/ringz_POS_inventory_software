@@ -30,6 +30,7 @@ export default function MasterDataFormModal({
   successMessageCreate,
   successMessageEdit,
   showLogo = true,
+  modalLayout = "default",
 }: {
   item: MasterDataFormItem | null;
   titleCreate: string;
@@ -39,7 +40,10 @@ export default function MasterDataFormModal({
   onSubmit: (formData: FormData) => Promise<MasterDataActionResult>;
   successMessageCreate: string;
   successMessageEdit: string;
+  // Name-only entities (Units, Expense Categories) pass false.
   showLogo?: boolean;
+  // See MasterDataModal's `layout` (Expense Categories: "simple", 460px).
+  modalLayout?: "default" | "simple";
 }) {
   const router = useRouter();
   const isEdit = !!item;
@@ -84,6 +88,8 @@ export default function MasterDataFormModal({
       onClose={onClose}
       onSubmit={handleSubmit}
       submitting={isPending}
+      layout={modalLayout}
+      {...(modalLayout === "simple" ? { width: 460 } : {})}
     >
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
@@ -97,7 +103,7 @@ export default function MasterDataFormModal({
           onFocus={nameFocus.on}
           onBlur={nameFocus.off}
           style={{
-            height: 40,
+            height: modalLayout === "simple" ? 42 : 40,
             border: `1px solid ${fieldErrors.name ? COLORS.danger : nameFocus.value ? COLORS.teal : COLORS.borderStrong}`,
             borderRadius: 8,
             padding: "0 12px",

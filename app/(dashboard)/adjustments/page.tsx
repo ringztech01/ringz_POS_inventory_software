@@ -1,6 +1,8 @@
 import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { auth } from "@/auth";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import PrimaryButton from "@/components/ui/PrimaryButton";
 import SearchInput from "@/components/ui/SearchInput";
@@ -27,6 +29,9 @@ export default async function AdjustmentsPage({
   if (!session?.user?.id) {
     redirect("/");
   }
+
+  const denied = await pageGuard(PERMISSIONS.MANAGE_ADJUSTMENTS);
+  if (denied) return denied;
 
   const params = await searchParams;
   const q = params.q?.trim() || "";

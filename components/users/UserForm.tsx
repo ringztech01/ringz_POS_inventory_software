@@ -3,11 +3,9 @@
 import { useEffect, useRef, useState, useTransition, type ChangeEvent, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import type { Role } from "@prisma/client";
 import { ArrowLeft, Eye, EyeOff, Pencil, User as UserIcon, ChevronDown } from "lucide-react";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
-import { ROLE_OPTIONS } from "@/lib/roles";
 import PrimaryButton from "@/components/ui/PrimaryButton";
 import GhostButton from "@/components/ui/GhostButton";
 import type { PublicUser } from "@/app/(dashboard)/peoples/users/queries";
@@ -20,7 +18,7 @@ type UserFormValues = {
   phoneNumber: string;
   password: string;
   confirmPassword: string;
-  role: Role;
+  roleId: string;
 };
 
 const EMPTY_VALUES: UserFormValues = {
@@ -30,7 +28,7 @@ const EMPTY_VALUES: UserFormValues = {
   phoneNumber: "",
   password: "",
   confirmPassword: "",
-  role: "CASHIER",
+  roleId: "",
 };
 
 function Field({
@@ -158,7 +156,16 @@ function PasswordField({
   );
 }
 
-function RoleField({ value, onChange }: { value: Role; onChange: (value: Role) => void }) {
+// Role options come from the Role table (active rows), never a fixed list.
+function RoleField({
+  value,
+  onChange,
+  roles,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  roles: { id: string; name: string }[];
+}) {
   const focus = useToggleState();
 
   return (
@@ -168,10 +175,10 @@ function RoleField({ value, onChange }: { value: Role; onChange: (value: Role) =
       </label>
       <div style={{ position: "relative" }}>
         <select
-          name="role"
+          name="roleId"
           required
           value={value}
-          onChange={(event) => onChange(event.target.value as Role)}
+          onChange={(event) => onChange(event.target.value)}
           onFocus={focus.on}
           onBlur={focus.off}
           style={{
@@ -183,14 +190,16 @@ function RoleField({ value, onChange }: { value: Role; onChange: (value: Role) =
             padding: "0 36px 0 12px",
             fontSize: 14,
             background: "#fff",
+            color: value ? COLORS.ink : COLORS.slateMid,
             cursor: "pointer",
             outline: "none",
             boxShadow: focus.value ? `0 0 0 3px ${COLORS.focusRing}` : "none",
           }}
         >
-          {ROLE_OPTIONS.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
+          <option value="">Choose Role</option>
+          {roles.map((role) => (
+            <option key={role.id} value={role.id} style={{ color: COLORS.ink }}>
+              {role.name}
             </option>
           ))}
         </select>
@@ -207,9 +216,12 @@ function RoleField({ value, onChange }: { value: Role; onChange: (value: Role) =
 
 export default function UserForm({
   user,
+  roles,
   action,
 }: {
   user?: PublicUser;
+  // Active roles (Role table).
+  roles: { id: string; name: string }[];
   action: (formData: FormData) => Promise<UserActionState>;
 }) {
   const router = useRouter();
@@ -223,7 +235,8 @@ export default function UserForm({
           phoneNumber: user.phoneNumber ?? "",
           password: "",
           confirmPassword: "",
-          role: user.role,
+          // A role that has since been deleted isn't offered — re-pick.
+          roleId: user.roleId && roles.some((role) => role.id === user.roleId) ? user.roleId : "",
         }
       : EMPTY_VALUES,
   );
@@ -413,7 +426,7 @@ export default function UserForm({
             value={values.confirmPassword}
             onChange={(v) => updateField("confirmPassword", v)}
           />
-          <RoleField value={values.role} onChange={(v) => updateField("role", v)} />
+          <RoleField value={values.roleId} onChange={(v) => updateField("roleId", v)} roles={roles} />
         </div>
 
         <div

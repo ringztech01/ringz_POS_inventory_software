@@ -44,18 +44,55 @@ function NavButton({
   );
 }
 
+function PageButton({ page, active, onClick }: { page: number; active: boolean; onClick: () => void }) {
+  const hover = useToggleState();
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      onMouseEnter={hover.on}
+      onMouseLeave={hover.off}
+      aria-current={active ? "page" : undefined}
+      style={{
+        minWidth: 34,
+        height: 34,
+        border: `1px solid ${active ? COLORS.teal : COLORS.borderStrong}`,
+        background: active ? COLORS.teal : hover.value ? COLORS.bgApp : "#fff",
+        borderRadius: 8,
+        color: active ? "#fff" : COLORS.text,
+        fontSize: 13,
+        fontWeight: 600,
+        cursor: "pointer",
+      }}
+    >
+      {page}
+    </button>
+  );
+}
+
+// Up to 5 page numbers centred on the current page.
+function pageWindow(page: number, totalPages: number): number[] {
+  const size = Math.min(5, totalPages);
+  const start = Math.min(Math.max(1, page - Math.floor(size / 2)), totalPages - size + 1);
+  return Array.from({ length: size }, (_, i) => start + i);
+}
+
 export default function Pagination({
   page,
   perPage,
   total,
   totalPages,
   perPageOptions = DEFAULT_PER_PAGE_OPTIONS,
+  showPageNumbers = false,
 }: {
   page: number;
   perPage: number;
   total: number;
   totalPages: number;
   perPageOptions?: number[];
+  // Numbered page buttons between the arrows (as in the Sales design).
+  showPageNumbers?: boolean;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -117,6 +154,10 @@ export default function Pagination({
         <NavButton disabled={!canPrev} onClick={() => navigate(page - 1)}>
           <ChevronLeft size={14} strokeWidth={1.7} />
         </NavButton>
+        {showPageNumbers &&
+          pageWindow(page, totalPages).map((n) => (
+            <PageButton key={n} page={n} active={n === page} onClick={() => navigate(n)} />
+          ))}
         <NavButton disabled={!canNext} onClick={() => navigate(page + 1)}>
           <ChevronRight size={14} strokeWidth={1.7} />
         </NavButton>

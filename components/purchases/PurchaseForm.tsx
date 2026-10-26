@@ -4,22 +4,20 @@ import { useRef, useState, useTransition, type FormEvent, type ReactNode } from 
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { ArrowLeft, Minus, PackageSearch, Pencil, Plus, Trash2 } from "lucide-react";
-import type { PurchaseStatus } from "@prisma/client";
+import type { PaymentType } from "@prisma/client";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import GhostButton from "@/components/ui/GhostButton";
 import PrimaryButton from "@/components/ui/PrimaryButton";
 import ProductSearchField from "@/components/ui/ProductSearchField";
-import { computeLine, computeOrder, sumSubtotals } from "@/lib/pricing";
+import QtyInput from "@/components/ui/QtyInput";
+import { computeLine, computeOrder, sumSubtotals, toDecimal } from "@/lib/pricing";
+import { computePaymentState } from "@/lib/payments";
 import { formatNaira } from "@/lib/format";
-import {
-  createPurchase,
-  getPurchaseStockForProducts,
-  searchProductsForPurchase,
-  updatePurchase,
-} from "@/app/(dashboard)/purchases/actions";
+import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import type {
   FormOption,
+  PurchaseActionState,
   PurchaseFieldName,
   PurchaseFormInitial,
   PurchaseLine,
@@ -28,11 +26,14 @@ import type {
 } from "@/app/(dashboard)/purchases/types";
 import { DateInput, DecimalInput, Field, SelectInput } from "./form-fields";
 import PurchaseLineModal, { type PurchaseLineEdit } from "./PurchaseLineModal";
-import { PURCHASE_STATUS_LABELS } from "./purchase-display";
+import { PURCHASE_UNITS } from "@/lib/purchase-units";
+import { PAYMENT_TYPE_LABELS, PURCHASE_STATUS_LABELS, PaymentStatusPill, type DocumentStatus } from "./purchase-display";
 
 export type { PurchaseLine };
 
 const ITEMS_GRID = "minmax(200px,1.3fr) 140px 110px 180px 120px 120px 140px 70px";
+// RingzPOS Transfers design: a wider Stock column.
+const TRANSFER_ITEMS_GRID = "minmax(200px,1.3fr) 140px 140px 180px 120px 120px 140px 70px";
 const ITEM_HEADERS: { label: string; right?: boolean }[] = [
   { label: "Product" },
   { label: "Net unit cost", right: true },
@@ -45,7 +46,7 @@ const ITEM_HEADERS: { label: string; right?: boolean }[] = [
 ];
 
 // Design order for the Status select.
-const STATUS_OPTIONS = (["RECEIVED", "PENDING", "ORDERED"] as const).map((value) => ({
+const STATUS_OPTIONS: { value: DocumentStatus; label: string }[] = (["RECEIVED", "PENDING", "ORDERED"] as const).map((value) => ({
   value,
   label: PURCHASE_STATUS_LABELS[value],
 }));
@@ -60,21 +61,23 @@ function todayInputValue(): string {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
-function lineFromProduct(product: PurchaseProductSearchResult): PurchaseLine {
+// `unitCost` holds the line's unit price either way: the product's cost on
+// purchase documents, its selling price on sales (priceField).
+function lineFromProduct(product: PurchaseProductSearchResult, priceField: "cost" | "price", unit: string): PurchaseLine {
   return {
     productId: product.id,
     name: product.name,
     code: product.code,
     unitName: product.unitName,
     stock: product.stock,
-    unitCost: product.cost,
+    unitCost: product[priceField],
     quantity: 1,
     discountType: "FIXED",
     discount: "0",
     // Line tax defaults to the product's own tax settings.
     taxType: product.taxType,
     taxRate: product.orderTax,
-    purchaseUnit: "Pic",
+    purchaseUnit: unit,
   };
 }
 
@@ -84,6 +87,7 @@ function SmallIconButton({
   tone,
   size,
   radius,
+  disabled,
   children,
 }: {
   title: string;
@@ -91,9 +95,11 @@ function SmallIconButton({
   tone: "teal" | "danger" | "neutral";
   size: number;
   radius: number | string;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   const hover = useToggleState();
+  const hovered = hover.value && !disabled;
   const hoverStyles = {
     teal: { background: COLORS.tealTint, color: COLORS.teal, borderColor: COLORS.tealBorder },
     danger: { background: COLORS.dangerBg, color: COLORS.danger, borderColor: COLORS.dangerBorder },
@@ -106,6 +112,7 @@ function SmallIconButton({
       title={title}
       aria-label={title}
       onClick={onClick}
+      disabled={disabled}
       onMouseEnter={hover.on}
       onMouseLeave={hover.off}
       style={{
@@ -115,11 +122,11 @@ function SmallIconButton({
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: hover.value ? hoverStyles.background : "#fff",
-        border: `1px solid ${hover.value ? hoverStyles.borderColor : COLORS.borderStrong}`,
+        background: hovered ? hoverStyles.background : "#fff",
+        border: `1px solid ${hovered ? hoverStyles.borderColor : COLORS.borderStrong}`,
         borderRadius: radius,
-        cursor: "pointer",
-        color: hover.value ? hoverStyles.color : COLORS.slate,
+        cursor: disabled ? "not-allowed" : "pointer",
+        color: disabled ? COLORS.slateLight : hovered ? hoverStyles.color : COLORS.slate,
         transition: "background .12s",
       }}
     >
@@ -128,9 +135,28 @@ function SmallIconButton({
   );
 }
 
-function QtyStepper({ line, onChange }: { line: PurchaseLine; onChange: (quantity: number) => void }) {
+// `max` (returns only): the stock available to return — current stock, plus
+// what this return already took out when editing a Received one. "+" stops
+// there, and a
+// warning shows if the quantity is above it (e.g. stock changed meanwhile);
+// the server re-checks on save either way.
+function QtyStepper({
+  line,
+  max,
+  capLabel = "stock",
+  onChange,
+}: {
+  line: PurchaseLine;
+  max?: number;
+  // What the cap is, for the warning: "stock" or "returnable".
+  capLabel?: string;
+  onChange: (quantity: number) => void;
+}) {
+  const exceeds = max !== undefined && line.quantity > max;
+
   return (
-    <span style={{ display: "flex", alignItems: "center", justifySelf: "start" }}>
+    <span style={{ display: "flex", flexDirection: "column", gap: 4, justifySelf: "start" }}>
+      <span style={{ display: "flex", alignItems: "center" }}>
       <SmallIconButton
         title={`Decrease quantity for ${line.name}`}
         onClick={() => onChange(line.quantity - 1)}
@@ -140,22 +166,11 @@ function QtyStepper({ line, onChange }: { line: PurchaseLine; onChange: (quantit
       >
         <Minus size={13} strokeWidth={2} />
       </SmallIconButton>
-      <input
+      <QtyInput
         value={line.quantity}
-        readOnly
-        aria-label={`Quantity for ${line.name}`}
-        style={{
-          width: 48,
-          height: 32,
-          border: `1px solid ${COLORS.borderStrong}`,
-          borderLeft: "none",
-          borderRight: "none",
-          textAlign: "center",
-          fontFamily: FONTS.mono,
-          fontSize: 13,
-          outline: "none",
-          background: "#fff",
-        }}
+        onChange={onChange}
+        ariaLabel={`Quantity for ${line.name}`}
+        hasError={exceeds}
       />
       <SmallIconButton
         title={`Increase quantity for ${line.name}`}
@@ -163,20 +178,29 @@ function QtyStepper({ line, onChange }: { line: PurchaseLine; onChange: (quantit
         tone="neutral"
         size={32}
         radius="0 6px 6px 0"
+        disabled={max !== undefined && line.quantity >= max}
       >
         <Plus size={13} strokeWidth={2} />
       </SmallIconButton>
+      </span>
+      {exceeds && <span style={{ fontSize: 11, color: COLORS.danger }}>Exceeds {capLabel} ({max})</span>}
     </span>
   );
 }
 
 function ItemRow({
+  grid,
   line,
+  maxQuantity,
+  capLabel,
   onQuantityChange,
   onEdit,
   onRemove,
 }: {
+  grid: string;
   line: PurchaseLine;
+  maxQuantity?: number;
+  capLabel?: string;
   onQuantityChange: (quantity: number) => void;
   onEdit: () => void;
   onRemove: () => void;
@@ -191,7 +215,7 @@ function ItemRow({
       onMouseLeave={hover.off}
       style={{
         display: "grid",
-        gridTemplateColumns: ITEMS_GRID,
+        gridTemplateColumns: grid,
         columnGap: 16,
         alignItems: "center",
         padding: "0 20px",
@@ -239,7 +263,7 @@ function ItemRow({
       >
         {line.stock} {line.unitName.toLowerCase()}
       </span>
-      <QtyStepper line={line} onChange={onQuantityChange} />
+      <QtyStepper line={line} max={maxQuantity} capLabel={capLabel} onChange={onQuantityChange} />
       <span style={{ ...money, color: COLORS.slate }}>{formatNaira(priced.discountAmount.toFixed(2))}</span>
       <span style={{ ...money, color: COLORS.slate }}>{formatNaira(priced.taxAmount.toFixed(2))}</span>
       <span style={{ ...money, fontWeight: 600 }}>{formatNaira(priced.subtotal.toFixed(2))}</span>
@@ -249,6 +273,27 @@ function ItemRow({
         </SmallIconButton>
       </span>
     </div>
+  );
+}
+
+// The design's disabled "Sale reference" input.
+function ReadOnlyInput({ value, mono, ariaLabel }: { value: string; mono?: boolean; ariaLabel: string }) {
+  return (
+    <input
+      value={value}
+      disabled
+      aria-label={ariaLabel}
+      style={{
+        height: 40,
+        border: `1px solid ${COLORS.border}`,
+        borderRadius: 8,
+        padding: "0 12px",
+        fontSize: 14,
+        fontFamily: mono ? FONTS.mono : FONTS.body,
+        background: COLORS.bgApp,
+        color: COLORS.slateLight,
+      }}
+    />
   );
 }
 
@@ -281,33 +326,106 @@ function TotalsRow({ label, value, last }: { label: string; value: string; last?
   );
 }
 
-// Create and edit share this form. In edit mode it starts from the saved
-// purchase (`initial`) and saves through updatePurchase, which reconciles
-// stock by difference instead of re-running create's stock logic.
+// The create/edit form for purchase documents — Purchases and Purchase
+// Returns differ only in the props below. Edit mode starts from the saved
+// document (`initial`) and its saveAction reconciles stock by difference
+// instead of re-running create's stock logic.
+//
+// stockDirection:
+//   "in"  (Purchase): any active product can be added; switching warehouse
+//         keeps the lines and refreshes their reference stock (stockAction).
+//   "out" (Return, Sale): searchAction only offers products held in the
+//         selected warehouse, quantities are capped at that stock, and
+//         switching warehouse (after confirming) clears the lines.
+//
+// Sales also set priceField "price" (lines default to the selling price),
+// unitLabel "Sale unit", the Customer party, and takePayment (Paid amount +
+// Payment type + live payment status, create only).
+//
+// Transfers set `transfer`: From Warehouse + To Warehouse replace Warehouse +
+// party. From behaves like an outbound document's warehouse (search scoped to
+// it, quantities capped at its stock, confirm-and-clear on change); To can
+// never be From — From is left out of its options, and an inline error shows
+// if they ever match.
 export default function PurchaseForm({
   warehouses,
-  suppliers,
+  parties,
+  partyLabel = "Supplier",
+  partyField = "supplierId",
+  defaultPartyId = "",
+  priceField = "cost",
+  unitLabel = "Purchase unit",
+  takePayment = false,
+  fromDocument,
+  statusOptions = STATUS_OPTIONS,
+  transfer = false,
+  units = PURCHASE_UNITS,
+  defaultUnit = "Pic",
   mode = "create",
-  purchaseId,
   initial,
+  noun,
+  listHref,
+  stockDirection,
+  searchAction,
+  stockAction,
+  saveAction,
 }: {
   warehouses: FormOption[];
-  suppliers: FormOption[];
+  // Supplier or customer options.
+  parties: FormOption[];
+  partyLabel?: string;
+  partyField?: "supplierId" | "customerId";
+  defaultPartyId?: string;
+  priceField?: "cost" | "price";
+  unitLabel?: string;
+  takePayment?: boolean;
+  // Sale Returns: the document this one is created from. Its reference,
+  // party and warehouse are shown read-only (never chosen), there's no
+  // product search — lines come pre-filled from it, each capped at its
+  // line.maxQuantity ("returnable") — and the payload carries its id.
+  fromDocument?: {
+    id: string;
+    referenceLabel: string;
+    reference: string;
+    partyName: string;
+    warehouseName: string;
+  };
+  // The first option is the create default.
+  statusOptions?: { value: DocumentStatus; label: string }[];
+  transfer?: boolean;
+  // Line-modal unit choices and the unit new lines start with.
+  units?: readonly string[];
+  defaultUnit?: string;
   mode?: "create" | "edit";
-  purchaseId?: string;
   initial?: PurchaseFormInitial;
+  // "Purchase" | "Purchase Return" — title, button and toast text.
+  noun: string;
+  // Back/Cancel target and where to go after saving.
+  listHref: string;
+  stockDirection: "in" | "out";
+  // Not needed with fromDocument (no product search there).
+  searchAction?: (warehouseId: string, query: string) => Promise<PurchaseProductSearchResult[]>;
+  stockAction?: (warehouseId: string, productIds: string[]) => Promise<Record<string, number>>;
+  // Server action; on edit the page binds it to the document id. Save is
+  // disabled while a module doesn't provide one yet.
+  saveAction?: (payload: PurchaseSubmitPayload) => Promise<PurchaseActionState>;
 }) {
-  const isEdit = mode === "edit" && !!purchaseId;
-  const [date, setDate] = useState(initial?.date ?? todayInputValue());
+  const isEdit = mode === "edit";
+  const isOutbound = stockDirection === "out";
+  const [date, setDate] = useState(initial?.date || todayInputValue());
   const [warehouseId, setWarehouseId] = useState(initial?.warehouseId ?? "");
-  const [supplierId, setSupplierId] = useState(initial?.supplierId ?? "");
+  const [toWarehouseId, setToWarehouseId] = useState(initial?.toWarehouseId ?? "");
+  const [partyId, setPartyId] = useState(initial?.partyId ?? defaultPartyId);
+  const [paidAmount, setPaidAmount] = useState("");
+  const [paymentType, setPaymentType] = useState<PaymentType>("CASH");
   const [lines, setLines] = useState<PurchaseLine[]>(initial?.lines ?? []);
   const [orderTax, setOrderTax] = useState(initial?.orderTax ?? "");
   const [discount, setDiscount] = useState(initial?.discount ?? "");
   const [shipping, setShipping] = useState(initial?.shipping ?? "");
-  const [status, setStatus] = useState<PurchaseStatus>(initial?.status ?? "RECEIVED");
+  const [status, setStatus] = useState<DocumentStatus>(initial?.status ?? statusOptions[0]?.value ?? "RECEIVED");
   const [notes, setNotes] = useState(initial?.notes ?? "");
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
+  const [pendingWarehouseId, setPendingWarehouseId] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<PurchaseFieldName, string[]>>>({});
   const [isPending, startTransition] = useTransition();
   const router = useRouter();
@@ -322,19 +440,46 @@ export default function PurchaseForm({
     shipping,
   });
 
-  const editingLine = lines.find((line) => line.productId === editingProductId) ?? null;
+  // Sales: the payment taken with the sale, through the same helper the
+  // server uses — so the pill shows exactly what will be saved.
+  const paidExceedsTotal = takePayment && toDecimal(paidAmount).greaterThan(order.grandTotal);
+  const paymentState = computePaymentState(
+    order.grandTotal,
+    takePayment && !toDecimal(paidAmount).isZero() ? [{ amount: paidAmount, paymentType, date: new Date() }] : [],
+  );
 
-  // Purchase lines aren't tied to a warehouse, so switching warehouse keeps
-  // the items and just refreshes their reference stock for the new one.
+  const editingLine = lines.find((line) => line.productId === editingProductId) ?? null;
+  const itemsGrid = transfer ? TRANSFER_ITEMS_GRID : ITEMS_GRID;
+  // Transfers: From ≠ To (the server re-checks).
+  const sameWarehouse = transfer && !!warehouseId && warehouseId === toWarehouseId;
+
   async function handleWarehouseChange(nextWarehouseId: string) {
+    // Return lines belong to the warehouse they're taken out of — confirm,
+    // then clear them (see confirmWarehouseChange).
+    if (isOutbound) {
+      if (lines.length > 0 && nextWarehouseId !== warehouseId) setPendingWarehouseId(nextWarehouseId);
+      else setWarehouseId(nextWarehouseId);
+      return;
+    }
+
+    // Purchase lines aren't tied to a warehouse, so switching warehouse keeps
+    // the items and just refreshes their reference stock for the new one.
     setWarehouseId(nextWarehouseId);
     const id = ++stockRequest.current;
     const productIds = lines.map((line) => line.productId);
-    if (!nextWarehouseId || productIds.length === 0) return;
+    if (!nextWarehouseId || productIds.length === 0 || !stockAction) return;
 
-    const stock = await getPurchaseStockForProducts(nextWarehouseId, productIds);
+    const stock = await stockAction(nextWarehouseId, productIds);
     if (id !== stockRequest.current) return;
     setLines((current) => current.map((line) => ({ ...line, stock: stock[line.productId] ?? line.stock })));
+  }
+
+  function confirmWarehouseChange() {
+    if (pendingWarehouseId !== null) {
+      setWarehouseId(pendingWarehouseId);
+      setLines([]);
+    }
+    setPendingWarehouseId(null);
   }
 
   function addProduct(product: PurchaseProductSearchResult) {
@@ -342,7 +487,7 @@ export default function PurchaseForm({
       toast.error(`${product.name} is already in the order.`);
       return;
     }
-    setLines((current) => [...current, lineFromProduct(product)]);
+    setLines((current) => [...current, lineFromProduct(product, priceField, defaultUnit)]);
   }
 
   function updateLine(productId: string, patch: Partial<PurchaseLine>) {
@@ -364,15 +509,21 @@ export default function PurchaseForm({
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (isPending) return;
+    if (isPending || !saveAction) return;
     setFieldErrors({});
 
     // Only ids and the user's inputs go to the server — it re-reads the
     // products and recomputes every total itself.
     const payload: PurchaseSubmitPayload = {
       date,
-      warehouseId,
-      supplierId,
+      // From-document returns send only the source id; the server takes the
+      // party and warehouse from that document.
+      ...(fromDocument
+        ? { saleId: fromDocument.id }
+        : transfer
+          ? { fromWarehouseId: warehouseId, toWarehouseId }
+          : { warehouseId, [partyField]: partyId }),
+      ...(takePayment ? { paidAmount, paymentType } : {}),
       status,
       orderTax,
       discount,
@@ -387,17 +538,17 @@ export default function PurchaseForm({
         taxType: line.taxType,
         taxRate: line.taxRate,
         purchaseUnit: line.purchaseUnit,
+        ...(line.saleItemId ? { saleItemId: line.saleItemId } : {}),
       })),
     };
 
     startTransition(async () => {
-      const result =
-        isEdit && purchaseId ? await updatePurchase(purchaseId, payload) : await createPurchase(payload);
+      const result = await saveAction(payload);
 
       if (result.ok) {
         const verb = isEdit ? "updated" : "saved";
-        toast.success(result.reference ? `Purchase ${result.reference} ${verb}.` : `Purchase ${verb}.`);
-        router.push("/purchases");
+        toast.success(result.reference ? `${noun} ${result.reference} ${verb}.` : `${noun} ${verb}.`);
+        router.push(listHref);
         router.refresh();
       } else {
         setFieldErrors(result.fieldErrors ?? {});
@@ -421,13 +572,13 @@ export default function PurchaseForm({
               letterSpacing: "-.015em",
             }}
           >
-            {isEdit ? "Edit Purchase" : "Create Purchase"}
+            {isEdit ? `Edit ${noun}` : `Create ${noun}`}
           </h1>
           <p style={{ margin: 0, fontSize: 13.5, color: COLORS.slateMid }}>
             Fields marked <span style={{ color: COLORS.danger }}>*</span> are required.
           </p>
         </div>
-        <GhostButton href="/purchases" paddingX={18}>
+        <GhostButton href={listHref} paddingX={18}>
           <ArrowLeft size={14} strokeWidth={1.7} />
           Back
         </GhostButton>
@@ -447,37 +598,92 @@ export default function PurchaseForm({
           gap: 24,
         }}
       >
+        {fromDocument ? (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "20px 32px" }}>
+            <Field label="Date" required error={errorOf("date")}>
+              <DateInput value={date} onChange={setDate} hasError={!!errorOf("date")} />
+            </Field>
+            <Field label={fromDocument.referenceLabel} required>
+              <ReadOnlyInput value={fromDocument.reference} mono ariaLabel={fromDocument.referenceLabel} />
+            </Field>
+            <Field label="Status" required error={errorOf("status")}>
+              <SelectInput
+                value={status}
+                onChange={(value) => setStatus(value as DocumentStatus)}
+                options={statusOptions}
+              />
+            </Field>
+            {/* Not in the design: the source document's party and warehouse,
+                read-only, styled like the Sale reference field. */}
+            <Field label={partyLabel}>
+              <ReadOnlyInput value={fromDocument.partyName} ariaLabel={partyLabel} />
+            </Field>
+            <Field label="Warehouse">
+              <ReadOnlyInput value={fromDocument.warehouseName} ariaLabel="Warehouse" />
+            </Field>
+          </div>
+        ) : (
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "20px 32px" }}>
           <Field label="Date" required error={errorOf("date")}>
             <DateInput value={date} onChange={setDate} hasError={!!errorOf("date")} />
           </Field>
-          <Field label="Warehouse" required error={errorOf("warehouseId")}>
+          <Field
+            label={transfer ? "From Warehouse" : "Warehouse"}
+            required
+            error={errorOf(transfer ? "fromWarehouseId" : "warehouseId")}
+          >
             <SelectInput
               value={warehouseId}
               onChange={handleWarehouseChange}
               options={warehouses.map((w) => ({ value: w.id, label: w.name }))}
               placeholder="Choose Warehouse"
-              hasError={!!errorOf("warehouseId")}
+              hasError={!!errorOf(transfer ? "fromWarehouseId" : "warehouseId")}
             />
           </Field>
-          <Field label="Supplier" required error={errorOf("supplierId")}>
+          {transfer ? (
+            <Field
+              label="To Warehouse"
+              required
+              error={sameWarehouse ? "To must be a different warehouse from From." : errorOf("toWarehouseId")}
+            >
+              <SelectInput
+                value={toWarehouseId}
+                onChange={setToWarehouseId}
+                // From is left out — unless it's already the chosen To, so the
+                // clash stays visible next to its error.
+                options={warehouses
+                  .filter((w) => w.id !== warehouseId || w.id === toWarehouseId)
+                  .map((w) => ({ value: w.id, label: w.name }))}
+                placeholder="Choose Warehouse"
+                hasError={sameWarehouse || !!errorOf("toWarehouseId")}
+              />
+            </Field>
+          ) : (
+          <Field label={partyLabel} required error={errorOf(partyField)}>
             <SelectInput
-              value={supplierId}
-              onChange={setSupplierId}
-              options={suppliers.map((s) => ({ value: s.id, label: s.name }))}
-              placeholder="Choose Supplier"
-              hasError={!!errorOf("supplierId")}
+              value={partyId}
+              onChange={setPartyId}
+              options={parties.map((party) => ({ value: party.id, label: party.name }))}
+              placeholder={`Choose ${partyLabel}`}
+              hasError={!!errorOf(partyField)}
             />
           </Field>
+          )}
         </div>
+        )}
 
+        {!fromDocument && (
         <Field label="Product">
           <ProductSearchField
-            search={(query) => searchProductsForPurchase(warehouseId, query)}
+            search={(query) => (searchAction ? searchAction(warehouseId, query) : Promise.resolve([]))}
             searchKey={warehouseId}
             onSelect={addProduct}
             disabled={!warehouseId}
-            disabledHint="Choose a warehouse first — its current stock is shown for reference."
+            disabledHint={
+              transfer
+                ? "Choose the From warehouse first — only products in stock there can be transferred."
+                : "Choose a warehouse first — its current stock is shown for reference."
+            }
             renderMeta={(product) => (
               <span style={{ fontFamily: FONTS.mono, fontSize: 12, fontWeight: 600, color: COLORS.slate }}>
                 {product.stock} in stock
@@ -485,8 +691,10 @@ export default function PurchaseForm({
             )}
           />
         </Field>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {fromDocument && <span style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Product list</span>}
           <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>
             Order items <span style={{ color: COLORS.danger }}>*</span>
           </label>
@@ -496,7 +704,7 @@ export default function PurchaseForm({
                 <div
                   style={{
                     display: "grid",
-                    gridTemplateColumns: ITEMS_GRID,
+                    gridTemplateColumns: itemsGrid,
                     columnGap: 16,
                     alignItems: "center",
                     padding: "0 20px",
@@ -506,7 +714,10 @@ export default function PurchaseForm({
                     whiteSpace: "nowrap",
                   }}
                 >
-                  {ITEM_HEADERS.map(({ label, right }) => (
+                  {ITEM_HEADERS.map(({ label: header, right }) => ({
+                    label: header === "Net unit cost" ? `Net unit ${priceField}` : header,
+                    right,
+                  })).map(({ label, right }) => (
                     <span
                       key={label}
                       style={{
@@ -526,7 +737,12 @@ export default function PurchaseForm({
                 {lines.map((line) => (
                   <ItemRow
                     key={line.productId}
+                    grid={itemsGrid}
                     line={line}
+                    maxQuantity={
+                      line.maxQuantity ?? (isOutbound ? line.stock + (line.reserved ?? 0) : undefined)
+                    }
+                    capLabel={line.maxQuantity !== undefined ? "returnable" : "stock"}
                     onQuantityChange={(quantity) => setQuantity(line.productId, quantity)}
                     onEdit={() => setEditingProductId(line.productId)}
                     onRemove={() => removeLine(line.productId)}
@@ -614,20 +830,58 @@ export default function PurchaseForm({
           </Field>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "20px 32px" }}>
-          <Field label="Status" required error={errorOf("status")}>
-            <SelectInput
-              value={status}
-              onChange={(value) => setStatus(value as PurchaseStatus)}
-              options={STATUS_OPTIONS}
-            />
-          </Field>
-        </div>
+        {!fromDocument && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "20px 32px" }}>
+            <Field label="Status" required error={errorOf("status")}>
+              <SelectInput
+                value={status}
+                onChange={(value) => setStatus(value as DocumentStatus)}
+                options={statusOptions}
+              />
+            </Field>
+          </div>
+        )}
+
+        {takePayment && (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0,1fr))", gap: "20px 32px" }}>
+            <Field
+              label="Paid amount"
+              error={paidExceedsTotal ? "Paid can't be more than the grand total." : errorOf("paidAmount")}
+            >
+              <DecimalInput
+                value={paidAmount}
+                onChange={setPaidAmount}
+                suffix="₦"
+                ariaLabel="Paid amount"
+                hasError={paidExceedsTotal || !!errorOf("paidAmount")}
+              />
+            </Field>
+            <Field label="Payment type" required error={errorOf("paymentType")}>
+              <SelectInput
+                value={paymentType}
+                onChange={(value) => setPaymentType(value as PaymentType)}
+                options={(Object.keys(PAYMENT_TYPE_LABELS) as PaymentType[]).map((type) => ({
+                  value: type,
+                  label: PAYMENT_TYPE_LABELS[type],
+                }))}
+              />
+            </Field>
+            {/* Read-only: computed from the paid amount vs the grand total. */}
+            <Field label="Payment status">
+              <div style={{ height: 40, display: "flex", alignItems: "center" }} aria-label="Payment status">
+                {/* With no items yet the total is ₦0, which computePaymentState
+                    rightly calls Paid for a real ₦0 sale — but an empty form
+                    isn't a sale yet, so show Unpaid until it has lines. */}
+                <PaymentStatusPill paymentStatus={lines.length === 0 ? "UNPAID" : paymentState.paymentStatus} />
+              </div>
+            </Field>
+          </div>
+        )}
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-          <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>Notes</label>
+          <label style={{ fontSize: 13, fontWeight: 600, color: COLORS.text }}>{transfer ? "Note" : "Notes"}</label>
           <textarea
-            placeholder="Enter Notes"
+            placeholder={transfer ? "Enter Note" : "Enter Notes"}
             value={notes}
             maxLength={2000}
             onChange={(event) => setNotes(event.target.value)}
@@ -656,18 +910,37 @@ export default function PurchaseForm({
             borderTop: `1px solid ${COLORS.border}`,
           }}
         >
-          <GhostButton href="/purchases" paddingX={20}>
+          <GhostButton href={listHref} paddingX={20}>
             Cancel
           </GhostButton>
-          <PrimaryButton type="submit" disabled={isPending} paddingX={24} fontSize={14}>
-            {isPending ? "Saving…" : "Save purchase"}
+          <PrimaryButton type="submit" disabled={isPending || !saveAction} paddingX={24} fontSize={14}>
+            {isPending ? "Saving…" : `Save ${noun.toLowerCase()}`}
           </PrimaryButton>
         </div>
       </form>
 
       {/* Outside the <form>: the modal has its own form, and forms can't nest. */}
+      {pendingWarehouseId !== null && (
+        <ConfirmDeleteModal
+          title="Change warehouse?"
+          message={`Switching warehouses will clear the ${lines.length} item${lines.length === 1 ? "" : "s"} already added, since the items must be in stock in the selected warehouse.`}
+          confirmLabel="Clear items"
+          pendingLabel="Clearing…"
+          tone="primary"
+          onCancel={() => setPendingWarehouseId(null)}
+          onConfirm={confirmWarehouseChange}
+        />
+      )}
+
       {editingLine && (
-        <PurchaseLineModal line={editingLine} onClose={() => setEditingProductId(null)} onSave={saveLineEdit} />
+        <PurchaseLineModal
+          line={editingLine}
+          priceField={priceField}
+          unitLabel={unitLabel}
+          units={units}
+          onClose={() => setEditingProductId(null)}
+          onSave={saveLineEdit}
+        />
       )}
     </div>
   );

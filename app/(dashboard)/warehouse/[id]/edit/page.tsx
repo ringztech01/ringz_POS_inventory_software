@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
-import { hasPermission, PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import { PERMISSIONS } from "@/lib/permissions";
 import WarehouseForm from "@/components/warehouse/WarehouseForm";
 import { getWarehouseById } from "../../queries";
 import { updateWarehouse } from "../../actions";
@@ -12,9 +13,8 @@ export default async function EditWarehousePage({ params }: { params: Promise<{ 
     redirect("/");
   }
 
-  if (!hasPermission(session.user.role, PERMISSIONS.MANAGE_WAREHOUSES)) {
-    redirect("/warehouse");
-  }
+  const denied = await pageGuard(PERMISSIONS.MANAGE_WAREHOUSES);
+  if (denied) return denied;
 
   const { id } = await params;
   const warehouse = await getWarehouseById(id);

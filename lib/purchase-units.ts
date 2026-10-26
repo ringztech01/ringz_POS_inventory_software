@@ -4,3 +4,6 @@
 export const PURCHASE_UNITS = ["Pic", "Piece", "Box"] as const;
 
 export type PurchaseUnit = (typeof PURCHASE_UNITS)[number];
+
+// Transfer-unit choices (RingzPOS Transfers design's "Transfer unit").
+export const TRANSFER_UNITS = ["Kilogram", "Piece", "Box"] as const;
