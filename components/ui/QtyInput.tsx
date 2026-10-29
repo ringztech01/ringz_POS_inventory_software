@@ -20,11 +20,14 @@ export default function QtyInput({
   onChange,
   ariaLabel,
   hasError,
+  plain = false,
 }: {
   value: number;
   onChange: (quantity: number) => void;
   ariaLabel: string;
   hasError?: boolean;
+  // POS design: a bare number between the steppers (no box).
+  plain?: boolean;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const focus = useToggleState();
@@ -56,7 +59,20 @@ export default function QtyInput({
           event.currentTarget.blur();
         }
       }}
-      style={{
+      style={plain ? {
+        width: Math.max(28, text.length * 10 + 8),
+        height: 32,
+        border: "none",
+        borderBottom: `1.5px solid ${hasError ? COLORS.danger : focus.value ? COLORS.teal : "transparent"}`,
+        padding: 0,
+        textAlign: "center",
+        fontSize: 15,
+        fontWeight: 600,
+        color: hasError ? COLORS.danger : COLORS.ink,
+        outline: "none",
+        background: "transparent",
+        cursor: "text",
+      } : {
         // The design's 48px, widening for longer numbers.
         width: Math.max(48, text.length * 8 + 16),
         height: 32,

@@ -25,8 +25,10 @@ export type ProductListRow = Omit<ProductListPayload, "price"> & {
   stock: number;
 };
 
-export async function getProductList({ q, page = 1, perPage = 10 }: ProductListParams) {
-  const where: Prisma.ProductWhereInput = {
+// Live products matching the search (name or code). Shared with Stock Reports
+// so the report lists exactly the products this list does.
+export function productListWhere({ q }: Pick<ProductListParams, "q">): Prisma.ProductWhereInput {
+  return {
     deletedAt: null,
     ...(q
       ? {
@@ -34,6 +36,10 @@ export async function getProductList({ q, page = 1, perPage = 10 }: ProductListP
         }
       : {}),
   };
+}
+
+export async function getProductList({ q, page = 1, perPage = 10 }: ProductListParams) {
+  const where = productListWhere({ q });
 
   const [total, products] = await Promise.all([
     prisma.product.count({ where }),

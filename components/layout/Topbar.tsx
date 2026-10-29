@@ -10,6 +10,7 @@ import { useToggleState } from "./hooks";
 import { resolveBreadcrumb } from "./nav-data";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { COLORS, FONTS } from "./theme";
+import ReportTabs from "@/components/reports/ReportTabs";
 
 function IconButton({
   title,
@@ -111,6 +112,9 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
   const searchFocus = useToggleState();
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { section, title } = resolveBreadcrumb(pathname);
+  // Reports (RingzPOS Reports design): the report tabs take the place of the
+  // breadcrumb and global search, and there's no New button.
+  const onReports = pathname === "/reports" || pathname.startsWith("/reports/");
 
   const displayName = session?.user?.name?.trim() || session?.user?.email || "User";
   const avatarInitial = displayName.charAt(0).toUpperCase();
@@ -155,7 +159,7 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
         borderBottom: `1px solid ${COLORS.border}`,
         display: "flex",
         alignItems: "center",
-        gap: 20,
+        gap: onReports ? 16 : 20,
         padding: "0 24px",
         boxShadow: "0 2px 8px -1px rgba(23,27,28,.06)",
         position: "sticky",
@@ -167,63 +171,73 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
         <Menu size={16} strokeWidth={1.7} />
       </IconButton>
 
-      <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
-        <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.slateLight }}>{section} /</span>
-        <span style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: "nowrap" }}>{title}</span>
-      </div>
+      {onReports ? (
+        <ReportTabs />
+      ) : (
+        <>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.slateLight }}>{section} /</span>
+            <span style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: "nowrap" }}>{title}</span>
+          </div>
 
-      <div style={{ position: "relative", flex: 1, maxWidth: 420 }}>
-        <Search size={15} strokeWidth={1.6} color={COLORS.slateMid} style={{ position: "absolute", left: 12, top: 11 }} />
-        <input
-          placeholder="Search anything — products, references, customers"
-          onFocus={searchFocus.on}
-          onBlur={searchFocus.off}
-          style={{
-            width: "100%",
-            height: 38,
-            border: `1px solid ${searchFocus.value ? COLORS.teal : COLORS.borderStrong}`,
-            borderRadius: 8,
-            padding: "0 12px 0 34px",
-            fontSize: 13.5,
-            outline: "none",
-            background: searchFocus.value ? "#fff" : COLORS.bgInput,
-            boxShadow: searchFocus.value ? `0 0 0 3px ${COLORS.focusRing}` : "none",
-          }}
-        />
-      </div>
+          <div style={{ position: "relative", flex: 1, maxWidth: 420 }}>
+            <Search size={15} strokeWidth={1.6} color={COLORS.slateMid} style={{ position: "absolute", left: 12, top: 11 }} />
+            <input
+              placeholder="Search anything — products, references, customers"
+              onFocus={searchFocus.on}
+              onBlur={searchFocus.off}
+              style={{
+                width: "100%",
+                height: 38,
+                border: `1px solid ${searchFocus.value ? COLORS.teal : COLORS.borderStrong}`,
+                borderRadius: 8,
+                padding: "0 12px 0 34px",
+                fontSize: 13.5,
+                outline: "none",
+                background: searchFocus.value ? "#fff" : COLORS.bgInput,
+                boxShadow: searchFocus.value ? `0 0 0 3px ${COLORS.focusRing}` : "none",
+              }}
+            />
+          </div>
+        </>
+      )}
 
       <div style={headerActionsStyle}>
-        <button
-          type="button"
-          onMouseEnter={newHover.on}
-          onMouseLeave={newHover.off}
-          style={{
-            height: 38,
-            padding: "0 14px",
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            background: newHover.value ? COLORS.tealDark : COLORS.teal,
-            border: "none",
-            borderRadius: 8,
-            fontSize: 13.5,
-            fontWeight: 600,
-            color: "#fff",
-            cursor: "pointer",
-          }}
-        >
-          <Plus size={14} strokeWidth={1.9} />
-          New
-        </button>
+        {!onReports && (
+          <button
+            type="button"
+            onMouseEnter={newHover.on}
+            onMouseLeave={newHover.off}
+            style={{
+              height: 38,
+              padding: "0 14px",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              background: newHover.value ? COLORS.tealDark : COLORS.teal,
+              border: "none",
+              borderRadius: 8,
+              fontSize: 13.5,
+              fontWeight: 600,
+              color: "#fff",
+              cursor: "pointer",
+            }}
+          >
+            <Plus size={14} strokeWidth={1.9} />
+            New
+          </button>
+        )}
 
         {canPos && (
-        <button
-          type="button"
+        <Link
+          href="/pos"
           onMouseEnter={posHover.on}
           onMouseLeave={posHover.off}
           style={{
             height: 38,
             padding: "0 14px",
+            display: "flex",
+            alignItems: "center",
             background: posHover.value ? COLORS.tealTint : "#fff",
             border: `1px solid ${posHover.value ? COLORS.tealBorder : COLORS.borderStrong}`,
             borderRadius: 8,
@@ -231,11 +245,12 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
             fontWeight: 700,
             letterSpacing: ".04em",
             color: COLORS.tealDark,
+            textDecoration: "none",
             cursor: "pointer",
           }}
         >
           POS
-        </button>
+        </Link>
         )}
 
         <IconButton title="Fullscreen">

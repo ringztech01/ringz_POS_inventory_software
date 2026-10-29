@@ -51,7 +51,7 @@ const STATUS_OPTIONS: { value: DocumentStatus; label: string }[] = (["RECEIVED",
   label: PURCHASE_STATUS_LABELS[value],
 }));
 
-const MAX_QTY = 1_000_000;
+export const MAX_QTY = 1_000_000;
 
 // Local calendar date as YYYY-MM-DD. toISOString() would give the UTC date,
 // which is "yesterday" just after midnight in Lagos (UTC+1).
@@ -62,8 +62,9 @@ function todayInputValue(): string {
 }
 
 // `unitCost` holds the line's unit price either way: the product's cost on
-// purchase documents, its selling price on sales (priceField).
-function lineFromProduct(product: PurchaseProductSearchResult, priceField: "cost" | "price", unit: string): PurchaseLine {
+// purchase documents, its selling price on sales (priceField). Also builds
+// POS cart lines, so a POS line starts exactly like a Sales line.
+export function lineFromProduct(product: PurchaseProductSearchResult, priceField: "cost" | "price", unit: string): PurchaseLine {
   return {
     productId: product.id,
     name: product.name,

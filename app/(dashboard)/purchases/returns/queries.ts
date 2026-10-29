@@ -26,8 +26,11 @@ const RETURN_LIST_SELECT = {
   warehouse: { select: { name: true } },
 } satisfies Prisma.PurchaseReturnSelect;
 
-export async function getPurchaseReturnList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
-  const where: Prisma.PurchaseReturnWhereInput = {
+// The list's filter (search, warehouse, date range; active rows only) —
+// shared with the dashboard (lib/dashboard/queries.ts), which adds only
+// its status rule, so the two always agree on the rest.
+export function purchaseReturnListWhere({ q, from, to, warehouseId }: Omit<PurchaseListParams, "page" | "perPage">): Prisma.PurchaseReturnWhereInput {
+  return {
     deletedAt: null,
     ...(warehouseId ? { warehouseId } : {}),
     ...dateRangeWhere(from, to),
@@ -37,6 +40,10 @@ export async function getPurchaseReturnList({ q, from, to, warehouseId, page = 1
         }
       : {}),
   };
+}
+
+export async function getPurchaseReturnList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
+  const where = purchaseReturnListWhere({ q, from, to, warehouseId });
 
   const [total, rows] = await Promise.all([
     prisma.purchaseReturn.count({ where }),

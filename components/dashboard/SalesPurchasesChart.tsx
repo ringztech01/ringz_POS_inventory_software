@@ -5,37 +5,30 @@ import { Bar } from "react-chartjs-2";
 import { AlignJustify } from "lucide-react";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS } from "@/components/layout/theme";
+import { formatNaira } from "@/lib/format";
+import type { WeeklySalesPurchases } from "@/lib/dashboard/queries";
 
-const LABELS = ["2026-05-20", "2026-05-21", "2026-05-22", "2026-05-23", "2026-05-24", "2026-05-25", "2026-05-26"];
+const PURCHASES_COLOR = "#1c62a8";
 
-const DATA = {
-  labels: LABELS,
-  datasets: [
-    { label: "Sales", data: [0, 0, 0, 0, 0, 0, 0], backgroundColor: COLORS.teal, borderRadius: 4, maxBarThickness: 26 },
-    { label: "Purchases", data: [0, 0, 0, 0, 0, 0, 0], backgroundColor: "#1c62a8", borderRadius: 4, maxBarThickness: 26 },
-  ],
-};
+// Axis ticks: whole Naira with grouping (₦150,000).
+const tickLabel = (value: string | number) =>
+  `₦${new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 }).format(Number(value))}`;
 
-const OPTIONS = {
-  responsive: true,
-  maintainAspectRatio: false,
-  plugins: { legend: { display: false } },
-  scales: {
-    x: {
-      grid: { color: "#f5f7f7" },
-      border: { color: COLORS.borderStrong },
-      ticks: { font: { size: 11.5 } },
-    },
-    y: {
-      beginAtZero: true,
-      suggestedMax: 1,
-      title: { display: true, text: "Amount", color: COLORS.slateMid, font: { size: 11.5, weight: 600 as const } },
-      grid: { color: "#f5f7f7" },
-      border: { color: COLORS.borderStrong },
-      ticks: {
-        callback: (value: string | number) => `₦${value}`,
-        font: { family: "'IBM Plex Mono', monospace", size: 11 },
-      },
+const SCALES = {
+  x: {
+    grid: { color: "#f5f7f7" },
+    border: { color: COLORS.borderStrong },
+    ticks: { font: { size: 11.5 } },
+  },
+  y: {
+    beginAtZero: true,
+    suggestedMax: 1,
+    title: { display: true, text: "Amount", color: COLORS.slateMid, font: { size: 11.5, weight: 600 as const } },
+    grid: { color: "#f5f7f7" },
+    border: { color: COLORS.borderStrong },
+    ticks: {
+      callback: tickLabel,
+      font: { family: "'IBM Plex Mono', monospace", size: 11 },
     },
   },
 };
@@ -49,8 +42,35 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-export default function SalesPurchasesChart() {
+// "This Week Sales & Purchases": the last 7 days (today included), per-day
+// Received totals from the server (lib/dashboard/queries.ts). The amounts
+// arrive as Decimal strings; bars plot them as numbers, tooltips show the
+// exact strings.
+export default function SalesPurchasesChart({ week }: { week: WeeklySalesPurchases }) {
   const hover = useToggleState();
+
+  const data = {
+    labels: week.labels,
+    datasets: [
+      { label: "Sales", data: week.sales.map(Number), backgroundColor: COLORS.teal, borderRadius: 4, maxBarThickness: 26 },
+      { label: "Purchases", data: week.purchases.map(Number), backgroundColor: PURCHASES_COLOR, borderRadius: 4, maxBarThickness: 26 },
+    ],
+  };
+  const exact = [week.sales, week.purchases];
+  const options = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        callbacks: {
+          label: (item: { dataset: { label?: string }; datasetIndex: number; dataIndex: number }) =>
+            `${item.dataset.label}: ${formatNaira(exact[item.datasetIndex][item.dataIndex])}`,
+        },
+      },
+    },
+    scales: SCALES,
+  };
 
   return (
     <div
@@ -77,7 +97,7 @@ export default function SalesPurchasesChart() {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
             <LegendDot color={COLORS.teal} label="Sales" />
-            <LegendDot color="#1c62a8" label="Purchases" />
+            <LegendDot color={PURCHASES_COLOR} label="Purchases" />
           </div>
           <button
             type="button"
@@ -101,7 +121,7 @@ export default function SalesPurchasesChart() {
         </div>
       </div>
       <div style={{ padding: "20px 22px 22px", height: 340 }}>
-        <Bar data={DATA} options={OPTIONS} />
+        <Bar data={data} options={options} />
       </div>
     </div>
   );

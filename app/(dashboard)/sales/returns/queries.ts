@@ -20,13 +20,17 @@ const SALE_RETURN_LIST_SELECT = {
   paymentStatus: true,
   grandTotal: true,
   paid: true,
+  due: true,
   createdAt: true,
   customer: { select: { name: true } },
   warehouse: { select: { name: true } },
 } satisfies Prisma.SaleReturnSelect;
 
-export async function getSaleReturnList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
-  const where: Prisma.SaleReturnWhereInput = {
+// The list's filter (search, warehouse, date range; active rows only) —
+// shared with the dashboard (lib/dashboard/queries.ts), which adds only
+// its status rule, so the two always agree on the rest.
+export function saleReturnListWhere({ q, from, to, warehouseId }: Omit<PurchaseListParams, "page" | "perPage">): Prisma.SaleReturnWhereInput {
+  return {
     deletedAt: null,
     ...(warehouseId ? { warehouseId } : {}),
     ...dateRangeWhere(from, to),
@@ -41,6 +45,10 @@ export async function getSaleReturnList({ q, from, to, warehouseId, page = 1, pe
         }
       : {}),
   };
+}
+
+export async function getSaleReturnList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
+  const where = saleReturnListWhere({ q, from, to, warehouseId });
 
   const [total, rows] = await Promise.all([
     prisma.saleReturn.count({ where }),
@@ -59,6 +67,7 @@ export async function getSaleReturnList({ q, from, to, warehouseId, page = 1, pe
     ...row,
     grandTotal: row.grandTotal.toString(),
     paid: row.paid.toString(),
+    due: row.due.toString(),
     paymentType: null,
     party: customer,
   }));

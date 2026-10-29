@@ -3,14 +3,32 @@ import { prisma } from "@/lib/db";
 import { formatDateForInput, formatDateTime } from "@/lib/format";
 import type { ExpenseRow } from "@/components/expenses/ExpenseTable";
 import type { ExpenseFormValues } from "./types";
+import { dateRangeWhere } from "../purchases/queries";
 
-export type ExpenseListParams = { q?: string; page?: number; perPage?: number };
+export type ExpenseListParams = {
+  q?: string;
+  // Optional (Reports): one warehouse, and an inclusive date range on the
+  // expense date.
+  warehouseId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  perPage?: number;
+};
 
-// Active expenses only. Search (?q=) matches the reference, title, warehouse
-// or category name; pagination runs here, server-side.
-export async function getExpenseList({ q, page = 1, perPage = 10 }: ExpenseListParams) {
-  const where: Prisma.ExpenseWhereInput = {
+// The list's filter: active expenses only; search (?q=) matches the
+// reference, title, warehouse or category name. Shared with the dashboard
+// (lib/dashboard/queries.ts).
+export function expenseListWhere({
+  q,
+  warehouseId,
+  from,
+  to,
+}: Omit<ExpenseListParams, "page" | "perPage">): Prisma.ExpenseWhereInput {
+  return {
     deletedAt: null,
+    ...(warehouseId ? { warehouseId } : {}),
+    ...dateRangeWhere(from, to),
     ...(q
       ? {
           OR: [
@@ -22,6 +40,10 @@ export async function getExpenseList({ q, page = 1, perPage = 10 }: ExpenseListP
         }
       : {}),
   };
+}
+
+export async function getExpenseList({ q, warehouseId, from, to, page = 1, perPage = 10 }: ExpenseListParams) {
+  const where = expenseListWhere({ q, warehouseId, from, to });
 
   const [total, rows] = await Promise.all([
     prisma.expense.count({ where }),

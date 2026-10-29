@@ -1,0 +1,20 @@
+// The POS design's own palette (RingzPOS POS.dc.html), on top of COLORS.
+export const POS = {
+  bg: "#eef1f4",
+  indigo: "#5a63ea",
+  indigoHover: "#4a52d8",
+  indigoTint: "#eef0fe",
+  indigoTintHover: "#dfe2fc",
+  rose: "#f2607a",
+  roseHover: "#e64d69",
+  red: "#f0402f",
+  redHover: "#d8331f",
+  green: "#1bb673",
+  greenHover: "#149961",
+  sky: "#2aa6e8",
+  chip: "#eef0f3",
+  chipHover: "#e2e5ea",
+  searchBg: "#f4f6f8",
+  remove: "#e0483d",
+  panelShadow: "0 4px 16px -6px rgba(23,27,28,.12)",
+} as const;

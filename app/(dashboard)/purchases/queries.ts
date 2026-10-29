@@ -59,8 +59,11 @@ export function dateRangeWhere(from?: string, to?: string): { date?: Prisma.Date
   };
 }
 
-export async function getPurchaseList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
-  const where: Prisma.PurchaseWhereInput = {
+// The list's filter (search, warehouse, date range; active rows only) —
+// shared with the dashboard (lib/dashboard/queries.ts), which adds only
+// its status rule, so the two always agree on the rest.
+export function purchaseListWhere({ q, from, to, warehouseId }: Omit<PurchaseListParams, "page" | "perPage">): Prisma.PurchaseWhereInput {
+  return {
     deletedAt: null,
     ...(warehouseId ? { warehouseId } : {}),
     ...dateRangeWhere(from, to),
@@ -70,6 +73,10 @@ export async function getPurchaseList({ q, from, to, warehouseId, page = 1, perP
         }
       : {}),
   };
+}
+
+export async function getPurchaseList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
+  const where = purchaseListWhere({ q, from, to, warehouseId });
 
   const [aggregate, rows] = await Promise.all([
     prisma.purchase.aggregate({ where, _count: { _all: true }, _sum: { grandTotal: true } }),

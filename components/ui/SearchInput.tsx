@@ -10,10 +10,12 @@ export default function SearchInput({
   paramName = "q",
   placeholder = "Search",
   width = 340,
+  height = 38,
 }: {
   paramName?: string;
   placeholder?: string;
   width?: number;
+  height?: number;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -48,7 +50,7 @@ export default function SearchInput({
         size={15}
         strokeWidth={1.6}
         color={COLORS.slateMid}
-        style={{ position: "absolute", left: 12, top: 11 }}
+        style={{ position: "absolute", left: 12, top: Math.floor((height - 15) / 2) }}
       />
       <input
         placeholder={placeholder}
@@ -58,7 +60,7 @@ export default function SearchInput({
         onBlur={focus.off}
         style={{
           width: "100%",
-          height: 38,
+          height,
           border: `1px solid ${focus.value ? COLORS.teal : COLORS.borderStrong}`,
           borderRadius: 8,
           padding: "0 12px 0 34px",

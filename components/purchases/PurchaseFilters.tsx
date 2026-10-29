@@ -28,7 +28,7 @@ function displayDate(value: string, shortYear = false): string {
   return `${month}/${day}/${shortYear ? year.slice(2) : year}`;
 }
 
-function rangeLabel(from: string, to: string): string {
+export function rangeLabel(from: string, to: string): string {
   // Two-digit years so a full range fits the design's 200px box.
   if (from && to) return `${displayDate(from, true)} – ${displayDate(to, true)}`;
   if (from) return `From ${displayDate(from)}`;
@@ -38,7 +38,15 @@ function rangeLabel(from: string, to: string): string {
 
 // Without `warehouses` the panel is date range only (e.g. Transfers, which
 // search warehouse names instead).
-export default function PurchaseFilters({ warehouses }: { warehouses?: FormOption[] }) {
+// `iconTrigger` (Reports): a solid square icon button instead of the
+// "Filters" button + date box.
+export default function PurchaseFilters({
+  warehouses,
+  iconTrigger,
+}: {
+  warehouses?: FormOption[];
+  iconTrigger?: { background: string; hover: string; width: number };
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -104,6 +112,48 @@ export default function PurchaseFilters({ warehouses }: { warehouses?: FormOptio
 
   return (
     <div ref={containerRef} style={{ position: "relative", display: "flex", gap: 10, alignItems: "center" }}>
+      {iconTrigger ? (
+        // Reports design: a solid square funnel button; a dot marks an active
+        // filter. The applied range shows inside the panel.
+        <button
+          type="button"
+          title="Filters"
+          aria-label="Filters"
+          onClick={isOpen ? close : openPanel}
+          onMouseEnter={filtersHover.on}
+          onMouseLeave={filtersHover.off}
+          aria-expanded={isOpen}
+          style={{
+            position: "relative",
+            width: iconTrigger.width,
+            height: 40,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            background: filtersHover.value ? iconTrigger.hover : iconTrigger.background,
+            border: "none",
+            borderRadius: 8,
+            cursor: "pointer",
+            color: "#fff",
+          }}
+        >
+          <Funnel size={16} strokeWidth={1.7} />
+          {activeCount > 0 && (
+            <span
+              style={{
+                position: "absolute",
+                top: 7,
+                right: 7,
+                width: 7,
+                height: 7,
+                borderRadius: 999,
+                background: "#fff",
+              }}
+            />
+          )}
+        </button>
+      ) : (
+      <>
       <button
         type="button"
         onClick={isOpen ? close : openPanel}
@@ -174,6 +224,8 @@ export default function PurchaseFilters({ warehouses }: { warehouses?: FormOptio
           style={{ position: "absolute", right: 12, top: 11, pointerEvents: "none" }}
         />
       </div>
+      </>
+      )}
 
       {isOpen && (
         <div

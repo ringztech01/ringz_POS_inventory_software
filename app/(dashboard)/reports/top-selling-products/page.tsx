@@ -1,0 +1,11 @@
+import { PERMISSIONS } from "@/lib/permissions";
+import { pageGuard } from "@/lib/auth/page-guard";
+import ReportStub from "@/components/reports/ReportStub";
+
+// /reports/top-selling-products — stub (Top Selling Products Reports isn't part of this build).
+export default async function TopSellingProductsReportsPage() {
+  const denied = await pageGuard(PERMISSIONS.MANAGE_REPORTS);
+  if (denied) return denied;
+
+  return <ReportStub title="Top Selling Products Reports" />;
+}

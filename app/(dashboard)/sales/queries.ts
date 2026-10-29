@@ -10,7 +10,8 @@ import {
   type PurchaseListParams,
 } from "../purchases/queries";
 
-const SALE_LIST_SELECT = {
+// Also read by the dashboard's Recent Sales.
+export const SALE_LIST_SELECT = {
   id: true,
   reference: true,
   date: true,
@@ -19,13 +20,17 @@ const SALE_LIST_SELECT = {
   paymentStatus: true,
   grandTotal: true,
   paid: true,
+  due: true,
   createdAt: true,
   customer: { select: { name: true } },
   warehouse: { select: { name: true } },
 } satisfies Prisma.SaleSelect;
 
-export async function getSaleList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
-  const where: Prisma.SaleWhereInput = {
+// The list's filter (search, warehouse, date range; active rows only) —
+// shared with the dashboard (lib/dashboard/queries.ts), which adds only
+// its status rule, so the two always agree on the rest.
+export function saleListWhere({ q, from, to, warehouseId }: Omit<PurchaseListParams, "page" | "perPage">): Prisma.SaleWhereInput {
+  return {
     deletedAt: null,
     ...(warehouseId ? { warehouseId } : {}),
     ...dateRangeWhere(from, to),
@@ -35,6 +40,10 @@ export async function getSaleList({ q, from, to, warehouseId, page = 1, perPage 
         }
       : {}),
   };
+}
+
+export async function getSaleList({ q, from, to, warehouseId, page = 1, perPage = 10 }: PurchaseListParams) {
+  const where = saleListWhere({ q, from, to, warehouseId });
 
   const [aggregate, rows] = await Promise.all([
     prisma.sale.aggregate({ where, _count: { _all: true }, _sum: { grandTotal: true, paid: true } }),
@@ -52,6 +61,7 @@ export async function getSaleList({ q, from, to, warehouseId, page = 1, perPage 
     ...row,
     grandTotal: row.grandTotal.toString(),
     paid: row.paid.toString(),
+    due: row.due.toString(),
     party: customer,
   }));
 
