@@ -11,6 +11,8 @@ import type { BillView } from "../../server/queries/bill";
 import DiscountModal, { type DiscountOutcome, type DiscountRequest } from "./DiscountModal";
 import PaymentModal, { type SettleOutcome, type SettleRequest } from "./PaymentModal";
 import SplitModal from "./SplitModal";
+import PrintButton from "@/components/hardware/PrintButton";
+import { printBillAction } from "../../server/actions/printing";
 
 // The Bill panel (Table Order design's "Bill & pay"): what the guest will
 // pay — billed lines with their options and the totals, all worked out on
@@ -59,6 +61,7 @@ export default function BillPanel({
   canSettle,
   onSettle,
   onClose,
+  prebillPrinter,
 }: {
   bill: BillView;
   approvers: Approver[];
@@ -71,6 +74,8 @@ export default function BillPanel({
   canSettle: boolean;
   onSettle: (request: SettleRequest) => Promise<SettleOutcome>;
   onClose: () => void;
+  // Where Print bill goes (null: the browser's print page).
+  prebillPrinter: string | null;
 }) {
   const { order, lines, totals, discount, split } = bill;
   const [popup, setPopup] = useState<Popup | null>(null);
@@ -256,12 +261,13 @@ export default function BillPanel({
         )}
 
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-          <a
+          <PrintButton
+            printer={prebillPrinter}
             href={`/restaurant/bill/${order.id}?autoprint=1`}
-            target="_blank"
-            rel="noopener"
-            aria-disabled={lines.length === 0}
+            onQueue={() => printBillAction(order.id)}
+            disabled={lines.length === 0}
             style={{
+              background: "#fff",
               height: 44,
               border: `1px solid ${COLORS.borderStrong}`,
               borderRadius: 9,
@@ -278,7 +284,7 @@ export default function BillPanel({
           >
             <Printer size={15} strokeWidth={1.7} />
             Print bill
-          </a>
+          </PrintButton>
           <button
             type="button"
             disabled={!!settleBlocker || !order.editable}

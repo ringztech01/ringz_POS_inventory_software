@@ -2,6 +2,7 @@ import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { readKdsFilter } from "../lib/kds";
 import { RESTAURANT_PERMISSIONS as P } from "../manifest";
 import { guardPage } from "../server/guard";
+import { stationPrinters } from "@/lib/hardware/printQueue";
 import { getKitchenBoard, getKitchenStations } from "../server/queries/kds";
 import KitchenBoard from "../components/kitchen/KitchenBoard";
 
@@ -15,6 +16,6 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
 
   const [{ permissions }, stations] = await Promise.all([getCurrentUserPermissions(), getKitchenStations()]);
   const filter = readKdsFilter(await searchParams, stations.map((s) => s.code));
-  const board = await getKitchenBoard(filter);
-  return <KitchenBoard data={{ ...board, stations }} canManage={permissions.has(P.MANAGE_KITCHEN)} canWaste={permissions.has(P.LOG_WASTE)} />;
+  const [board, printers] = await Promise.all([getKitchenBoard(filter), stationPrinters()]);
+  return <KitchenBoard data={{ ...board, stations }} canManage={permissions.has(P.MANAGE_KITCHEN)} canWaste={permissions.has(P.LOG_WASTE)} printers={printers} />;
 }

@@ -57,6 +57,7 @@ export default function OrderScreen({
   bill,
   approvers,
   waste,
+  printers,
   canSettle,
   refundView,
   floorHref,
@@ -67,6 +68,9 @@ export default function OrderScreen({
   // Log Waste: Returned by guest can log the food as waste (with the waste
   // approvers for over the limit); null without it.
   waste: { approvers: Approver[] } | null;
+  // The printers this device's pre-bill and receipt go to (null: the
+  // browser's print page, as before printers were set up).
+  printers: { prebill: string | null; receipt: string | null };
   // The signed-in user has Settle Bill (settles and refunds).
   canSettle: boolean;
   // A settled bill's sale, for the Refund pop-up (null otherwise).
@@ -241,6 +245,7 @@ export default function OrderScreen({
             paid: result.paid,
             change: result.change,
             title: part?.label ?? "Bill",
+            printedOn: result.receiptPrinter ?? null,
             partsLeft: (bill.split?.parts.filter((p) => p.status === "OPEN" && p.id !== request.partId).length ?? 0),
           });
         return result;
@@ -301,6 +306,7 @@ export default function OrderScreen({
         onCancelOrder={() => setCancelling({ mode: "order" })}
         onBill={() => setBilling(true)}
         onRefund={refundView && canSettle ? () => setRefunding(true) : undefined}
+        receiptPrinter={printers.receipt}
       />
       {refunding && refundView && (
         <RefundModal title={data.order.tableName ? `Table ${data.order.tableName}` : data.order.ref} view={refundView} onSubmit={refund} onClose={closeRefund} />
@@ -317,9 +323,10 @@ export default function OrderScreen({
           canSettle={canSettle}
           onSettle={settle}
           onClose={closeBill}
+          prebillPrinter={printers.prebill}
         />
       )}
-      {settled && <SettledModal settled={settled} onClose={closeSettled} />}
+      {settled && <SettledModal settled={settled} receiptPrinter={printers.receipt} onClose={closeSettled} />}
       {modal && (
         <ModifierModal
           title={modal.title}

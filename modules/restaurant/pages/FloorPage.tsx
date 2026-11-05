@@ -1,5 +1,9 @@
 import Link from "next/link";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
+import { PERMISSIONS } from "@/lib/permissions";
+import { currentDeviceId } from "@/lib/hardware/device";
+import { drawerPrinterFor } from "@/lib/hardware/drawer";
+import OpenDrawerButton from "@/components/hardware/OpenDrawerButton";
 import { COLORS } from "@/components/layout/theme";
 import { TABLE_STATUSES } from "../lib/tableStatus";
 import { FLOOR_LEGEND } from "../lib/theme";
@@ -27,6 +31,8 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
   const canBook = permissions.has(P.MANAGE_RESERVATIONS);
   const { area } = await searchParams;
   const floor = await getFloor(area);
+  // Open drawer: Open Drawer holders at a till with a cash drawer.
+  const drawer = permissions.has(PERMISSIONS.OPEN_DRAWER) ? await drawerPrinterFor(await currentDeviceId()) : null;
 
   const header = (
     <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
@@ -79,6 +85,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
     // (cancels the dashboard <main>'s padding and gap).
     <div style={{ margin: "-24px -32px 0", display: "grid", gridTemplateColumns: "minmax(0,1fr) 360px", minHeight: "calc(100vh - 120px)" }}>
       <HeaderActions>
+        {drawer && <OpenDrawerButton printer={drawer.name} />}
         <NewTakeawayButton
           areaId={floor.areaId}
           disabledReason={!canOrders ? "Needs the Manage Orders permission." : !floor.areaId ? "Add a dining area first." : null}

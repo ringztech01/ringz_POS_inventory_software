@@ -4,13 +4,14 @@ import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Menu, Search, Plus, Maximize, ChevronDown, User as UserIcon, KeyRound, LogOut, type LucideIcon } from "lucide-react";
+import { Menu, Search, Plus, Maximize, Minimize, ChevronDown, User as UserIcon, KeyRound, LogOut, type LucideIcon } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { useToggleState } from "./hooks";
 import { resolveBreadcrumb } from "./nav-data";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { COLORS, FONTS } from "./theme";
 import ReportTabs from "@/components/reports/ReportTabs";
+import { useFullscreen } from "@/components/pos/use-fullscreen";
 
 function IconButton({
   title,
@@ -109,6 +110,8 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
   const { value: userMenuOpen, on: openUserMenu, off: closeUserMenu } = useToggleState();
   const newHover = useToggleState();
   const posHover = useToggleState();
+  // The whole app fullscreen, as on the POS (Esc / F11 to leave are picked up too).
+  const fullscreen = useFullscreen();
   const searchFocus = useToggleState();
   const userMenuRef = useRef<HTMLDivElement>(null);
   const { section, title } = resolveBreadcrumb(pathname);
@@ -253,8 +256,8 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
         </Link>
         )}
 
-        <IconButton title="Fullscreen">
-          <Maximize size={16} strokeWidth={1.6} />
+        <IconButton title={fullscreen.active ? "Exit fullscreen" : "Fullscreen"} onClick={() => void fullscreen.toggle()}>
+          {fullscreen.active ? <Minimize size={16} strokeWidth={1.6} /> : <Maximize size={16} strokeWidth={1.6} />}
         </IconButton>
 
         <div style={{ width: 1, height: 26, background: COLORS.border }} />

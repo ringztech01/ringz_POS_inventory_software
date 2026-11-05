@@ -1,5 +1,8 @@
 import { notFound } from "next/navigation";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
+import { PREBILL, RECEIPT } from "@/lib/hardware/assignments";
+import { currentDeviceId } from "@/lib/hardware/device";
+import { printerFor } from "@/lib/hardware/printQueue";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
 import { getDiscountApprovers, getWasteApprovers } from "../server/queries/approvers";
@@ -22,6 +25,9 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const canWaste = current.permissions.has(RESTAURANT_PERMISSIONS.LOG_WASTE);
   const wasteApprovers = canWaste ? await getWasteApprovers() : [];
   const refundView = data.order.status === "BILLED" ? await getRefundView(id) : null;
+  // Where this device's pre-bill and receipt print (null: the browser page).
+  const deviceId = await currentDeviceId();
+  const [prebillPrinter, receiptPrinter] = await Promise.all([printerFor(PREBILL, deviceId), printerFor(RECEIPT, deviceId)]);
 
   const floorHref = data.order.areaId ? `/restaurant/floor?area=${data.order.areaId}` : "/restaurant/floor";
   return (
@@ -33,6 +39,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         bill={bill}
         approvers={approvers}
         waste={canWaste ? { approvers: wasteApprovers } : null}
+        printers={{ prebill: prebillPrinter, receipt: receiptPrinter }}
         canSettle={current.permissions.has(RESTAURANT_PERMISSIONS.SETTLE_BILL)}
         refundView={refundView}
         floorHref={floorHref}

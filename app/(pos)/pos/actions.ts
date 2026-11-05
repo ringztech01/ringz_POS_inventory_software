@@ -5,6 +5,9 @@ import { requirePermission } from "@/lib/auth/permissions.server";
 import { todayInAppZone } from "@/lib/dateRanges";
 import { saveNewSale } from "@/app/(dashboard)/sales/save-sale";
 import type { PurchaseActionState } from "@/app/(dashboard)/purchases/types";
+import { currentDeviceId } from "@/lib/hardware/device";
+import { openDrawerForCash } from "@/lib/hardware/drawer";
+import { tookCash } from "@/lib/hardware/drawerKick";
 import { getPosCatalog, isActiveWarehouse } from "./queries";
 import { posCheckoutToSaleInput } from "./sale-input";
 import type { PosProduct } from "./types";
@@ -30,11 +33,17 @@ export async function loadPosProducts(
 // (saveNewSale — validation, lib/pricing.ts totals, the no-oversell stock
 // check and decrement, the first payment, the SA_ reference, all in one
 // transaction). Only the permission differs: Manage Pos Screen here, Manage
-// Sale on createSale.
+// Sale on createSale. Paid in cash: this till's cash drawer opens (once per
+// sale; a drawer problem never undoes the sale).
 export async function createPosSale(checkout: unknown): Promise<PurchaseActionState> {
   const authCheck = await requirePos();
   if (authCheck.error !== undefined) {
     return { ok: false, error: authCheck.error };
   }
-  return saveNewSale(posCheckoutToSaleInput(checkout, todayInAppZone()), authCheck.userId);
+  const input = posCheckoutToSaleInput(checkout, todayInAppZone());
+  const result = await saveNewSale(input, authCheck.userId);
+  if (result.ok && result.id && tookCash([{ paymentType: String(input.paymentType), amount: String(input.paidAmount) }])) {
+    await openDrawerForCash({ reason: "CASH_SALE", userId: authCheck.userId, deviceId: await currentDeviceId(), refId: result.id, refLabel: result.reference ?? null, dedupeKey: `DRAWER:SALE:${result.id}` });
+  }
+  return result;
 }

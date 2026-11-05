@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { currentDeviceId } from "@/lib/hardware/device";
 import { invalid, type ActionFailure } from "../../lib/actionResult";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { logWasteSchema, previewWasteSchema, remakeSchema, voidWasteSchema, type LogWasteField } from "../../schemas/waste";
@@ -8,6 +9,7 @@ import { requirePermission } from "../guard";
 import { safely } from "../safely";
 import { getWasteApprovers, type Approver } from "../queries/approvers";
 import { getWasteItemOptions, type WasteItemOption } from "../queries/waste";
+import { printNewKots } from "../services/printing";
 import { remakeLine, type RemakeResult } from "../services/remake";
 import { logWasteEntry, voidWasteEntry, wasteCostPreview, type LogWasteResult, type VoidWasteResult, type WasteCostPreview } from "../services/waste";
 
@@ -63,7 +65,11 @@ export async function remakeKitchenLine(input: unknown): Promise<RemakeResult> {
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That remake isn't valid." };
 
     const result = await remakeLine(parsed.data, authCheck.userId);
-    if (result.ok) refresh();
+    if (result.ok) {
+      refresh();
+      // The REMAKE ticket to its station's printer.
+      await printNewKots([result.kotId], { userId: authCheck.userId, deviceId: await currentDeviceId() });
+    }
     return result;
   });
 }

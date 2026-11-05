@@ -1,8 +1,9 @@
 import { MODULES } from "@/lib/modules/registry";
 
-// THE single source of truth for permission strings. The core set is exactly
-// the 27 from the PERMS array in RingzPOS Roles.dc.html, in that order; each
-// optional module's (lib/modules/registry.ts) are merged in after them.
+// THE single source of truth for permission strings. The core set is the 27
+// from the PERMS array in RingzPOS Roles.dc.html, in that order, then Open
+// Drawer (the cash drawer by hand — Part 6d); each optional module's
+// (lib/modules/registry.ts) are merged in after them.
 // Everything (the Role form's checkbox grid, the zod schema, the permission
 // helper, the sidebar and every module check) imports from here; the strings
 // are never retyped.
@@ -38,6 +39,8 @@ const CORE_PERMISSIONS = {
   MANAGE_SMS_TEMPLATES: "Manage Sms Templates",
   MANAGE_SMS_APIS: "Manage Sms Apis",
   MANAGE_LANGUAGE: "Manage Language",
+  // Open drawer on the POS / at the till (lib/hardware/drawerActions.ts).
+  OPEN_DRAWER: "Open Drawer",
 } as const;
 
 type UnionToIntersection<U> = (U extends unknown ? (arg: U) => void : never) extends (arg: infer I) => void ? I : never;
@@ -52,7 +55,7 @@ export const PERMISSIONS = MODULES.reduce<Record<string, string>>(
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
 
-// Every permission: the core 27 in design order, then each module's (the
+// Every permission: the core 28 in order, then each module's (the
 // admin role's set).
 export const ALL_PERMISSIONS = Object.values(PERMISSIONS) as Permission[];
 

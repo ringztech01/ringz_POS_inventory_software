@@ -3,6 +3,8 @@
 import { useState } from "react";
 import type { KitchenStatus } from "@prisma/client";
 import { MoreVertical } from "lucide-react";
+import PrintButton from "@/components/hardware/PrintButton";
+import { printKotAction } from "../../server/actions/printing";
 import { FONTS } from "@/components/layout/theme";
 import { fmtElapsed, isLate, type KdsView, type KitchenStep } from "../../lib/kds";
 import { KDS, KDS_STEP_PILL } from "../../lib/theme";
@@ -23,6 +25,7 @@ export default function TicketCard({
   now,
   canManage,
   canWaste,
+  printer,
   busy,
   statusOf,
   onAdvance,
@@ -37,6 +40,8 @@ export default function TicketCard({
   canManage: boolean;
   // Log Waste: the line menu's Remake.
   canWaste: boolean;
+  // The station's printer (null: Print KOT opens the browser's print page).
+  printer: string | null;
   // A bump or recall of this ticket is on its way.
   busy: boolean;
   // The line's status as shown (the server's, or a tap not saved yet).
@@ -190,14 +195,14 @@ export default function TicketCard({
       </div>
 
       <div style={{ marginTop: "auto", padding: "12px 14px", display: "grid", gridTemplateColumns: canManage ? "1fr 1fr" : "1fr", gap: 8 }}>
-        <a
+        <PrintButton
+          printer={printer}
           href={`/restaurant/kot/${ticket.id}?autoprint=1`}
-          target="_blank"
-          rel="noopener"
+          onQueue={() => printKotAction(ticket.id)}
           style={{ height: 40, border: `1px solid ${KDS.buttonBorder}`, background: "transparent", color: KDS.text, borderRadius: 8, fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", textDecoration: "none" }}
         >
           {printLabel}
-        </a>
+        </PrintButton>
         {canManage && (
           <button
             type="button"

@@ -14,6 +14,8 @@ import type { OrderScreenData, TicketLine } from "../../server/queries/orderScre
 import type { OrderChangeResult } from "../../server/services/orders";
 import type { Pending } from "./OrderScreen";
 import ReadyToServe from "./ReadyToServe";
+import PrintButton from "@/components/hardware/PrintButton";
+import { printReceiptAction } from "../../server/actions/printing";
 
 const ORDER_TYPES: OrderType[] = ["DINE_IN", "TAKEAWAY", "DELIVERY"];
 
@@ -219,6 +221,7 @@ export default function Ticket({
   onCancelOrder,
   onBill,
   onRefund,
+  receiptPrinter,
 }: {
   data: OrderScreenData;
   run: (change: (version: number) => Promise<OrderChangeResult>) => Promise<boolean>;
@@ -234,6 +237,8 @@ export default function Ticket({
   onBill: () => void;
   // A settled bill, and the user can give refunds (Settle Bill).
   onRefund?: () => void;
+  // Where Print receipt goes (null: the browser's print page).
+  receiptPrinter: string | null;
 }) {
   const { order, lines, totals, newCount, waiters } = data;
   const server: Header = { type: order.type, waiterId: order.waiterId ?? "", guests: order.guests };
@@ -394,14 +399,14 @@ export default function Ticket({
             >
               View sale
             </Link>
-            <a
+            <PrintButton
+              printer={receiptPrinter}
               href={`/restaurant/receipt/${order.saleId}`}
-              target="_blank"
-              rel="noopener"
-              style={{ height: 46, display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.teal, borderRadius: 9, color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
+              onQueue={() => printReceiptAction(order.saleId!)}
+              style={{ height: 46, border: "none", display: "flex", alignItems: "center", justifyContent: "center", background: COLORS.teal, borderRadius: 9, color: "#fff", fontSize: 14, fontWeight: 600, textDecoration: "none" }}
             >
               Print receipt
-            </a>
+            </PrintButton>
             {onRefund && (
               <button
                 type="button"

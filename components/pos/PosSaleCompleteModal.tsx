@@ -6,6 +6,8 @@ import type { PaymentStatus } from "@prisma/client";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { formatNaira } from "@/lib/format";
 import { PaymentStatusPill } from "@/components/purchases/purchase-display";
+import PrintButton from "@/components/hardware/PrintButton";
+import { printPosReceipt } from "@/lib/hardware/receiptActions";
 import PosButton from "./PosButton";
 import { POS } from "./theme";
 
@@ -36,11 +38,14 @@ const linkStyle = {
 export default function PosSaleCompleteModal({
   sale,
   canViewSales,
+  receiptPrinter,
   onClose,
 }: {
   sale: CompletedSale;
   // Manage Sale: also offer the sale's details page.
   canViewSales: boolean;
+  // Print receipt goes there (the print queue); null: the receipt page.
+  receiptPrinter: string | null;
   onClose: () => void;
 }) {
   useEffect(() => {
@@ -124,10 +129,10 @@ export default function PosSaleCompleteModal({
         </div>
 
         <div style={{ width: "100%", display: "grid", gridTemplateColumns: canViewSales ? "1fr 1fr" : "1fr", gap: 10, marginTop: 6 }}>
-          <a href={`/pos/receipt/${sale.id}`} target="_blank" rel="noopener" style={{ ...linkStyle, background: POS.indigo, color: "#fff" }}>
+          <PrintButton printer={receiptPrinter} href={`/pos/receipt/${sale.id}`} onQueue={() => printPosReceipt(sale.id)} style={{ ...linkStyle, border: "none", background: POS.indigo, color: "#fff" }}>
             <Printer size={18} strokeWidth={1.6} />
             Print receipt
-          </a>
+          </PrintButton>
           {canViewSales && (
             <a href={`/sales/${sale.id}`} target="_blank" rel="noopener" style={{ ...linkStyle, background: POS.chip, color: COLORS.slate }}>
               <ExternalLink size={17} strokeWidth={1.6} />

@@ -21,11 +21,13 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   return (
     <AuthSessionProvider session={session}>
       <SidebarProvider>
-        <div style={{ display: "flex", minHeight: "100vh", minWidth: 1440 }}>
+        {/* Fills the window exactly — no fixed page width, so no sideways
+            scroll; a wide table scrolls inside its own card instead. */}
+        <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
           <Sidebar permissions={permissions} />
           <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
             <Topbar permissions={permissions} />
-            <main style={{ flex: 1, padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
+            <main style={{ flex: 1, minWidth: 0, padding: 32, display: "flex", flexDirection: "column", gap: 24 }}>
               {children}
               <Footer />
             </main>

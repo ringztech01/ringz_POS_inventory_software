@@ -266,7 +266,7 @@ describe("restaurant concurrency (database copy)", { skip: enabled ? false : "se
       const first = await sendToKitchen(orderId, await versionOf(orderId), userId);
       assert.ok(first.ok);
       const again = await sendToKitchen(orderId, first.version, userId);
-      assert.deepEqual(again, { ok: true, version: first.version, sent: [] });
+      assert.deepEqual(again, { ok: true, version: first.version, sent: [], kotIds: [] });
       assert.equal(await prisma.kot.count({ where: { orderId } }), 1);
     });
   });

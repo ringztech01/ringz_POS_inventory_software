@@ -4,6 +4,7 @@ import { useMemo, useRef, useState, useTransition, type CSSProperties, type Reac
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
+  Archive,
   Banknote,
   Calculator,
   ChevronDown,
@@ -38,6 +39,7 @@ import PosPaymentModal, { tenderFor } from "./PosPaymentModal";
 import PosSaleCompleteModal, { type CompletedSale } from "./PosSaleCompleteModal";
 import PosCalculator from "./PosCalculator";
 import { useFullscreen } from "./use-fullscreen";
+import { OpenDrawerModal } from "@/components/hardware/OpenDrawerButton";
 import { POS } from "./theme";
 
 const panel: CSSProperties = {
@@ -62,6 +64,8 @@ const posLine = (product: PosProduct): PurchaseLine => lineFromProduct({ ...prod
 export default function PosScreen({
   userId,
   canViewSales,
+  receiptPrinter,
+  drawerPrinter,
   warehouses,
   customers,
   defaultCustomerId,
@@ -74,6 +78,10 @@ export default function PosScreen({
   userId: string;
   // Manage Sale: the receipt also links to the sale's details page.
   canViewSales: boolean;
+  // The receipt printer for this till (null: the receipt page, as before).
+  receiptPrinter: string | null;
+  // This till's cash drawer (its printer) when the user has Open Drawer; null: no button.
+  drawerPrinter: string | null;
   warehouses: PosOption[];
   customers: PosOption[];
   defaultCustomerId: string;
@@ -99,6 +107,7 @@ export default function PosScreen({
   const held = useHeldOrders(userId);
   const [showHeld, setShowHeld] = useState(false);
   const [showCalculator, setShowCalculator] = useState(false);
+  const [openingDrawer, setOpeningDrawer] = useState(false);
   const fullscreen = useFullscreen();
   const [paying, setPaying] = useState(false);
   const [payPending, startPaying] = useTransition();
@@ -485,6 +494,11 @@ export default function PosScreen({
           >
             {fullscreen.active ? <Minimize size={21} strokeWidth={1.6} /> : <Maximize size={21} strokeWidth={1.6} />}
           </ToolButton>
+          {drawerPrinter && (
+            <ToolButton title="Open drawer" color={POS.indigo} hover={POS.indigoHover} onClick={() => setOpeningDrawer(true)}>
+              <Archive size={21} strokeWidth={1.5} />
+            </ToolButton>
+          )}
           <ToolButton title="Calculator" color={POS.indigo} hover={POS.indigoHover} onClick={() => setShowCalculator((open) => !open)}>
             <Calculator size={21} strokeWidth={1.5} />
           </ToolButton>
@@ -517,6 +531,8 @@ export default function PosScreen({
 
       {showCalculator && <PosCalculator onClose={() => setShowCalculator(false)} />}
 
+      {openingDrawer && drawerPrinter && <OpenDrawerModal printer={drawerPrinter} onClose={() => setOpeningDrawer(false)} />}
+
       {paying && (
         <PosPaymentModal
           grandTotal={order.grandTotal.toFixed(2)}
@@ -528,7 +544,7 @@ export default function PosScreen({
         />
       )}
 
-      {completed && <PosSaleCompleteModal sale={completed} canViewSales={canViewSales} onClose={() => setCompleted(null)} />}
+      {completed && <PosSaleCompleteModal sale={completed} canViewSales={canViewSales} receiptPrinter={receiptPrinter} onClose={() => setCompleted(null)} />}
 
       {showHeld && (
         <PosHeldOrdersModal

@@ -29,7 +29,7 @@ import { logWasteInTx, wasteStockRefusal } from "./waste";
 // order screen refreshes; its bill doesn't change.
 
 export type RemakeResult =
-  | { ok: true; lineId: string; wasteId: string; costSnapshot: string; station: string }
+  | { ok: true; lineId: string; wasteId: string; costSnapshot: string; station: string; kotId: string }
   | (ActionFailure & { needsApproval?: true; limit?: string; stale?: true });
 
 const LIVE_ORDER: OrderStatus[] = ["OPEN", "SENT", "SERVED"];
@@ -103,13 +103,13 @@ export async function remakeLine(input: RemakeInput, userId: string): Promise<Re
           },
           select: { id: true },
         });
-        await sendRemakeKot(tx, remake.id, station.id, userId, `REMAKE: ${WASTE_REASON_LABEL[input.reason]}${input.note ? ` — ${input.note}` : ""}`);
+        const kotId = await sendRemakeKot(tx, remake.id, station.id, userId, `REMAKE: ${WASTE_REASON_LABEL[input.reason]}${input.note ? ` — ${input.note}` : ""}`);
         // A Served order has something cooking again.
         await tx.order.update({
           where: { id: line.orderId },
           data: { version: { increment: 1 }, ...(line.order.status === "SERVED" ? { status: "SENT" } : {}) },
         });
-        return { ok: true, lineId: remake.id, wasteId: waste.id, costSnapshot: waste.costSnapshot, station: station.name };
+        return { ok: true, lineId: remake.id, wasteId: waste.id, costSnapshot: waste.costSnapshot, station: station.name, kotId };
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 },
     );

@@ -14,6 +14,7 @@ import type { KitchenResult } from "../../server/services/kitchen";
 import type { KdsLine, KdsTicket, KitchenBoardData } from "../../server/queries/kds";
 import FloorPolling from "../floor/FloorPolling";
 import KdsWasteModal, { type KdsWasteMode } from "./KdsWasteModal";
+import PrinterAlerts from "@/components/hardware/PrinterAlerts";
 import TicketCard from "./TicketCard";
 
 // /restaurant/kitchen — the kitchen display (RingzPOS Kitchen Display
@@ -83,7 +84,9 @@ const hrefFor = (station: string | null, view: KdsView) => {
 
 // With Log Waste: the header's Log waste and each line's Remake (the dark
 // waste pop-up).
-export default function KitchenBoard({ data, canManage, canWaste }: { data: KitchenBoardData; canManage: boolean; canWaste: boolean }) {
+// `printers`: each station's printer (station code → name); a station
+// without one prints KOTs from the browser, as before.
+export default function KitchenBoard({ data, canManage, canWaste, printers }: { data: KitchenBoardData; canManage: boolean; canWaste: boolean; printers: Record<string, string> }) {
   const router = useRouter();
   const [wasteMode, setWasteMode] = useState<KdsWasteMode | null>(null);
   const [lineTaps, setLineTaps] = useState<Map<string, Pending<KitchenStatus>>>(new Map());
@@ -224,7 +227,7 @@ export default function KitchenBoard({ data, canManage, canWaste }: { data: Kitc
         <div style={{ width: 32, height: 32, borderRadius: 9, background: KDS.teal, color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.display, fontWeight: 700 }}>
           R
         </div>
-        <h1 style={{ margin: 0, fontFamily: FONTS.display, fontSize: 18, fontWeight: 600 }}>Kitchen display</h1>
+        <h1 style={{ margin: 0, fontFamily: FONTS.display, fontSize: 18, fontWeight: 600, whiteSpace: "nowrap" }}>Kitchen display</h1>
         <nav aria-label="Stations" style={group}>
           {[{ code: null, name: "All" }, ...data.stations].map((s) => (
             <Link key={s.code ?? "all"} href={hrefFor(s.code, data.view)} replace scroll={false} aria-current={data.station === s.code ? "page" : undefined} style={tab(data.station === s.code)}>
@@ -243,6 +246,7 @@ export default function KitchenBoard({ data, canManage, canWaste }: { data: Kitc
           <span aria-live="polite" style={{ minWidth: 60, color: KDS.qty, fontFamily: FONTS.body, fontWeight: 600 }}>
             {saving > 0 ? "Saving…" : ""}
           </span>
+          <PrinterAlerts scope="kitchen" dark />
           <span data-count="tickets">{data.active.length} tickets</span>
           <span data-count="late" style={{ color: KDS.lateText }}>
             {late} late
@@ -262,7 +266,7 @@ export default function KitchenBoard({ data, canManage, canWaste }: { data: Kitc
             <button
               type="button"
               onClick={() => setWasteMode({ kind: "log" })}
-              style={{ height: 44, padding: "0 16px", border: `1px solid ${KDS.buttonBorder}`, borderRadius: 9, background: "transparent", color: KDS.text, fontFamily: FONTS.body, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+              style={{ height: 44, padding: "0 16px", border: `1px solid ${KDS.buttonBorder}`, borderRadius: 9, background: "transparent", color: KDS.text, fontFamily: FONTS.body, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", whiteSpace: "nowrap" }}
             >
               <Trash2 size={16} strokeWidth={2} /> Log waste
             </button>
@@ -297,6 +301,7 @@ export default function KitchenBoard({ data, canManage, canWaste }: { data: Kitc
                 now={now}
                 canManage={canManage}
                 canWaste={canWaste}
+                printer={printers[ticket.station.code] ?? null}
                 busy={ticketBusy(ticket)}
                 statusOf={statusOf}
                 onAdvance={(line, from) => stepLine(line, from, "forward")}

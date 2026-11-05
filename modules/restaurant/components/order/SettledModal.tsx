@@ -6,14 +6,17 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 import { formatNaira } from "@/lib/format";
 import PosButton from "@/components/pos/PosButton";
 import { POS } from "@/components/pos/theme";
+import PrintButton from "@/components/hardware/PrintButton";
+import { printReceiptAction } from "../../server/actions/printing";
 
-export type Settled = { saleId: string; reference: string; closed: boolean; paid: string; change: string; title: string; partsLeft: number };
+// `printedOn`: the receipt already went to that printer at settle.
+export type Settled = { saleId: string; reference: string; closed: boolean; paid: string; change: string; title: string; partsLeft: number; printedOn: string | null };
 
 // After a settle — the retail till's "Sale complete" look (PosSaleCompleteModal):
 // the sale's reference, what was paid, the change to hand back, and the
 // receipt (the retail receipt with the table and waiter). A split bill with
 // parts still open says how many are left.
-export default function SettledModal({ settled, onClose }: { settled: Settled; onClose: () => void }) {
+export default function SettledModal({ settled, receiptPrinter, onClose }: { settled: Settled; receiptPrinter: string | null; onClose: () => void }) {
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -56,15 +59,20 @@ export default function SettledModal({ settled, onClose }: { settled: Settled; o
           </div>
         </div>
 
-        <a
+        {settled.printedOn && (
+          <p data-receipt-printed style={{ margin: "6px 0 0", fontSize: 13.5, color: POS.green, fontWeight: 600, textAlign: "center" }}>
+            Receipt sent to {settled.printedOn}.
+          </p>
+        )}
+        <PrintButton
+          printer={receiptPrinter}
           href={`/restaurant/receipt/${settled.saleId}`}
-          target="_blank"
-          rel="noopener"
-          style={{ width: "100%", height: 48, borderRadius: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, fontWeight: 600, textDecoration: "none", background: POS.indigo, color: "#fff", marginTop: 6 }}
+          onQueue={() => printReceiptAction(settled.saleId)}
+          style={{ width: "100%", height: 48, borderRadius: 12, border: "none", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 15, fontWeight: 600, textDecoration: "none", background: POS.indigo, color: "#fff", marginTop: 6 }}
         >
           <Printer size={18} strokeWidth={1.6} />
-          Print receipt
-        </a>
+          {settled.printedOn ? "Print again" : "Print receipt"}
+        </PrintButton>
         <PosButton onClick={onClose} autoFocus style={{ width: "100%", height: 52, borderRadius: 12, background: POS.green, color: "#fff", fontSize: 16, fontWeight: 600 }} hoverStyle={{ background: POS.greenHover }}>
           Done
         </PosButton>

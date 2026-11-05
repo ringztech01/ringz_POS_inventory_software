@@ -191,11 +191,31 @@ model BusinessSetting {
   // today's food cost.
   restaurantWasteAmberPercent     Decimal  @default(5) @db.Decimal(5, 2)
   restaurantWasteRedPercent       Decimal  @default(10) @db.Decimal(5, 2)
+  // ---- Printed tickets (Settings › Ticket templates; lib/hardware/tickets.ts)
+  // The logo on receipts and pre-bills: on/off, and the image itself, turned
+  // to 1-bit once (at most 384 × 240 dots) — rows of ceil(width / 8) bytes.
+  printLogo                       Boolean  @default(false)
+  printLogoWidth                  Int?
+  printLogoHeight                 Int?
+  printLogoData                   Bytes?   @db.MediumBlob
+  // The business header and the footer, line by line (null: the defaults).
+  printHeader                     String?  @db.Text
+  printFooter                     String?  @db.Text
+  // KOT lines in large type; prices on KOT lines (default off).
+  printKitchenLarge               Boolean  @default(false)
+  printKotPrices                  Boolean  @default(false)
+  // A QR code under receipts and pre-bills, holding this (a link, Wi-Fi…).
+  printQr                         Boolean  @default(false)
+  printQrText                     String?  @db.VarChar(300)
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
 
-  restaurantWarehouse Warehouse?   @relation("RestaurantWarehouse", fields: [restaurantWarehouseId], references: [id])
+  restaurantWarehouse Warehouse?          @relation("RestaurantWarehouse", fields: [restaurantWarehouseId], references: [id])
   wasteEntries        WasteEntry[]
+  printers            Printer[]
+  printerAssignments  PrinterAssignment[]
+  printJobs           PrintJob[]
+  drawerEvents        DrawerEvent[]
 }
 
 model User {
@@ -237,7 +257,9 @@ model User {
   tips               OrderTip[]          @relation("OrderTipWaiter")
   orderRefunds       OrderRefund[]
   wasteLogged        WasteEntry[]        @relation("WasteLoggedBy")
+  printJobs          PrintJob[]
   wasteApproved      WasteEntry[]        @relation("WasteApprovedBy")
+  drawerEvents       DrawerEvent[]
 
   @@index([deletedAt])
   @@index([roleId])
@@ -1417,9 +1439,11 @@ model KitchenStation {
   updatedAt    DateTime  @updatedAt
   deletedAt    DateTime?
 
-  products   Product[]
-  orderItems OrderItem[]
-  kots       Kot[]
+  products           Product[]
+  orderItems         OrderItem[]
+  kots               Kot[]
+  // Its KOT printer (Settings › Printers).
+  printerAssignments PrinterAssignment[]
 
   @@index([deletedAt])
 }
@@ -1468,4 +1492,239 @@ model KotLine {
 
   @@index([kotId])
   @@index([orderItemId])
+}
+
+// ---- Printers (Settings › Printers; the hardware bridge, desktop/bridge) ----
+
+// How the server reaches a printer (desktop/bridge/types.ts):
+// OS a print queue (RAW), USB a raw device file (Linux), NETWORK raw TCP
+// (host:9100), SERIAL a COM / tty port.
+enum PrinterConnection {
+  OS
+  USB
+  NETWORK
+  SERIAL
+}
+
+enum PrinterCut {
+  FULL
+  PARTIAL
+  NONE
+}
+
+// A printer the business prints to. Never deleted while assigned; removed
+// ones are soft-deleted and their assignments cleared.
+model Printer {
+  id         String            @id @default(cuid())
+  // The single business (BusinessSetting "default").
+  businessId String            @default("default")
+  name       String            @db.VarChar(80)
+  connection PrinterConnection
+  // The OS queue name, "host:port", "COM3" or the device path.
+  address    String            @db.VarChar(255)
+  // 58 or 80 (mm).
+  paperWidth Int               @default(80)
+  // ESC/POS code page (lib/hardware/escpos.ts CODE_PAGES), e.g. PC437, WPC1252.
+  codePage   String            @default("PC437") @db.VarChar(20)
+  cut        PrinterCut        @default(PARTIAL)
+  // A cash drawer is plugged into this printer, on pin 2 or 5. It opens on
+  // a cash sale or refund at a till that prints receipts here, by hand
+  // (Open drawer) and from Settings (lib/hardware/drawer.ts).
+  openDrawer Boolean           @default(false)
+  drawerPin  Int               @default(2)
+  // Serial printers only.
+  baudRate   Int               @default(9600)
+  model      String?           @db.VarChar(120)
+  // What finds it again after a replug or an IP change (Step 7): USB
+  // vendor / product / serial, OS queue name, MAC.
+  identity   Json?
+  // The bridge's last word on it.
+  lastStatus String?           @db.VarChar(20)
+  lastSeenAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+  deletedAt  DateTime?
+
+  business     BusinessSetting     @relation(fields: [businessId], references: [id])
+  assignments  PrinterAssignment[] @relation("AssignedPrinter")
+  fallbackFor  PrinterAssignment[] @relation("FallbackPrinter")
+  overrides    DeviceOverride[]
+  printJobs    PrintJob[]          @relation("PrintJobPrinter")
+  reroutedJobs PrintJob[]          @relation("PrintJobReroutedFrom")
+  drawerEvents DrawerEvent[]
+
+  @@index([businessId])
+  @@index([deletedAt])
+}
+
+// Which printer does a job (role → printer). `role` is the key:
+// STATION:<kitchenStationId>, RECEIPT, PREBILL (none: the receipt printer),
+// REPORTS. Copies for stations; a fallback used while the main one is
+// offline (the ticket says REROUTED FROM <printer>).
+model PrinterAssignment {
+  id                String   @id @default(cuid())
+  businessId        String   @default("default")
+  role              String   @db.VarChar(40)
+  stationId         String?
+  printerId         String
+  fallbackPrinterId String?
+  copies            Int      @default(1)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  business BusinessSetting @relation(fields: [businessId], references: [id])
+  station  KitchenStation? @relation(fields: [stationId], references: [id], onDelete: Cascade)
+  printer  Printer         @relation("AssignedPrinter", fields: [printerId], references: [id])
+  fallback Printer?        @relation("FallbackPrinter", fields: [fallbackPrinterId], references: [id])
+
+  @@unique([businessId, role])
+  @@index([stationId])
+  @@index([printerId])
+  @@index([fallbackPrinterId])
+}
+
+// A browser that prints (a cashier tablet, the kitchen PC): its id is a
+// long-lived cookie, its name the admin's ("Cashier tablet 2").
+model Device {
+  id         String   @id
+  name       String?  @db.VarChar(80)
+  userAgent  String?  @db.VarChar(255)
+  lastSeenAt DateTime @default(now())
+  createdAt  DateTime @default(now())
+
+  overrides DeviceOverride[]
+
+  @@index([lastSeenAt])
+}
+
+// This device prints `role` (RECEIPT, PREBILL) on its own printer instead.
+model DeviceOverride {
+  id        String   @id @default(cuid())
+  deviceId  String
+  role      String   @db.VarChar(40)
+  printerId String
+  createdAt DateTime @default(now())
+
+  device  Device  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  printer Printer @relation(fields: [printerId], references: [id])
+
+  @@unique([deviceId, role])
+  @@index([printerId])
+}
+
+// ---- The print queue (lib/hardware/printQueue.ts, printWorker.ts) ---------
+
+enum PrintJobType {
+  KOT
+  KOT_VOID
+  RECEIPT
+  PREBILL
+  REPORT
+  TEST
+  // Not a ticket: the cash drawer's kick (lib/hardware/drawer.ts) — sent
+  // ahead of the tickets, never rerouted, dropped after 30 s.
+  DRAWER
+}
+
+// QUEUED → PRINTING → DONE; a job that failed 3 times is FAILED (Retry puts
+// it back); CANCELLED by hand. A printer that's offline keeps its jobs
+// QUEUED (they wait, or move to the role's fallback).
+enum PrintJobStatus {
+  QUEUED
+  PRINTING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+// One print: what (a template and its data, rendered for the printer it
+// ends up on — so a reprint or a reroute prints the same ticket, marked),
+// where, and how it went. Never deleted: the history.
+model PrintJob {
+  id                    String         @id @default(cuid())
+  businessId            String         @default("default")
+  printerId             String
+  // The role it was sent for (STATION:<id>, RECEIPT, PREBILL); null when
+  // sent to a printer directly (a test page).
+  role                  String?        @db.VarChar(40)
+  type                  PrintJobType
+  // What it prints: the Kot, Order or Sale id.
+  refId                 String?        @db.VarChar(191)
+  // For the queue screen: "KOT-000123 · Kitchen".
+  label                 String         @db.VarChar(160)
+  // lib/hardware/tickets.ts: KOT, PREBILL, RECEIPT, TEST — and its data,
+  // as it was when queued.
+  template              String         @db.VarChar(20)
+  data                  Json
+  copies                Int            @default(1)
+  status                PrintJobStatus @default(QUEUED)
+  attempts              Int            @default(0)
+  error                 String?        @db.VarChar(500)
+  // Printed again by hand (marked REPRINT on the ticket).
+  reprint               Boolean        @default(false)
+  reprintOfId           String?
+  // Moved here from that printer while it was offline (REROUTED FROM …).
+  reroutedFromPrinterId String?
+  // Auto-prints carry one ("KOT:<kotId>"): a ticket is queued once.
+  dedupeKey             String?        @unique @db.VarChar(191)
+  createdById           String?
+  deviceId              String?        @db.VarChar(64)
+  // Retry backoff: not tried again before this.
+  nextAttemptAt         DateTime       @default(now())
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  printedAt             DateTime?
+
+  business     BusinessSetting @relation(fields: [businessId], references: [id])
+  printer      Printer         @relation("PrintJobPrinter", fields: [printerId], references: [id])
+  reroutedFrom Printer?        @relation("PrintJobReroutedFrom", fields: [reroutedFromPrinterId], references: [id])
+  createdBy    User?           @relation(fields: [createdById], references: [id])
+  drawerEvent  DrawerEvent?
+
+  @@index([printerId, status, createdAt])
+  @@index([status, nextAttemptAt])
+  @@index([type, refId])
+  @@index([createdAt])
+  @@index([businessId])
+  @@index([reroutedFromPrinterId])
+  @@index([createdById])
+}
+
+// ---- The cash drawer (lib/hardware/drawer.ts) ------------------------------
+
+enum DrawerReason {
+  CASH_SALE
+  CASH_REFUND
+  MANUAL
+  TEST
+}
+
+// Every time the drawer was told to open: why, who, at which till, on which
+// printer, and the sale / refund it was for. Whether it opened is its kick's
+// print job (DONE: sent; CANCELLED / FAILED: not opened). Never deleted.
+model DrawerEvent {
+  id         String       @id @default(cuid())
+  businessId String       @default("default")
+  reason     DrawerReason
+  // Open drawer (by hand): what the cashier typed.
+  note       String?      @db.VarChar(140)
+  printerId  String
+  printJobId String       @unique
+  // The Sale or SaleReturn it was for, and its reference (SA_0012).
+  refId      String?      @db.VarChar(191)
+  refLabel   String?      @db.VarChar(80)
+  userId     String?
+  deviceId   String?      @db.VarChar(64)
+  createdAt  DateTime     @default(now())
+
+  business BusinessSetting @relation(fields: [businessId], references: [id])
+  printer  Printer         @relation(fields: [printerId], references: [id])
+  printJob PrintJob        @relation(fields: [printJobId], references: [id])
+  user     User?           @relation(fields: [userId], references: [id])
+
+  @@index([businessId])
+  @@index([createdAt])
+  @@index([reason, createdAt])
+  @@index([printerId])
+  @@index([userId])
 }

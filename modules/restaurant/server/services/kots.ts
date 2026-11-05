@@ -46,13 +46,13 @@ export async function sendNewLines(
   tx: Prisma.TransactionClient,
   orderId: string,
   userId: string,
-): Promise<{ ok: true; sent: SentToStation[] } | { ok: false; error: string }> {
+): Promise<{ ok: true; sent: SentToStation[]; kotIds: string[] } | { ok: false; error: string }> {
   const lines = await tx.orderItem.findMany({
     where: { orderId, kitchenStatus: "NEW", deletedAt: null, cancelledAt: null },
     select: kotLineSelect,
     orderBy: { createdAt: "asc" },
   });
-  if (lines.length === 0) return { ok: true, sent: [] };
+  if (lines.length === 0) return { ok: true, sent: [], kotIds: [] };
   const stations = await activeStations(tx);
   if (stations.length === 0) return { ok: false, error: NO_ACTIVE_STATION };
 
@@ -64,32 +64,36 @@ export async function sendNewLines(
 
   const now = new Date();
   const sent: SentToStation[] = [];
+  const kotIds: string[] = [];
   for (const station of stations) {
     const group = byStation.get(station.id);
     if (!group) continue;
-    await tx.kot.create({
+    const kot = await tx.kot.create({
       data: { type: "NEW", orderId, stationId: station.id, createdById: userId, createdAt: now, lines: { create: group.map(snapshot) } },
+      select: { id: true },
     });
+    kotIds.push(kot.id);
     await tx.orderItem.updateMany({
       where: { id: { in: group.map((line) => line.id) }, kitchenStatus: "NEW" },
       data: { kitchenStatus: "PENDING", stationId: station.id, sentAt: now },
     });
     sent.push({ station: station.name, count: group.length });
   }
-  return { ok: true, sent };
+  return { ok: true, sent, kotIds };
 }
 
 // Remake's part: the remake line (already Sent at `stationId`) gets a NEW
 // KOT of its own for that station, noted "REMAKE: Burnt" — a ticket on the
 // board like any other.
-export async function sendRemakeKot(tx: Prisma.TransactionClient, remakeLineId: string, stationId: string, userId: string, note: string): Promise<void> {
+export async function sendRemakeKot(tx: Prisma.TransactionClient, remakeLineId: string, stationId: string, userId: string, note: string): Promise<string> {
   const line = await tx.orderItem.findUniqueOrThrow({ where: { id: remakeLineId }, select: { ...kotLineSelect, orderId: true } });
-  await tx.kot.create({ data: { type: "NEW", orderId: line.orderId, stationId, createdById: userId, note, lines: { create: [snapshot(line)] } } });
+  const kot = await tx.kot.create({ data: { type: "NEW", orderId: line.orderId, stationId, createdById: userId, note, lines: { create: [snapshot(line)] } }, select: { id: true } });
+  return kot.id;
 }
 
 // Cancel line's part: a line that had been sent gets a VOID KOT for its
 // station, noted "VOID: <reason>", so the kitchen stops making it.
-export async function createVoidKot(tx: Prisma.TransactionClient, lineId: string, userId: string, reason: string): Promise<void> {
+export async function createVoidKot(tx: Prisma.TransactionClient, lineId: string, userId: string, reason: string): Promise<string | null> {
   const line = await tx.orderItem.findUniqueOrThrow({ where: { id: lineId }, select: { ...kotLineSelect, orderId: true, stationId: true } });
   // Its station, else (a line sent before stations existed) the first
   // active one, else any station at all.
@@ -97,10 +101,12 @@ export async function createVoidKot(tx: Prisma.TransactionClient, lineId: string
     line.stationId ??
     stationFor(line.product.stationId, await activeStations(tx)) ??
     (await tx.kitchenStation.findFirst({ where: { deletedAt: null }, orderBy: { sortOrder: "asc" }, select: { id: true } }))?.id;
-  if (!stationId) return;
-  await tx.kot.create({
+  if (!stationId) return null;
+  const kot = await tx.kot.create({
     data: { type: "VOID", orderId: line.orderId, stationId, createdById: userId, note: `VOID: ${reason}`, lines: { create: [snapshot(line)] } },
+    select: { id: true },
   });
+  return kot.id;
 }
 
 // After any line change: each NEW ticket holding one of these lines is

@@ -17,7 +17,8 @@ import { logWasteInTx, wasteStockRefusal } from "./waste";
 // an order isn't a sale until it's billed.
 
 // `sent`: how many lines went to each station, in station order.
-export type SendResult = { ok: true; version: number; sent: SentToStation[] } | OrderFailure;
+// `kotIds`: the tickets made (each goes to its station's printer).
+export type SendResult = { ok: true; version: number; sent: SentToStation[]; kotIds: string[] } | OrderFailure;
 
 const LINE_GONE = "That line is no longer on the order — refreshed.";
 
@@ -49,13 +50,13 @@ export async function sendToKitchen(orderId: string, version: number, userId: st
 
     const result = await sendNewLines(tx, orderId, userId);
     if (!result.ok) return result;
-    if (result.sent.length === 0) return { ok: true, version, sent: [] };
+    if (result.sent.length === 0) return { ok: true, version, sent: [], kotIds: [] };
 
     const status = locked.order.status === "OPEN" || locked.order.status === "SERVED" ? { status: "SENT" as const } : {};
     await markBillChanged(tx, orderId);
     await clearSplit(tx, orderId);
     const { version: next } = await bump(tx, orderId, status);
-    return { ok: true, version: next, sent: result.sent };
+    return { ok: true, version: next, sent: result.sent, kotIds: result.kotIds };
   });
 }
 
@@ -102,7 +103,7 @@ export async function markLinesServed(orderId: string, version: number, lineIds:
 // logged as waste first (RETURNED_BY_GUEST, linked to the line, the note as
 // its note), in the same transaction — refused (an approver's PIN over the
 // limit, not enough stock), nothing is cancelled either.
-export type CancelLineResult = OrderChangeResult | (OrderFailure & { needsApproval?: true; limit?: string });
+export type CancelLineResult = (OrderChangeResult & { voidKotId?: string | null }) | (OrderFailure & { needsApproval?: true; limit?: string });
 
 export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wasted?: boolean }, cancelledById: string): Promise<CancelLineResult> {
   const { orderId, version, lineId, reason, details } = input;
@@ -130,11 +131,11 @@ export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wast
 
         const why = cancelReasonText(reason, details);
         await tx.orderItem.update({ where: { id: lineId }, data: { cancelledAt: new Date(), cancelReason: why, cancelledById } });
-        await createVoidKot(tx, lineId, cancelledById, why);
+        const voidKotId = await createVoidKot(tx, lineId, cancelledById, why);
         await syncKotBump(tx, [lineId]);
         await markBillChanged(tx, orderId);
         await clearSplit(tx, orderId);
-        return { ok: true, version: (await bump(tx, orderId, await servedIfDone(tx, orderId))).version };
+        return { ok: true, version: (await bump(tx, orderId, await servedIfDone(tx, orderId))).version, voidKotId };
       },
       // With waste: its stock reads see what's committed (as Log waste does).
       settings ? { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 } : undefined,

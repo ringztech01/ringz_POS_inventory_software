@@ -10,7 +10,7 @@ import { Prisma } from "@prisma/client";
 import { RESTAURANT_PERMISSIONS, restaurantModule } from "../manifest";
 
 const RESTAURANT = Object.values(RESTAURANT_PERMISSIONS);
-const CORE = ALL_PERMISSIONS.slice(0, 27);
+const CORE = ALL_PERMISSIONS.slice(0, 28);
 const ON = ["restaurant"];
 const OFF: string[] = [];
 const keys = (permissions: Iterable<Permission>, modules: string[]) =>
@@ -19,17 +19,18 @@ const restaurantGroup = (permissions: Iterable<Permission>) =>
   visibleNav(new Set(permissions), ON).find((item) => item.key === "restaurant");
 
 describe("permissions", () => {
-  test("the 13 restaurant permissions come after the core 27, with matching keys", () => {
-    assert.equal(ALL_PERMISSIONS.length, 40);
-    assert.deepEqual(ALL_PERMISSIONS.slice(27), RESTAURANT);
+  test("the 13 restaurant permissions come after the core 28, with matching keys", () => {
+    assert.equal(ALL_PERMISSIONS.length, 41);
+    assert.deepEqual(ALL_PERMISSIONS.slice(28), RESTAURANT);
+    assert.equal(CORE[27], "Open Drawer");
     assert.equal(PERMISSIONS.KITCHEN_DISPLAY, "Kitchen Display");
     assert.equal(PERMISSIONS.MANAGE_KITCHEN, "Manage Kitchen");
     assert.equal(PERMISSIONS.MANAGE_SALE, "Manage Sale");
-    assert.equal(new Set(ALL_PERMISSIONS).size, 40, "no string is shared with the core set");
+    assert.equal(new Set(ALL_PERMISSIONS).size, 41, "no string is shared with the core set");
     assert.ok(CORE.every((p) => !RESTAURANT.includes(p as (typeof RESTAURANT)[number])));
   });
 
-  test("Role form: off shows only the core 27; on adds a Restaurant group", () => {
+  test("Role form: off shows only the core 28; on adds a Restaurant group", () => {
     assert.deepEqual(permissionGroups(OFF), [{ label: null, permissions: CORE }]);
     assert.deepEqual(permissionGroups(ON), [
       { label: null, permissions: CORE },

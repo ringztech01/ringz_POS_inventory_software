@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { currentDeviceId } from "@/lib/hardware/device";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { orderDetailsSchema } from "../../schemas/order";
 import { addLineSchema, editLineSchema, lineQuantitySchema } from "../../schemas/orderLine";
@@ -10,6 +11,7 @@ import { safely } from "../safely";
 import { cancelLine, cancelOrder, markLineServed, markLinesServed, sendToKitchen, type CancelLineResult, type SendResult } from "../services/orderFlow";
 import { addLine, editLine, setLineQuantity } from "../services/orderLines";
 import { changeOrderDetails, type OrderChangeResult } from "../services/orders";
+import { printNewKots } from "../services/printing";
 
 // Thin wrappers for the order screen: permission, input parsing and refresh
 // here; the rules (locking, the version check) are in services/orders.ts.
@@ -84,7 +86,11 @@ export async function sendOrderToKitchen(input: unknown): Promise<SendResult> {
     if (!parsed.success) return { ok: false, error: "That order can't be sent." };
 
     const result = await sendToKitchen(parsed.data.orderId, parsed.data.version, authCheck.userId);
-    if (result.ok) refresh();
+    if (result.ok) {
+      refresh();
+      // Each station's KOT to its printer (Settings › Printers).
+      await printNewKots(result.kotIds, { userId: authCheck.userId, deviceId: await currentDeviceId() });
+    }
     return result;
   });
 }
@@ -117,7 +123,11 @@ export async function cancelOrderLine(input: unknown): Promise<CancelLineResult>
     }
 
     const result = await cancelLine(parsed.data, authCheck.userId);
-    if (result.ok) refresh();
+    if (result.ok) {
+      refresh();
+      // The station's VOID ticket.
+      if (result.voidKotId) await printNewKots([result.voidKotId], { userId: authCheck.userId, deviceId: await currentDeviceId() });
+    }
     return result;
   });
 }
