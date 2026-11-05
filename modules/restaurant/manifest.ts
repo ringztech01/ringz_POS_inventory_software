@@ -20,6 +20,10 @@ export const RESTAURANT_PERMISSIONS = {
   SETTLE_BILL: "Settle Bill",
   // Approve a discount above the limit with a PIN, and set that PIN.
   APPROVE_DISCOUNT: "Approve Discount",
+  // Log waste (Food › Waste, the kitchen display, a returned order line).
+  LOG_WASTE: "Log Waste",
+  // Approve waste above the limit with a PIN (and set that PIN); void waste.
+  APPROVE_WASTE: "Approve Waste",
 } as const;
 
 export type RestaurantPermission = (typeof RESTAURANT_PERMISSIONS)[keyof typeof RESTAURANT_PERMISSIONS];
@@ -43,14 +47,16 @@ export const restaurantModule = defineModule({
     },
     { label: "Orders", href: "/restaurant/orders", permissions: [P.MANAGE_ORDERS] },
     { label: "Kitchen", href: "/restaurant/kitchen", permissions: [P.KITCHEN_DISPLAY] },
-    { label: "Food", href: "/restaurant/food", permissions: [P.MANAGE_FOOD] },
+    // Menu items, modifiers and recipes need Manage Food; the Waste tab, Log
+    // Waste or Approve Waste (lib/foodTabs.ts).
+    { label: "Food", href: "/restaurant/food", permissions: [P.MANAGE_FOOD, P.LOG_WASTE, P.APPROVE_WASTE] },
     // Tables, areas and reservations share the page; each part needs its own.
     { label: "Tables", href: "/restaurant/tables", permissions: [P.MANAGE_TABLES, P.MANAGE_RESERVATIONS] },
     { label: "Digital menu", href: "/restaurant/digital-menu", permissions: [P.MANAGE_FOOD] },
     // Sidebar only (the designs' header has the seven tabs above).
     { label: "Prep times", href: "/restaurant/reports/prep-times", permissions: [P.RESTAURANT_REPORTS], header: false },
     { label: "Stations", href: "/restaurant/settings/stations", permissions: [P.RESTAURANT_SETTINGS], header: false },
-    { label: "Approval PIN", href: "/restaurant/settings/approval-pin", permissions: [P.APPROVE_DISCOUNT], header: false },
+    { label: "Approval PIN", href: "/restaurant/settings/approval-pin", permissions: [P.APPROVE_DISCOUNT, P.APPROVE_WASTE], header: false },
   ],
   toggle: { setting: "restaurantEnabled", permission: P.RESTAURANT_SETTINGS },
   isEnabled: (settings) => settings.restaurantEnabled,

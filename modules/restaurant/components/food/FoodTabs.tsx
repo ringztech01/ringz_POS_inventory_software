@@ -1,20 +1,15 @@
 import Link from "next/link";
 import { COLORS } from "@/components/layout/theme";
+import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
+import { visibleFoodTabs, type FoodTab } from "../../lib/foodTabs";
 
-// The Food screen's tabs (RingzPOS Food Management design): Menu items,
-// Modifiers, Recipes — each its own route.
-export const FOOD_TABS = [
-  { key: "items", label: "Menu items", href: "/restaurant/food/items" },
-  { key: "modifiers", label: "Modifiers", href: "/restaurant/food/modifiers" },
-  { key: "recipes", label: "Recipes", href: "/restaurant/food/recipes" },
-] as const;
-
-export type FoodTab = (typeof FOOD_TABS)[number]["key"];
-
-export default function FoodTabs({ active }: { active: FoodTab }) {
+// The Food screen's tabs (lib/foodTabs.ts): the ones this user may open.
+// A server component — a client panel gets it as a prop.
+export default async function FoodTabs({ active }: { active: FoodTab }) {
+  const { permissions } = await getCurrentUserPermissions();
   return (
     <nav aria-label="Food" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 9, padding: 3 }}>
-      {FOOD_TABS.map((tab) => {
+      {visibleFoodTabs(permissions).map((tab) => {
         const on = tab.key === active;
         return (
           <Link

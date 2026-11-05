@@ -126,6 +126,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
             kitchenStatus: true,
             cancelledAt: true,
             deletedAt: true,
+            remakeOfId: true,
             product: { select: { name: true } },
           },
         },

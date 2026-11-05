@@ -4,7 +4,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KitchenStatus } from "@prisma/client";
-import { Volume2, VolumeX, X } from "lucide-react";
+import toast from "react-hot-toast";
+import { Trash2, Volume2, VolumeX, X } from "lucide-react";
 import { FONTS } from "@/components/layout/theme";
 import { fmtElapsed, isLate, nextStep, previousStep, type KdsView, type KitchenStep } from "../../lib/kds";
 import { KDS } from "../../lib/theme";
@@ -12,6 +13,7 @@ import { advanceKitchenLine, bumpKitchenTicket, recallKitchenLine, recallKitchen
 import type { KitchenResult } from "../../server/services/kitchen";
 import type { KdsLine, KdsTicket, KitchenBoardData } from "../../server/queries/kds";
 import FloorPolling from "../floor/FloorPolling";
+import KdsWasteModal, { type KdsWasteMode } from "./KdsWasteModal";
 import TicketCard from "./TicketCard";
 
 // /restaurant/kitchen — the kitchen display (RingzPOS Kitchen Display
@@ -79,8 +81,11 @@ const hrefFor = (station: string | null, view: KdsView) => {
   return `/restaurant/kitchen${query ? `?${query}` : ""}`;
 };
 
-export default function KitchenBoard({ data, canManage }: { data: KitchenBoardData; canManage: boolean }) {
+// With Log Waste: the header's Log waste and each line's Remake (the dark
+// waste pop-up).
+export default function KitchenBoard({ data, canManage, canWaste }: { data: KitchenBoardData; canManage: boolean; canWaste: boolean }) {
   const router = useRouter();
+  const [wasteMode, setWasteMode] = useState<KdsWasteMode | null>(null);
   const [lineTaps, setLineTaps] = useState<Map<string, Pending<KitchenStatus>>>(new Map());
   const [ticketTaps, setTicketTaps] = useState<Map<string, string | null>>(new Map());
   const [saving, setSaving] = useState(0);
@@ -253,6 +258,15 @@ export default function KitchenBoard({ data, canManage }: { data: KitchenBoardDa
           >
             {sound ? <Volume2 size={16} strokeWidth={2} /> : <VolumeX size={16} strokeWidth={2} />}
           </button>
+          {canWaste && (
+            <button
+              type="button"
+              onClick={() => setWasteMode({ kind: "log" })}
+              style={{ height: 44, padding: "0 16px", border: `1px solid ${KDS.buttonBorder}`, borderRadius: 9, background: "transparent", color: KDS.text, fontFamily: FONTS.body, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}
+            >
+              <Trash2 size={16} strokeWidth={2} /> Log waste
+            </button>
+          )}
           <Link href="/restaurant/floor" style={{ fontFamily: FONTS.body, fontWeight: 600, color: KDS.link }}>
             Floor →
           </Link>
@@ -282,17 +296,31 @@ export default function KitchenBoard({ data, canManage }: { data: KitchenBoardDa
                 view={data.view}
                 now={now}
                 canManage={canManage}
+                canWaste={canWaste}
                 busy={ticketBusy(ticket)}
                 statusOf={statusOf}
                 onAdvance={(line, from) => stepLine(line, from, "forward")}
                 onRecallLine={(line, from) => stepLine(line, from, "back")}
                 onBump={() => bump(ticket)}
                 onRecall={() => recall(ticket)}
+                onRemake={(line) => setWasteMode({ kind: "remake", line, table: ticket.table })}
               />
             ))}
           </div>
         )}
       </main>
+
+      {wasteMode && (
+        <KdsWasteModal
+          mode={wasteMode}
+          onClose={() => setWasteMode(null)}
+          onDone={(message) => {
+            setWasteMode(null);
+            toast.success(message);
+            router.refresh();
+          }}
+        />
+      )}
 
       <footer style={{ padding: "0 24px 18px", fontSize: 12.5, color: KDS.faint }}>
         {canManage

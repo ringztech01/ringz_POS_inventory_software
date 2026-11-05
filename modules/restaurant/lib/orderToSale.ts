@@ -48,7 +48,7 @@ export type OrderForSale = OrderAdjustments & {
   type: OrderType;
   warehouseId: string;
   customerId: string | null;
-  lines: (PricedLine & { productId: string; kitchenStatus: KitchenStatus })[];
+  lines: (PricedLine & { productId: string; kitchenStatus: KitchenStatus; remakeOfId: string | null })[];
 };
 
 export type PaymentIn = { paymentType: PaymentType; amount: Decimal.Value };

@@ -96,8 +96,8 @@ describe("Bill (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_TE
     const { restaurantServiceChargePercent } = await getBusinessSettings();
     const expected = summariseBill(
       [
-        { quantity: 2, unitPrice: "18.00", taxType: "EXCLUSIVE", taxRate: "0", cancelledAt: null, deletedAt: null, kitchenStatus: "PENDING" },
-        { quantity: 1, unitPrice: "10.00", taxType: "EXCLUSIVE", taxRate: "7.5", cancelledAt: null, deletedAt: null, kitchenStatus: "SERVED" },
+        { quantity: 2, unitPrice: "18.00", taxType: "EXCLUSIVE", taxRate: "0", cancelledAt: null, deletedAt: null, remakeOfId: null, kitchenStatus: "PENDING" },
+        { quantity: 1, unitPrice: "10.00", taxType: "EXCLUSIVE", taxRate: "7.5", cancelledAt: null, deletedAt: null, remakeOfId: null, kitchenStatus: "SERVED" },
       ],
       restaurantServiceChargePercent,
     );

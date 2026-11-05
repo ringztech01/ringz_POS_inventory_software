@@ -34,6 +34,8 @@ export type TicketLine = {
   // For the pencil: the options it has (ids) and its note.
   modifierIds: string[];
   note: string | null;
+  // A remake (the kitchen display's Remake): made again at no charge.
+  remake: boolean;
 };
 
 export type MenuCard = {
@@ -164,6 +166,7 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
           cancelledAt: true,
           cancelReason: true,
           deletedAt: true,
+          remakeOfId: true,
           productId: true,
           product: { select: { name: true } },
         },
@@ -219,6 +222,7 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
         // Seeded lines have no option ids: matched by group and name.
         modifierIds: chosen.flatMap((m) => m.id ?? options.find((o) => o.group === m.group && o.name === m.name)?.id ?? []),
         note: line.note,
+        remake: !!line.remakeOfId,
       };
     }),
     totals: {

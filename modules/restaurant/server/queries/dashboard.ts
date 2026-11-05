@@ -2,18 +2,22 @@ import "server-only";
 import { Prisma, type OrderStatus, type OrderType, type PurchaseStatus } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getBusinessSettings } from "@/lib/business-settings";
-import type { DateRange } from "@/lib/dateRanges";
+import { lastNDaysRange, type DateRange } from "@/lib/dateRanges";
 import { formatNaira } from "@/lib/format";
 import { saleListWhere } from "@/app/(dashboard)/sales/queries";
 import {
+  foodCostOf,
   LATE_ORDER_MINUTES,
   NO_TABLE_BADGE,
   OPEN_ORDER_STATUS_LABEL,
   ORDER_TYPES,
   periodBounds,
   stockLevel,
+  wasteLevel,
+  wasteShare,
   type DashboardPeriod,
   type StockLevel,
+  type WasteLevel,
 } from "../../lib/dashboard";
 import { orderTotals } from "../../lib/orderTotals";
 import { getPrepSummary } from "./prepTimes";
@@ -191,7 +195,7 @@ export async function getPrepTime(period: DashboardPeriod): Promise<PrepTime> {
 export type CancelledLines = { current: { count: number; value: string }; previous: { count: number; value: string } };
 
 // Lines cancelled in the range, and what they were worth at their price
-// (unit price × quantity; service charge left out).
+// (unit price × quantity; service charge left out). Remakes (no charge) left out.
 export async function getCancelledLines(period: DashboardPeriod): Promise<CancelledLines> {
   const [current, previous] = await Promise.all(
     [period.range, period.previous].map(async (range) => {
@@ -201,7 +205,7 @@ export async function getCancelledLines(period: DashboardPeriod): Promise<Cancel
         FROM \`OrderItem\` i
         JOIN \`Order\` o ON o.\`id\` = i.\`orderId\`
         WHERE i.\`cancelledAt\` >= ${start} AND i.\`cancelledAt\` < ${end}
-          AND i.\`deletedAt\` IS NULL AND o.\`deletedAt\` IS NULL`;
+          AND i.\`deletedAt\` IS NULL AND o.\`deletedAt\` IS NULL AND i.\`remakeOfId\` IS NULL`;
       return { count: Number(row?.count ?? 0), value: money(row?.value) };
     }),
   );
@@ -254,7 +258,7 @@ export type TopDish = { productId: string; name: string; quantity: number; reven
 const TOP_DISHES = 5;
 
 // The dishes on billed orders (the revenue rule), most sold first; revenue
-// is unit price × quantity (cancelled and removed lines left out).
+// is unit price × quantity (cancelled and removed lines, and remakes, left out).
 export async function getTopDishes(period: DashboardPeriod): Promise<TopDish[]> {
   const rows = await prisma.$queryRaw<{ productId: string; name: string; quantity: Prisma.Decimal | bigint | number; revenue: Prisma.Decimal | null }[]>`
     SELECT p.\`id\` AS productId, p.\`name\` AS name, SUM(i.\`quantity\`) AS quantity, SUM(i.\`unitPrice\` * i.\`quantity\`) AS revenue
@@ -262,7 +266,7 @@ export async function getTopDishes(period: DashboardPeriod): Promise<TopDish[]> 
     JOIN \`Order\` o ON o.\`id\` = i.\`orderId\`
     JOIN \`Sale\` s ON s.\`id\` = o.\`saleId\`
     JOIN \`Product\` p ON p.\`id\` = i.\`productId\`
-    WHERE ${billedSaleSql(period.range)} AND i.\`deletedAt\` IS NULL AND i.\`cancelledAt\` IS NULL
+    WHERE ${billedSaleSql(period.range)} AND i.\`deletedAt\` IS NULL AND i.\`cancelledAt\` IS NULL AND i.\`remakeOfId\` IS NULL
     GROUP BY p.\`id\`, p.\`name\`
     ORDER BY quantity DESC, revenue DESC, p.\`name\` ASC
     LIMIT ${TOP_DISHES}`;
@@ -323,4 +327,82 @@ export async function getRestaurantWarehouses(): Promise<string[]> {
     orderBy: { name: "asc" },
   });
   return warehouses.map((w) => w.name);
+}
+
+// ---- Waste -------------------------------------------------------------------
+
+// Waste that stands: not voided, not a VOID entry, not deleted.
+const standingWaste = { deletedAt: null, voidOfId: null, status: "ACTIVE" } satisfies Prisma.WasteEntryWhereInput;
+
+export type WasteKpi = { cost: string; entries: number; foodCost: string; share: number | null; level: WasteLevel };
+
+// The Waste tile: the period's waste (its cost as logged) against the food
+// cost of the period's billed orders (the revenue rule's sales; their lines'
+// stockPerUnit at each product's cost now — lib/dashboard.ts foodCostOf),
+// amber / red above the settings' percentages.
+export async function getWasteKpi(period: DashboardPeriod): Promise<WasteKpi> {
+  const { start, end } = periodBounds(period.range);
+  const [waste, lines, settings] = await Promise.all([
+    prisma.wasteEntry.aggregate({ where: { ...standingWaste, createdAt: { gte: start, lt: end } }, _sum: { costSnapshot: true }, _count: { _all: true } }),
+    prisma.$queryRaw<{ quantity: number; stockPerUnit: unknown }[]>`
+      SELECT i.\`quantity\` AS quantity, i.\`stockPerUnit\` AS stockPerUnit
+      FROM \`OrderItem\` i
+      JOIN \`Order\` o ON o.\`id\` = i.\`orderId\`
+      JOIN \`Sale\` s ON s.\`id\` = o.\`saleId\`
+      WHERE ${billedSaleSql(period.range)} AND i.\`deletedAt\` IS NULL AND i.\`cancelledAt\` IS NULL
+        AND i.\`remakeOfId\` IS NULL AND i.\`stockPerUnit\` IS NOT NULL`,
+    getBusinessSettings(),
+  ]);
+  // MariaDB's JSON is text: parsed here.
+  const parsed = lines.map((line) => ({ quantity: Number(line.quantity), stockPerUnit: typeof line.stockPerUnit === "string" ? JSON.parse(line.stockPerUnit) : line.stockPerUnit }));
+  const ids = [...new Set(parsed.flatMap((line) => (Array.isArray(line.stockPerUnit) ? line.stockPerUnit.map((m: { productId?: unknown }) => m?.productId) : [])).filter((id): id is string => typeof id === "string"))];
+  const costs = ids.length ? await prisma.product.findMany({ where: { id: { in: ids } }, select: { id: true, cost: true } }) : [];
+  const foodCost = foodCostOf(parsed, new Map(costs.map((p) => [p.id, p.cost?.toString() ?? "0"])));
+  const cost = new Prisma.Decimal(waste._sum.costSnapshot ?? 0);
+  const share = wasteShare(cost.toString(), foodCost);
+  return {
+    cost: cost.toFixed(2),
+    entries: waste._count._all,
+    foodCost: foodCost.toFixed(2),
+    share,
+    level: wasteLevel(share, cost.toString(), settings.restaurantWasteAmberPercent.toString(), settings.restaurantWasteRedPercent.toString()),
+  };
+}
+
+export type TopWastedItem = { productId: string; name: string; code: string; quantity: string; unit: string; entries: number; cost: string };
+
+const TOP_WASTED = 5;
+
+// Top wasted items: the last 7 days (whatever the dashboard's range), the
+// five that cost the most (ties: by name). Each row opens Food › Waste for
+// that item over those days (`range`).
+export async function getTopWastedItems(now: Date = new Date()): Promise<{ range: DateRange; rows: TopWastedItem[] }> {
+  const range = lastNDaysRange(7, now);
+  const { start, end } = periodBounds(range);
+  const groups = await prisma.wasteEntry.groupBy({
+    by: ["productId"],
+    where: { ...standingWaste, createdAt: { gte: start, lt: end } },
+    _sum: { costSnapshot: true, qty: true },
+    _count: { _all: true },
+  });
+  const products = groups.length
+    ? await prisma.product.findMany({ where: { id: { in: groups.map((g) => g.productId) } }, select: { id: true, name: true, code: true, unit: { select: { name: true } } } })
+    : [];
+  const byId = new Map(products.map((p) => [p.id, p]));
+  const rows = groups
+    .map((g) => {
+      const product = byId.get(g.productId);
+      return {
+        productId: g.productId,
+        name: product?.name ?? "Deleted item",
+        code: product?.code ?? "",
+        quantity: new Prisma.Decimal(g._sum.qty ?? 0).toString(),
+        unit: product?.unit.name ?? "",
+        entries: g._count._all,
+        cost: money(g._sum.costSnapshot),
+      };
+    })
+    .sort((a, b) => new Prisma.Decimal(b.cost).comparedTo(a.cost) || a.name.localeCompare(b.name))
+    .slice(0, TOP_WASTED);
+  return { range, rows };
 }

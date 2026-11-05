@@ -20,6 +20,7 @@ const line = (productId: string, quantity: number, unitPrice: string, extra: Par
   kitchenStatus: "SERVED" as KitchenStatus,
   cancelledAt: null,
   deletedAt: null,
+  remakeOfId: null,
   ...extra,
 });
 const order = (lines: Line[], extra: Partial<OrderForSale> = {}): OrderForSale => ({

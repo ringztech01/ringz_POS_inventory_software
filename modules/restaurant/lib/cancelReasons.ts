@@ -6,10 +6,20 @@ export const CANCEL_REASONS = {
   CHANGED_MIND: "Customer changed mind",
   WRONG_ITEM: "Wrong item",
   KITCHEN_ISSUE: "Kitchen issue",
+  // A served line only (the guest sent it back); the food can be logged as
+  // waste with it (Log Waste).
+  RETURNED_BY_GUEST: "Returned by guest",
   OTHER: "Other",
 } as const;
 
 export type CancelReason = keyof typeof CANCEL_REASONS;
+
+// The reasons offered: a whole order, or a line — Returned by guest only for
+// a served one.
+export function cancelReasonsFor(target: "order" | { served: boolean }): CancelReason[] {
+  const all = Object.keys(CANCEL_REASONS) as CancelReason[];
+  return target !== "order" && target.served ? all : all.filter((r) => r !== "RETURNED_BY_GUEST");
+}
 
 export const CANCEL_DETAILS_MAX = 140;
 

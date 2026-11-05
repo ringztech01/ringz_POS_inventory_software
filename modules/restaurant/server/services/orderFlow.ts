@@ -1,11 +1,14 @@
 import "server-only";
 import { Prisma } from "@prisma/client";
+import { Decimal } from "@prisma/client/runtime/index-browser";
 import { prisma } from "@/lib/db";
+import { getBusinessSettings } from "@/lib/business-settings";
 import { cancelReasonText } from "../../lib/cancelReasons";
 import { cancelOrderBlocker } from "../../lib/orderLines";
 import type { CancelLineInput, CancelOrderInput } from "../../schemas/orderFlow";
 import { createVoidKot, sendNewLines, syncKotBump, type SentToStation } from "./kots";
 import { clearSplit, lockOrderAt, markBillChanged, type OrderChangeResult, type OrderFailure } from "./orders";
+import { logWasteInTx, wasteStockRefusal } from "./waste";
 
 // Send to kitchen, Mark served and the cancellations — without the
 // permission check and input parsing (the server actions in
@@ -95,23 +98,52 @@ export async function markLinesServed(orderId: string, version: number, lineIds:
 // Cancel a line that has been sent (New lines are simply removed with the
 // stepper). It stays on the ticket, struck through, out of the totals, with
 // who cancelled it, when and why — and its station gets a VOID KOT.
-export async function cancelLine(input: CancelLineInput, cancelledById: string): Promise<OrderChangeResult> {
-  const { orderId, version, lineId, reason, details } = input;
-  return prisma.$transaction(async (tx): Promise<OrderChangeResult> => {
-    const locked = await lockOrderAt(tx, orderId, version);
-    if (!locked.ok) return locked;
-    const line = await tx.orderItem.findFirst({ where: { id: lineId, orderId, ...counted }, select: { kitchenStatus: true } });
-    if (!line) return { ok: false, error: LINE_GONE, stale: true };
-    if (line.kitchenStatus === "NEW") return { ok: false, error: "That line hasn't been sent — remove it with the − button instead." };
+// Returned by guest (a served line only) can say the food was wasted: it's
+// logged as waste first (RETURNED_BY_GUEST, linked to the line, the note as
+// its note), in the same transaction — refused (an approver's PIN over the
+// limit, not enough stock), nothing is cancelled either.
+export type CancelLineResult = OrderChangeResult | (OrderFailure & { needsApproval?: true; limit?: string });
 
-    const why = cancelReasonText(reason, details);
-    await tx.orderItem.update({ where: { id: lineId }, data: { cancelledAt: new Date(), cancelReason: why, cancelledById } });
-    await createVoidKot(tx, lineId, cancelledById, why);
-    await syncKotBump(tx, [lineId]);
-    await markBillChanged(tx, orderId);
-    await clearSplit(tx, orderId);
-    return { ok: true, version: (await bump(tx, orderId, await servedIfDone(tx, orderId))).version };
-  });
+export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wasted?: boolean }, cancelledById: string): Promise<CancelLineResult> {
+  const { orderId, version, lineId, reason, details } = input;
+  const settings = input.wasted ? await getBusinessSettings() : null;
+  try {
+    return await prisma.$transaction(
+      async (tx): Promise<CancelLineResult> => {
+        const locked = await lockOrderAt(tx, orderId, version);
+        if (!locked.ok) return locked;
+        const line = await tx.orderItem.findFirst({ where: { id: lineId, orderId, ...counted }, select: { kitchenStatus: true, productId: true, quantity: true } });
+        if (!line) return { ok: false, error: LINE_GONE, stale: true };
+        if (line.kitchenStatus === "NEW") return { ok: false, error: "That line hasn't been sent — remove it with the − button instead." };
+        if (reason === "RETURNED_BY_GUEST" && line.kitchenStatus !== "SERVED") return { ok: false, error: "Returned by guest is for a line that's been served." };
+
+        if (settings) {
+          const waste = await logWasteInTx(
+            tx,
+            { productId: line.productId, qty: String(line.quantity), reason: "RETURNED_BY_GUEST", note: details ?? "", orderItemId: lineId, approval: input.approval },
+            cancelledById,
+            new Decimal(settings.restaurantWasteApprovalLimit.toString()),
+            settings.restaurantWarehouseId,
+          );
+          if (!waste.ok) return waste;
+        }
+
+        const why = cancelReasonText(reason, details);
+        await tx.orderItem.update({ where: { id: lineId }, data: { cancelledAt: new Date(), cancelReason: why, cancelledById } });
+        await createVoidKot(tx, lineId, cancelledById, why);
+        await syncKotBump(tx, [lineId]);
+        await markBillChanged(tx, orderId);
+        await clearSplit(tx, orderId);
+        return { ok: true, version: (await bump(tx, orderId, await servedIfDone(tx, orderId))).version };
+      },
+      // With waste: its stock reads see what's committed (as Log waste does).
+      settings ? { isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted, timeout: 20000 } : undefined,
+    );
+  } catch (error) {
+    const refused = wasteStockRefusal(error);
+    if (refused) return refused;
+    throw error;
+  }
 }
 
 // Cancel the order: it closes with its reason, and its table is free at once

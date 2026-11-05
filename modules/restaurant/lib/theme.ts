@@ -1,4 +1,4 @@
-import type { ReservationStatus } from "@prisma/client";
+import type { ReservationStatus, WasteReason, WasteStatus } from "@prisma/client";
 import type { TableStatus } from "./tableStatus";
 
 // Colours the restaurant designs use beyond the app palette
@@ -86,6 +86,21 @@ export const ORDER_TYPE_COLOR = { DINE_IN: "#0f7d6a", TAKEAWAY: "#5fb3a5", DELIV
 
 // Low-stock pills: [background, text].
 export const STOCK_LEVEL_PILL = { Critical: ["#fdecef", "#b4233c"], Low: ["#fff4e0", "#8a5a00"] } as const;
+
+// Waste reason and status pills (Food › Waste): [background, text], from the
+// KPI tones above.
+export const WASTE_REASON_PILL: Record<WasteReason, readonly [string, string]> = {
+  BURNT: ["#fdefe6", "#a24a17"],
+  EXPIRED: ["#fdf4e3", "#8a5a00"],
+  DROPPED: ["#eaf1fb", "#1d5fa8"],
+  RETURNED_BY_GUEST: ["#f1edfb", "#553aa8"],
+  OVERPRODUCTION: ["#e6f5f8", "#136b80"],
+  OTHER: ["#eef1f2", "#4d5659"],
+};
+export const WASTE_STATUS_PILL: Record<WasteStatus, readonly [string, string]> = {
+  ACTIVE: ["#eff8f6", "#0a6355"],
+  VOID: ["#fcecef", "#b4233c"],
+};
 
 // Kitchen Display (dark; RingzPOS Kitchen Display design).
 export const KDS = {

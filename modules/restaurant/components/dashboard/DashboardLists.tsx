@@ -2,12 +2,13 @@ import Link from "next/link";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { formatNaira } from "@/lib/format";
 import { R, STOCK_LEVEL_PILL } from "../../lib/theme";
-import type { LowStock, OpenOrders, TopDish } from "../../server/queries/dashboard";
+import type { DateRange } from "@/lib/dateRanges";
+import type { LowStock, OpenOrders, TopDish, TopWastedItem } from "../../server/queries/dashboard";
 import DashboardCard from "./DashboardCard";
 
-// The dashboard's bottom row: Live open orders, Top dishes and Low-stock
-// ingredients (each opens the product's Stock page for its warehouse). null
-// means that widget failed to load.
+// The dashboard's lists: Live open orders, Top dishes, Low-stock ingredients
+// (each opens the product's Stock page for its warehouse) and Top wasted
+// items. null means that widget failed to load.
 
 const row = { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: `1px solid ${R.rowBorder}` } as const;
 const more = { paddingTop: 10, borderTop: `1px solid ${R.rowBorder}`, fontSize: 12.5, fontWeight: 600 } as const;
@@ -91,6 +92,47 @@ export function LowStockIngredients({ data, showWarehouse }: { data: LowStock | 
           {data.total - data.rows.length} more at or below their alert level
         </Link>
       )}
+    </DashboardCard>
+  );
+}
+
+// Top wasted items (the last 7 days, top 5 by cost). With Log or Approve
+// Waste each row opens Food › Waste for that item over those days.
+export function TopWastedItems({ data, canOpen }: { data: { range: DateRange; rows: TopWastedItem[] } | null; canOpen: boolean }) {
+  return (
+    <DashboardCard
+      title="Top wasted items"
+      aside={<span style={{ fontSize: 12.5, color: COLORS.slateMid }}>Last 7 days · by cost</span>}
+      failed={!data}
+      empty={data && data.rows.length === 0 ? "No waste logged in the last 7 days." : null}
+    >
+      {data?.rows.map((item, i) => {
+        const body = (
+          <>
+            <span style={{ width: 20, fontFamily: FONTS.mono, fontSize: 12, color: COLORS.slateLight }}>{String(i + 1).padStart(2, "0")}</span>
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 500 }}>{item.name}</span>
+              <span style={{ fontSize: 12, color: COLORS.slateMid }}>
+                {item.entries} {item.entries === 1 ? "entry" : "entries"}
+              </span>
+            </span>
+            <span style={{ fontFamily: FONTS.mono, fontSize: 12.5, color: COLORS.slate }}>
+              {item.quantity} {item.unit}
+            </span>
+            <span style={{ width: 96, textAlign: "right", fontWeight: 600, fontSize: 13.5 }}>{formatNaira(item.cost)}</span>
+          </>
+        );
+        const query = new URLSearchParams({ from: data.range.from, to: data.range.to, q: item.code || item.name });
+        return canOpen ? (
+          <Link key={item.productId} href={`/restaurant/food/waste?${query.toString()}`} data-wasted-rank={i + 1} title={`Open ${item.name}'s waste`} style={{ ...row, color: COLORS.ink }}>
+            {body}
+          </Link>
+        ) : (
+          <div key={item.productId} data-wasted-rank={i + 1} style={row}>
+            {body}
+          </div>
+        );
+      })}
     </DashboardCard>
   );
 }

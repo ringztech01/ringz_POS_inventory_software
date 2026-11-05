@@ -79,6 +79,14 @@ export async function sendNewLines(
   return { ok: true, sent };
 }
 
+// Remake's part: the remake line (already Sent at `stationId`) gets a NEW
+// KOT of its own for that station, noted "REMAKE: Burnt" — a ticket on the
+// board like any other.
+export async function sendRemakeKot(tx: Prisma.TransactionClient, remakeLineId: string, stationId: string, userId: string, note: string): Promise<void> {
+  const line = await tx.orderItem.findUniqueOrThrow({ where: { id: remakeLineId }, select: { ...kotLineSelect, orderId: true } });
+  await tx.kot.create({ data: { type: "NEW", orderId: line.orderId, stationId, createdById: userId, note, lines: { create: [snapshot(line)] } } });
+}
+
 // Cancel line's part: a line that had been sent gets a VOID KOT for its
 // station, noted "VOID: <reason>", so the kitchen stops making it.
 export async function createVoidKot(tx: Prisma.TransactionClient, lineId: string, userId: string, reason: string): Promise<void> {

@@ -18,11 +18,15 @@ const DONE_WINDOW_MS = 6 * 60 * 60 * 1000;
 
 export type KdsLine = {
   itemId: string;
+  // The dish (Remake's cost preview).
+  productId: string;
   name: string;
   quantity: number;
   modifiers: string | null;
   note: string | null;
   status: KitchenStatus;
+  // A remake line (made again at no charge).
+  remake: boolean;
 };
 
 export type KdsTicket = {
@@ -37,6 +41,8 @@ export type KdsTicket = {
   sentAt: string;
   bumpedAt: string | null;
   printCount: number;
+  // The ticket's note: "REMAKE: Burnt" on a remake's ticket.
+  note: string | null;
   lines: KdsLine[];
   cancelledCount: number;
 };
@@ -61,6 +67,7 @@ const ticketSelect = {
   createdAt: true,
   bumpedAt: true,
   printCount: true,
+  note: true,
   station: { select: { code: true, name: true, lateAfterMin: true } },
   order: orderInfo,
   lines: {
@@ -70,7 +77,7 @@ const ticketSelect = {
       quantity: true,
       modifiers: true,
       note: true,
-      orderItem: { select: { id: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, order: { select: { ...orderInfo.select, deletedAt: true } } } },
+      orderItem: { select: { id: true, productId: true, remakeOfId: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, order: { select: { ...orderInfo.select, deletedAt: true } } } },
     },
   },
 } satisfies Prisma.KotSelect;
@@ -92,8 +99,11 @@ function toTicket(kot: TicketRow): KdsTicket | null {
     sentAt: kot.createdAt.toISOString(),
     bumpedAt: kot.bumpedAt?.toISOString() ?? null,
     printCount: kot.printCount,
+    note: kot.note,
     lines: live.map((line) => ({
       itemId: line.orderItem.id,
+      productId: line.orderItem.productId,
+      remake: !!line.orderItem.remakeOfId,
       name: line.name,
       quantity: line.quantity,
       modifiers: line.modifiers,

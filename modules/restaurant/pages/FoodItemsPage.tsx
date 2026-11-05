@@ -3,6 +3,7 @@ import { guardPage } from "../server/guard";
 import { getMenuCategories, getMenuItemList } from "../server/queries/menuItems";
 import { getStationOptions } from "../server/queries/stations";
 import { getModifierGroupOptions } from "../server/queries/modifierList";
+import FoodTabs from "../components/food/FoodTabs";
 import MenuItemsPanel from "../components/food/MenuItemsPanel";
 
 const PER_PAGE_OPTIONS = [10, 25, 50];
@@ -26,6 +27,7 @@ export default async function FoodItemsPage({ searchParams }: { searchParams: Pr
 
   return (
     <MenuItemsPanel
+      tabs={<FoodTabs active="items" />}
       rows={rows}
       groups={groups}
       categories={categories.map((c) => ({ value: c.id, label: c.name }))}

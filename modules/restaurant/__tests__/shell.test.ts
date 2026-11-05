@@ -19,13 +19,13 @@ const restaurantGroup = (permissions: Iterable<Permission>) =>
   visibleNav(new Set(permissions), ON).find((item) => item.key === "restaurant");
 
 describe("permissions", () => {
-  test("the 11 restaurant permissions come after the core 27, with matching keys", () => {
-    assert.equal(ALL_PERMISSIONS.length, 38);
+  test("the 13 restaurant permissions come after the core 27, with matching keys", () => {
+    assert.equal(ALL_PERMISSIONS.length, 40);
     assert.deepEqual(ALL_PERMISSIONS.slice(27), RESTAURANT);
     assert.equal(PERMISSIONS.KITCHEN_DISPLAY, "Kitchen Display");
     assert.equal(PERMISSIONS.MANAGE_KITCHEN, "Manage Kitchen");
     assert.equal(PERMISSIONS.MANAGE_SALE, "Manage Sale");
-    assert.equal(new Set(ALL_PERMISSIONS).size, 38, "no string is shared with the core set");
+    assert.equal(new Set(ALL_PERMISSIONS).size, 40, "no string is shared with the core set");
     assert.ok(CORE.every((p) => !RESTAURANT.includes(p as (typeof RESTAURANT)[number])));
   });
 
@@ -68,8 +68,15 @@ describe("sidebar", () => {
     // Part 4: Prep times (Restaurant Reports) and Stations (Restaurant Settings), sidebar only.
     assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_REPORTS])?.children?.map((c) => [c.label, c.href]), [["Prep times", "/restaurant/reports/prep-times"]]);
     assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_SETTINGS])?.children?.map((c) => [c.label, c.href]), [["Stations", "/restaurant/settings/stations"]]);
-    // Part 6: Approval PIN (Approve Discount), sidebar only.
+    // Part 6: Approval PIN (Approve Discount, or Approve Waste), sidebar only.
     assert.deepEqual(restaurantGroup([PERMISSIONS.APPROVE_DISCOUNT])?.children?.map((c) => [c.label, c.href]), [["Approval PIN", "/restaurant/settings/approval-pin"]]);
+    // Waste: Food (its Waste tab) for Log Waste or Approve Waste.
+    assert.deepEqual(restaurantGroup([PERMISSIONS.APPROVE_WASTE])?.children?.map((c) => [c.label, c.href]), [
+      ["Food", "/restaurant/food"],
+      ["Approval PIN", "/restaurant/settings/approval-pin"],
+    ]);
+    assert.deepEqual(restaurantGroup([PERMISSIONS.LOG_WASTE])?.children?.map((c) => [c.label, c.href]), [["Food", "/restaurant/food"]]);
+    assert.equal(PERMISSIONS.LOG_WASTE, "Log Waste");
     assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_KITCHEN]), undefined, "Manage Kitchen alone opens no page");
   });
 
@@ -110,6 +117,10 @@ describe("manifest", () => {
       restaurantManualCleaning: true,
       restaurantServiceChargePercent: new Prisma.Decimal(10),
       restaurantDiscountLimitPercent: new Prisma.Decimal(10),
+      restaurantWarehouseId: null,
+      restaurantWasteApprovalLimit: new Prisma.Decimal(0),
+      restaurantWasteAmberPercent: new Prisma.Decimal(5),
+      restaurantWasteRedPercent: new Prisma.Decimal(10),
     };
     const flag = restaurantModule.toggle.setting;
     assert.equal(restaurantModule.isEnabled({ ...settings, [flag]: true }), true);

@@ -331,6 +331,11 @@ export default function Ticket({
                 <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, textDecoration: line.cancelled ? "line-through" : "none", color: line.cancelled ? COLORS.slateMid : COLORS.ink }}>
                     {line.name}
+                    {line.remake && (
+                      <span data-remake style={{ marginLeft: 8, padding: "1px 7px", borderRadius: 10, background: "#fff4e0", color: "#8a5a00", fontSize: 11, fontWeight: 600, textDecoration: "none", display: "inline-block" }}>
+                        Remake
+                      </span>
+                    )}
                   </span>
                   {line.detail && <span style={{ fontSize: 12, color: COLORS.slateMid }}>{line.detail}</span>}
                 </div>
@@ -344,7 +349,7 @@ export default function Ticket({
                     opacity: shownQuantity(line) !== line.quantity ? 0.4 : 1,
                   }}
                 >
-                  {line.amount}
+                  {line.remake ? "No charge" : line.amount}
                 </span>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>

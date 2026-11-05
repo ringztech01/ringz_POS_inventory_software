@@ -53,7 +53,7 @@ export async function applyOrderDiscount(input: OrderDiscountInput, userId: stri
     } else {
       const lines = await tx.orderItem.findMany({
         where: { orderId },
-        select: { quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true },
+        select: { quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, remakeOfId: true },
       });
       const check = checkDiscount(summariseBill(lines, 0).subTotal, type, value, limit);
       if (!check.ok) return check;
@@ -105,7 +105,7 @@ export async function splitOrderBill(orderId: string, version: number, split: Bi
         serviceCharge: true,
         items: {
           orderBy: { createdAt: "asc" },
-          select: { id: true, quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, product: { select: { name: true } } },
+          select: { id: true, quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, remakeOfId: true, product: { select: { name: true } } },
         },
       },
     });

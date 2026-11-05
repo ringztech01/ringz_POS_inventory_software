@@ -7,7 +7,7 @@ import { addLineSchema, editLineSchema, lineQuantitySchema } from "../../schemas
 import { cancelLineSchema, cancelOrderSchema, lineActionSchema, sendToKitchenSchema, serveLinesSchema } from "../../schemas/orderFlow";
 import { requirePermission } from "../guard";
 import { safely } from "../safely";
-import { cancelLine, cancelOrder, markLineServed, markLinesServed, sendToKitchen, type SendResult } from "../services/orderFlow";
+import { cancelLine, cancelOrder, markLineServed, markLinesServed, sendToKitchen, type CancelLineResult, type SendResult } from "../services/orderFlow";
 import { addLine, editLine, setLineQuantity } from "../services/orderLines";
 import { changeOrderDetails, type OrderChangeResult } from "../services/orders";
 
@@ -104,13 +104,17 @@ export async function markOrderLineServed(input: unknown): Promise<OrderChangeRe
 }
 
 // Cancel a sent line, with a reason. Needs Manage Orders; the canceller is
-// recorded.
-export async function cancelOrderLine(input: unknown): Promise<OrderChangeResult> {
-  return safely("cancel order line", async (): Promise<OrderChangeResult> => {
+// recorded. Returned by guest with the food wasted also needs Log Waste.
+export async function cancelOrderLine(input: unknown): Promise<CancelLineResult> {
+  return safely("cancel order line", async (): Promise<CancelLineResult> => {
     const authCheck = await requireManageOrders();
     if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
     const parsed = cancelLineSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Pick a reason." };
+    if (parsed.data.wasted) {
+      const wasteCheck = await requirePermission(RESTAURANT_PERMISSIONS.LOG_WASTE);
+      if (wasteCheck.error !== undefined) return { ok: false, error: wasteCheck.error };
+    }
 
     const result = await cancelLine(parsed.data, authCheck.userId);
     if (result.ok) refresh();

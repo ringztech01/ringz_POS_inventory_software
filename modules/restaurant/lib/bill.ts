@@ -6,7 +6,8 @@ import { countsTowardsTotal, discountAmount, orderTotals, type OrderAdjustments,
 // The bill's rules (Bill panel, pre-bill, and later the settle):
 //
 //   billed      lines sent to the kitchen — Sent, Preparing, Ready, Served
-//   left out    cancelled (VOID) and removed lines: never billed
+//   left out    cancelled (VOID) and removed lines, and remakes (made at no
+//               charge — the line they remake is billed): never billed
 //   unsent      New lines: not billed, and the order can't be settled until
 //               they're sent or removed
 //   not served  billed lines not Served yet: a warning only
@@ -15,10 +16,12 @@ import { countsTowardsTotal, discountAmount, orderTotals, type OrderAdjustments,
 // (lib/pricing.ts — retail's tax rules), never from the browser. The
 // discount and service charge are the order's own (OrderAdjustments).
 
-export type BillLineInput = PricedLine & { kitchenStatus: KitchenStatus };
+// remakeOfId: set on a remake line (required, so every bill query selects it).
+export type BillLineInput = PricedLine & { kitchenStatus: KitchenStatus; remakeOfId: string | null };
 
-export const isBilled = (line: Pick<BillLineInput, "kitchenStatus" | "cancelledAt" | "deletedAt">) =>
-  countsTowardsTotal(line) && line.kitchenStatus !== "NEW";
+type BillRule = Pick<BillLineInput, "kitchenStatus" | "cancelledAt" | "deletedAt" | "remakeOfId">;
+
+export const isBilled = (line: BillRule) => countsTowardsTotal(line) && line.kitchenStatus !== "NEW" && !line.remakeOfId;
 export const isUnsent = (line: Pick<BillLineInput, "kitchenStatus" | "cancelledAt" | "deletedAt">) =>
   countsTowardsTotal(line) && line.kitchenStatus === "NEW";
 

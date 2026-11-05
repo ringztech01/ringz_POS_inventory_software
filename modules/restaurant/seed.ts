@@ -1,7 +1,7 @@
 // Sample restaurant data from the RingzPOS restaurant designs: dining areas
 // and tables (Main hall T1–T12, Patio P1–P4, Bar B1–B4), the menu with its
-// modifiers and recipes, ingredients with stock, some open orders and
-// today's reservations.
+// modifiers and recipes, ingredients with stock, some open orders,
+// today's reservations and some waste logged earlier today.
 //
 // Run with: npx tsx modules/restaurant/seed.ts [--warehouse "<name>"] [--user <email>]
 //   --warehouse  where the areas and stock go (default: the oldest active one)
@@ -9,11 +9,12 @@
 //                (default: the oldest active user)
 //
 // Safe to re-run: lookups are found or created, products are upserted by
-// code without overwriting edits, and orders / reservations are only added
-// while there are none. It never creates warehouses or users.
+// code without overwriting edits, and orders / reservations / waste are only
+// added while there are none. It never creates warehouses or users.
 import { prisma } from "@/lib/db";
 import { todayInAppZone } from "@/lib/dateRanges";
-import type { KitchenStatus, OrderStatus, OrderType, PrepStation, Prisma } from "@prisma/client";
+import { Prisma, type KitchenStatus, type OrderStatus, type OrderType, type PrepStation, type WasteReason } from "@prisma/client";
+import { decreaseStock, increaseStock } from "@/lib/stock";
 import { newQrToken } from "./lib/qrToken";
 
 function flag(name: string): string | undefined {
@@ -113,6 +114,18 @@ const RESERVATIONS: [string, string, number, string, string, "BOOKED" | "NO_SHOW
   ["19:30", "Okafor", 6, "0812 554 0192", "T5", "BOOKED"],
   ["20:00", "Bello", 4, "0705 300 8841", "T10", "BOOKED"],
   ["18:00", "Nwosu", 3, "0809 771 2200", "P3", "NO_SHOW"],
+];
+
+// Waste logged earlier today (Restaurant › Food › Waste): raw ingredients and
+// a dish with no recipe — whole units, as stock is; none of the dashboard's
+// low-stock five — one with a note, and one voided (its stock put back).
+// Each takes its stock out as logged: item, qty in its own unit.
+const WASTE: { item: string; qty: number; reason: WasteReason; note?: string; minutesAgo: number; voided?: string }[] = [
+  { item: "Fanta", qty: 2, reason: "EXPIRED", minutesAgo: 50 },
+  { item: "Goat meat", qty: 1, reason: "EXPIRED", minutesAgo: 45 },
+  { item: "Spring Rolls", qty: 4, reason: "OVERPRODUCTION", minutesAgo: 35 },
+  { item: "Chicken wings", qty: 1, reason: "OTHER", note: "Freezer door left open overnight", minutesAgo: 25 },
+  { item: "Beef sirloin", qty: 1, reason: "BURNT", minutesAgo: 15, voided: "Logged on the wrong item" },
 ];
 
 // ---- Helpers --------------------------------------------------------------
@@ -341,9 +354,48 @@ async function main() {
     }
   }
 
+  // Waste: its stock out of the warehouse with the entry, each in its own
+  // transaction (retail's decreaseStock — never below zero); the voided one
+  // put back and marked VOID, with its VOID entry.
+  let waste = 0;
+  if ((await prisma.wasteEntry.count()) === 0) {
+    for (const w of WASTE) {
+      const product = await prisma.product.findUniqueOrThrow({
+        where: { id: products.get(w.item)!.id },
+        select: { id: true, name: true, cost: true, unit: { select: { name: true } } },
+      });
+      const unitCost = new Prisma.Decimal(product.cost ?? 0);
+      const lineCost = unitCost.times(w.qty).toDecimalPlaces(2);
+      const entry = (minutesAgo: number) => ({
+        warehouseId: warehouse.id,
+        productId: product.id,
+        qty: w.qty,
+        unit: product.unit.name,
+        reason: w.reason,
+        note: w.note ?? null,
+        costSnapshot: lineCost,
+        loggedById: user.id,
+        createdAt: minutesBefore(now, minutesAgo),
+        lines: { create: [{ productId: product.id, qty: w.qty, unitCost, lineCost }] },
+      });
+      await prisma.$transaction(async (tx) => {
+        const stockLine = { productId: product.id, warehouseId: warehouse.id, quantity: w.qty };
+        await decreaseStock(tx, { ...stockLine, productName: product.name, warehouseName: warehouse.name });
+        const logged = await tx.wasteEntry.create({ data: entry(w.minutesAgo), select: { id: true } });
+        if (w.voided) {
+          await increaseStock(tx, stockLine);
+          await tx.wasteEntry.update({ where: { id: logged.id }, data: { status: "VOID", version: { increment: 1 } } });
+          await tx.wasteEntry.create({ data: { ...entry(w.minutesAgo - 5), status: "VOID", voidOfId: logged.id, voidReason: w.voided } });
+        }
+      });
+      waste++;
+    }
+  }
+
   console.log(
     `Menu: ${MENU.length} items (${newItems} new) · ingredients: ${INGREDIENTS.length} · areas: ${AREAS.length} · tables: ${tables.size}`,
   );
+  console.log(`Waste: ${waste ? `${waste} entries added` : "skipped (waste already logged)"}`);
   console.log(
     `Orders: ${orders ? `${orders} added` : "skipped (orders already exist)"} · reservations: ${reservations ? `${reservations} added` : "skipped (reservations already exist)"}`,
   );

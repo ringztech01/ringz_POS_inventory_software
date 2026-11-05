@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { Banknote, CircleX, ClipboardList, Clock, ConciergeBell, LayoutGrid, ReceiptText, Users } from "lucide-react";
+import { Banknote, CircleX, ClipboardList, Clock, ConciergeBell, LayoutGrid, ReceiptText, Trash2, Users } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
+import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { formatNaira } from "@/lib/format";
 import {
   averageBill,
@@ -12,7 +13,11 @@ import {
   percentNote,
   PREP_TARGET_MINUTES,
   resolvePeriod,
+  WASTE_LABEL,
+  wasteShareNote,
+  type WasteLevel,
 } from "../lib/dashboard";
+import type { KpiTone } from "../lib/theme";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
 import { loadWidget } from "../server/safely";
@@ -28,17 +33,23 @@ import {
   getRevenue,
   getSalesByHour,
   getTopDishes,
+  getTopWastedItems,
+  getWasteKpi,
 } from "../server/queries/dashboard";
 import HeaderActions from "../components/HeaderActions";
 import KpiTile from "../components/dashboard/KpiTile";
 import RangeSelect from "../components/dashboard/RangeSelect";
 import SalesByHour from "../components/dashboard/SalesByHour";
 import OrderTypeMix from "../components/dashboard/OrderTypeMix";
-import { LiveOpenOrders, LowStockIngredients, TopDishes } from "../components/dashboard/DashboardLists";
+import { LiveOpenOrders, LowStockIngredients, TopDishes, TopWastedItems } from "../components/dashboard/DashboardLists";
+
+// The Waste tile's colour by level (amber / red above the settings' %).
+const WASTE_TONE: Record<WasteLevel, KpiTone> = { ok: "green", amber: "amber", red: "rose" };
 
 // /restaurant[?range=today|yesterday|7d] — RingzPOS Restaurant Dashboard:
 // eight KPI tiles, Sales by hour, Order type mix, Live open orders, Top
-// dishes and Low-stock ingredients. Each widget loads on its own (all at
+// dishes and Low-stock ingredients; then Waste (the period's, against its
+// food cost) and Top wasted items (the last 7 days). Each widget loads on its own (all at
 // once), so one that fails shows its error and the rest still render.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
   const denied = await guardPage(RESTAURANT_PERMISSIONS.RESTAURANT_DASHBOARD);
@@ -46,7 +57,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
   const now = new Date();
   const period = resolvePeriod((await searchParams).range, now);
-  const [revenue, orders, floor, open, prep, cancelled, hours, mix, dishes, lowStock, warehouses] = await Promise.all([
+  const [revenue, orders, floor, open, prep, cancelled, hours, mix, dishes, lowStock, warehouses, waste, wasted, current] = await Promise.all([
     loadWidget("revenue", getRevenue(period)),
     loadWidget("orders", getOrderKpis(period)),
     loadWidget("tables occupied", getFloorNow()),
@@ -58,7 +69,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     loadWidget("top dishes", getTopDishes(period)),
     loadWidget("low stock", getLowStockIngredients()),
     loadWidget("warehouses", getRestaurantWarehouses()),
+    loadWidget("waste", getWasteKpi(period)),
+    loadWidget("top wasted items", getTopWastedItems(now)),
+    getCurrentUserPermissions(),
   ]);
+  const canOpenWaste = current.permissions.has(RESTAURANT_PERMISSIONS.LOG_WASTE) || current.permissions.has(RESTAURANT_PERMISSIONS.APPROVE_WASTE);
   const vsName = period.previousName;
   const place = warehouses.ok && warehouses.data.length ? `${warehouses.data.join(", ")} · ` : "";
 
@@ -142,6 +157,17 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <LiveOpenOrders data={open.ok ? open.data : null} />
         <TopDishes rows={dishes.ok ? dishes.data : null} />
         <LowStockIngredients data={lowStock.ok ? lowStock.data : null} showWarehouse={warehouses.ok && warehouses.data.length > 1} />
+      </div>
+
+      <div style={{ display: "grid", gridTemplateColumns: "minmax(0,1fr) minmax(0,3fr)", gap: 14, alignItems: "start" }}>
+        <KpiTile
+          label={WASTE_LABEL[period.key]}
+          tone={waste.ok ? WASTE_TONE[waste.data.level] : "green"}
+          icon={Trash2}
+          value={waste.ok ? formatNaira(waste.data.cost) : null}
+          note={waste.ok ? wasteShareNote(waste.data.share, waste.data.foodCost, waste.data.entries) : ""}
+        />
+        <TopWastedItems data={wasted.ok ? wasted.data : null} canOpen={canOpenWaste} />
       </div>
     </div>
   );

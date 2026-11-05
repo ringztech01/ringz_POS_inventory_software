@@ -70,10 +70,12 @@ export async function setServiceCharge(input: unknown): Promise<OrderChangeResul
   });
 }
 
-// My approval PIN: the signed-in user's own, so Approve Discount is needed.
+// My approval PIN: the signed-in user's own, so Approve Discount or Approve
+// Waste is needed.
 export async function saveApprovalPin(input: unknown): Promise<ActionResult<"pin" | "confirm">> {
   return safely("save approval PIN", async (): Promise<ActionResult<"pin" | "confirm">> => {
-    const authCheck = await requirePermission(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT);
+    const discount = await requirePermission(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT);
+    const authCheck = discount.error === undefined ? discount : await requirePermission(RESTAURANT_PERMISSIONS.APPROVE_WASTE);
     if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
     const parsed = approvalPinSchema.safeParse(input);
     if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);

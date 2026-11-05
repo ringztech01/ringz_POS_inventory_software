@@ -14,6 +14,10 @@ export type BusinessSettings = Pick<
   | "restaurantManualCleaning"
   | "restaurantServiceChargePercent"
   | "restaurantDiscountLimitPercent"
+  | "restaurantWarehouseId"
+  | "restaurantWasteApprovalLimit"
+  | "restaurantWasteAmberPercent"
+  | "restaurantWasteRedPercent"
 >;
 
 // The schema's defaults: what applies until the row is first saved.
@@ -24,6 +28,10 @@ const DEFAULTS: BusinessSettings = {
   restaurantManualCleaning: true,
   restaurantServiceChargePercent: new Prisma.Decimal(10),
   restaurantDiscountLimitPercent: new Prisma.Decimal(10),
+  restaurantWarehouseId: null,
+  restaurantWasteApprovalLimit: new Prisma.Decimal(0),
+  restaurantWasteAmberPercent: new Prisma.Decimal(5),
+  restaurantWasteRedPercent: new Prisma.Decimal(10),
 };
 
 // Read-only — never creates the row (the Settings page's save does).
@@ -38,6 +46,10 @@ export const getBusinessSettings = cache(async (): Promise<BusinessSettings> => 
       restaurantManualCleaning: true,
       restaurantServiceChargePercent: true,
       restaurantDiscountLimitPercent: true,
+      restaurantWarehouseId: true,
+      restaurantWasteApprovalLimit: true,
+      restaurantWasteAmberPercent: true,
+      restaurantWasteRedPercent: true,
     },
   });
   return row ?? DEFAULTS;

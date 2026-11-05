@@ -52,7 +52,7 @@ export async function planSettlement(tx: Prisma.TransactionClient, input: Settle
       discountType: true,
       discountValue: true,
       serviceCharge: true,
-      items: { select: { quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true } },
+      items: { select: { quantity: true, unitPrice: true, taxType: true, taxRate: true, kitchenStatus: true, cancelledAt: true, deletedAt: true, remakeOfId: true } },
       billParts: { where: { deletedAt: null }, select: { id: true, amount: true, status: true } },
     },
   });
@@ -183,6 +183,7 @@ export async function settleOrder(input: SettleInput, userId: string): Promise<S
                   kitchenStatus: true,
                   cancelledAt: true,
                   deletedAt: true,
+                  remakeOfId: true,
                   product: {
                     select: {
                       name: true,

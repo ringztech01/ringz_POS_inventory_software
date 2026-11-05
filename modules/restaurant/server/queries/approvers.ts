@@ -1,15 +1,19 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
+import type { ApprovalPermission } from "../services/approvalPins";
 import { hasPermissionWhere } from "../services/orders";
 
-// Who can approve a discount above the limit: users with Approve Discount
-// who have set an approval PIN — the Bill panel's approver list.
+// Who can approve a discount (or waste) above its limit: users with Approve
+// Discount (Approve Waste) who have set an approval PIN — the approver lists.
 export type Approver = { id: string; name: string };
 
-export async function getDiscountApprovers(): Promise<Approver[]> {
+export const getDiscountApprovers = () => getApprovers(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT);
+export const getWasteApprovers = () => getApprovers(RESTAURANT_PERMISSIONS.APPROVE_WASTE);
+
+async function getApprovers(permission: ApprovalPermission): Promise<Approver[]> {
   const users = await prisma.user.findMany({
-    where: { ...hasPermissionWhere(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT), approvalPin: { isNot: null } },
+    where: { ...hasPermissionWhere(permission), approvalPin: { isNot: null } },
     orderBy: [{ firstName: "asc" }, { lastName: "asc" }],
     select: { id: true, firstName: true, lastName: true },
   });

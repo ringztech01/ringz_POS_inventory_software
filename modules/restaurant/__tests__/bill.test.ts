@@ -12,6 +12,7 @@ const line = (quantity: number, unitPrice: string, kitchenStatus: KitchenStatus,
   cancelledAt: null,
   deletedAt: null,
   kitchenStatus,
+  remakeOfId: null,
   ...extra,
 });
 const money = (s: ReturnType<typeof summariseBill>) => ({

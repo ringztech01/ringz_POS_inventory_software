@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { MAX_LINE_QUANTITY } from "../../lib/modifiers";
 import toast from "react-hot-toast";
 import { formatNaira } from "@/lib/format";
-import type { CancelReason } from "../../lib/cancelReasons";
+import { cancelReasonsFor, type CancelReason } from "../../lib/cancelReasons";
 import {
   addOrderLine,
   cancelOrderLine,
@@ -27,7 +27,7 @@ import type { DiscountOutcome, DiscountRequest } from "./DiscountModal";
 import type { SettleOutcome, SettleRequest } from "./PaymentModal";
 import SettledModal, { type Settled } from "./SettledModal";
 import RefundModal, { type RefundOutcome, type RefundRequest } from "./RefundModal";
-import CancelModal from "./CancelModal";
+import CancelModal, { type CancelExtras, type CancelOutcome } from "./CancelModal";
 import MenuPanel from "./MenuPanel";
 import ModifierModal from "./ModifierModal";
 import Ticket from "./Ticket";
@@ -56,6 +56,7 @@ export default function OrderScreen({
   data,
   bill,
   approvers,
+  waste,
   canSettle,
   refundView,
   floorHref,
@@ -63,6 +64,9 @@ export default function OrderScreen({
   data: OrderScreenData;
   bill: BillView;
   approvers: Approver[];
+  // Log Waste: Returned by guest can log the food as waste (with the waste
+  // approvers for over the limit); null without it.
+  waste: { approvers: Approver[] } | null;
   // The signed-in user has Settle Bill (settles and refunds).
   canSettle: boolean;
   // A settled bill's sale, for the Refund pop-up (null otherwise).
@@ -169,19 +173,27 @@ export default function OrderScreen({
     });
   }
 
-  function submitCancel(reason: CancelReason, details: string): Promise<boolean> {
-    if (!cancelling) return Promise.resolve(false);
+  // A line's refusals over the waste limit (a PIN needed, a wrong one) come
+  // back to its pop-up instead of a toast.
+  async function submitCancel(reason: CancelReason, details: string, extras: CancelExtras): Promise<CancelOutcome> {
+    if (!cancelling) return { ok: false };
     if (cancelling.mode === "line") {
       const { line } = cancelling;
-      return run((version) => cancelOrderLine({ orderId, version, lineId: line.id, reason, details })).then((ok) => {
-        if (ok) toast.success(`${line.name} cancelled.`);
-        return ok;
-      });
+      const refused: { result?: CancelOutcome } = {};
+      const accepted = await run(
+        async (version) => {
+          const result = await cancelOrderLine({ orderId, version, lineId: line.id, reason, details, wasted: extras.wasted, approval: extras.approval });
+          if (!result.ok) refused.result = { ok: false, error: result.error, needsApproval: "needsApproval" in result && !!result.needsApproval };
+          else toast.success(extras.wasted ? `${line.name} cancelled and logged as waste.` : `${line.name} cancelled.`);
+          return result;
+        },
+        { quiet: extras.wasted },
+      );
+      return accepted ? { ok: true } : (refused.result ?? { ok: false });
     }
-    return run((version) => cancelRestaurantOrder({ orderId, version, reason, details })).then((ok) => {
-      if (ok) toast.success(data.order.tableName ? `Order cancelled. Table ${data.order.tableName} is free.` : "Order cancelled.");
-      return ok;
-    });
+    const ok = await run((version) => cancelRestaurantOrder({ orderId, version, reason, details }));
+    if (ok) toast.success(data.order.tableName ? `Order cancelled. Table ${data.order.tableName} is free.` : "Order cancelled.");
+    return ok ? { ok: true } : { ok: false };
   }
 
   // The Bill panel's discount: refusals (over the limit, a wrong PIN) come
@@ -327,6 +339,9 @@ export default function OrderScreen({
               : "The order closes and its table is free again. Why is it being cancelled?"
           }
           confirmLabel={cancelling.mode === "line" ? "Cancel line" : "Cancel order"}
+          reasons={cancelReasonsFor(cancelling.mode === "line" ? { served: cancelling.line.kitchenStatus === "SERVED" } : "order")}
+          askWasted={!!waste}
+          approvers={waste?.approvers ?? []}
           onSubmit={submitCancel}
           onClose={() => setCancelling(null)}
         />

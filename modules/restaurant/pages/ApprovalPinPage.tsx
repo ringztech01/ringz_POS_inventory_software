@@ -1,15 +1,15 @@
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { FONTS } from "@/components/layout/theme";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
-import { guardPage } from "../server/guard";
+import { guardPageAny } from "../server/guard";
 import { getApprovalPinStatus } from "../server/queries/approvers";
 import ApprovalPinForm from "../components/settings/ApprovalPinForm";
 
 // /restaurant/settings/approval-pin — My approval PIN: the signed-in user's
-// own PIN for approving discounts above the limit on a bill. Needs Approve
-// Discount.
+// own PIN for approving a discount or waste above its limit. Needs Approve
+// Discount or Approve Waste.
 export default async function ApprovalPinPage() {
-  const denied = await guardPage(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT);
+  const denied = await guardPageAny([RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT, RESTAURANT_PERMISSIONS.APPROVE_WASTE]);
   if (denied) return denied;
 
   const { userId } = await getCurrentUserPermissions();

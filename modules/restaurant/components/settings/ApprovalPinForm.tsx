@@ -10,7 +10,7 @@ import { saveApprovalPin } from "../../server/actions/bill";
 const field = { height: 40, border: `1px solid ${COLORS.borderStrong}`, borderRadius: 8, padding: "0 12px", fontSize: 15, letterSpacing: ".3em", outline: "none" } as const;
 const digits = (value: string) => value.replace(/\D/g, "").slice(0, 6);
 
-// Set or change the PIN typed on a bill to approve a discount above the
+// Set or change the PIN typed to approve a discount or waste above its
 // limit. Only its hash is kept; nobody can read it back.
 export default function ApprovalPinForm({ hasPin, updatedAt }: { hasPin: boolean; updatedAt: string | null }) {
   const [pin, setPin] = useState("");
@@ -47,7 +47,7 @@ export default function ApprovalPinForm({ hasPin, updatedAt }: { hasPin: boolean
       <p style={{ margin: 0, fontSize: 13.5, color: COLORS.slate, display: "flex", gap: 8 }}>
         <KeyRound size={16} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1, color: COLORS.tealDark }} />
         <span>
-          A waiter giving a discount above the limit picks you and you type this PIN on their screen. 4 to 6 digits; keep it to yourself.
+          When a discount or waste needs approving, you&apos;re picked from the list and type this PIN on that screen. 4 to 6 digits; keep it to yourself.
         </span>
       </p>
       <span data-pin-status style={{ fontSize: 12.5, color: COLORS.slateMid }}>

@@ -165,3 +165,49 @@ export type StockLevel = "Critical" | "Low";
 export function stockLevel(quantity: number, alert: number): StockLevel {
   return quantity * 2 <= alert ? "Critical" : "Low";
 }
+
+// ---- Waste -------------------------------------------------------------------
+
+// The Waste tile's label for the period.
+export const WASTE_LABEL: Record<DashboardRangeKey, string> = { today: "Waste today", yesterday: "Waste yesterday", "7d": "Waste · 7 days" };
+
+// Food cost: what the period's billed lines took from stock, at each
+// product's cost — a line's stockPerUnit (written at settle: its
+// ingredients by the recipe then, or the dish itself) × its quantity. A
+// product with no cost counts as ₦0; a line without stockPerUnit (settled
+// before it was recorded) adds nothing.
+export function foodCostOf(lines: readonly { quantity: number; stockPerUnit: unknown }[], costOf: ReadonlyMap<string, Decimal.Value>): Decimal {
+  let total = new Decimal(0);
+  for (const line of lines) {
+    if (!Array.isArray(line.stockPerUnit)) continue;
+    for (const move of line.stockPerUnit as { productId?: unknown; quantity?: unknown }[]) {
+      if (typeof move?.productId !== "string") continue;
+      const quantity = new Decimal(String(move.quantity ?? 0)).times(line.quantity);
+      total = total.plus(quantity.times(costOf.get(move.productId) ?? 0));
+    }
+  }
+  return total.toDecimalPlaces(2, Decimal.ROUND_HALF_UP);
+}
+
+// The waste's share of the food cost (%, 1 decimal); null with no food cost.
+export function wasteShare(waste: Decimal.Value, foodCost: Decimal.Value): number | null {
+  const base = new Decimal(foodCost);
+  if (!base.greaterThan(0)) return null;
+  return new Decimal(waste).div(base).times(100).toDecimalPlaces(1, Decimal.ROUND_HALF_UP).toNumber();
+}
+
+// The tile's colour: amber above the amber %, red above the red % (both
+// settings). No food cost: amber if anything was wasted, else ok.
+export type WasteLevel = "ok" | "amber" | "red";
+export function wasteLevel(share: number | null, waste: Decimal.Value, amberPercent: Decimal.Value, redPercent: Decimal.Value): WasteLevel {
+  if (share === null) return new Decimal(waste).greaterThan(0) ? "amber" : "ok";
+  if (new Decimal(share).greaterThan(redPercent)) return "red";
+  if (new Decimal(share).greaterThan(amberPercent)) return "amber";
+  return "ok";
+}
+
+// "3.2% of food cost (₦1,200.00)", or why there's no share.
+export function wasteShareNote(share: number | null, foodCost: Decimal.Value, entries: number): string {
+  if (share !== null) return `${share}% of food cost (${formatNaira(new Decimal(foodCost).toFixed(2))})`;
+  return entries === 0 ? "Nothing wasted" : "No food cost billed yet";
+}

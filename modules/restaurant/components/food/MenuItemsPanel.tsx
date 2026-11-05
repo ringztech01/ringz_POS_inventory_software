@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState, useTransition } from "react";
+import { Suspense, useState, useTransition, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import toast from "react-hot-toast";
@@ -18,7 +18,6 @@ import { deleteMenuItem } from "../../server/actions/menuItems";
 import type { MenuItemRow } from "../../server/queries/menuItems";
 import type { ModifierGroupOption } from "../../server/queries/modifierList";
 import ItemGroupsModal from "./ItemGroupsModal";
-import FoodTabs from "./FoodTabs";
 import MenuItemModal from "./MenuItemModal";
 import MenuSwitch from "./MenuSwitch";
 
@@ -133,6 +132,7 @@ function SidePanel({ item }: { item: MenuItemRow | null }) {
 }
 
 export default function MenuItemsPanel({
+  tabs,
   rows,
   groups,
   categories,
@@ -144,6 +144,8 @@ export default function MenuItemsPanel({
   total,
   totalPages,
 }: {
+  // The Food tabs (a server component: they follow the user's permissions).
+  tabs: ReactNode;
   rows: MenuItemRow[];
   // Every modifier group (the Modifiers pop-up).
   groups: ModifierGroupOption[];
@@ -182,7 +184,7 @@ export default function MenuItemsPanel({
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap" }}>
         <h1 style={{ margin: 0, fontFamily: FONTS.display, fontSize: 24, fontWeight: 600 }}>Food</h1>
-        <FoodTabs active="items" />
+        {tabs}
         <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 10 }}>
           <Suspense fallback={null}>
             <CategoryFilter categories={categories} value={categoryId} />

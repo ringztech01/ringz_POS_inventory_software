@@ -143,6 +143,23 @@ enum ReservationStatus {
   NO_SHOW
 }
 
+// Why food or stock was thrown away (WasteEntry.reason). OTHER needs a note.
+enum WasteReason {
+  BURNT
+  EXPIRED
+  DROPPED
+  RETURNED_BY_GUEST
+  OVERPRODUCTION
+  OTHER
+}
+
+// ACTIVE: the waste's stock is out. VOID: an entry that was voided, or the
+// VOID entry that reversed it (voidOfId) — the same pattern as KOTs.
+enum WasteStatus {
+  ACTIVE
+  VOID
+}
+
 // Business-wide settings: a single row, id "default". Read through
 // lib/business-settings.ts, which falls back to these defaults until the row
 // is first saved (from the Settings page).
@@ -164,8 +181,21 @@ model BusinessSetting {
   // A discount above this % of the bill's sub total needs a PIN from someone
   // with Approve Discount.
   restaurantDiscountLimitPercent  Decimal  @default(10) @db.Decimal(5, 2)
+  // Waste is taken out of this warehouse (an order line's waste: its order's
+  // warehouse). Filled by the add_waste migration with the dining areas'.
+  restaurantWarehouseId           String?
+  // Waste costing more than this (₦) needs a PIN from someone with Approve
+  // Waste; 0: no approval needed.
+  restaurantWasteApprovalLimit    Decimal  @default(0) @db.Decimal(12, 2)
+  // The dashboard's Waste today KPI turns amber / red above these % of
+  // today's food cost.
+  restaurantWasteAmberPercent     Decimal  @default(5) @db.Decimal(5, 2)
+  restaurantWasteRedPercent       Decimal  @default(10) @db.Decimal(5, 2)
   createdAt                       DateTime @default(now())
   updatedAt                       DateTime @updatedAt
+
+  restaurantWarehouse Warehouse?   @relation("RestaurantWarehouse", fields: [restaurantWarehouseId], references: [id])
+  wasteEntries        WasteEntry[]
 }
 
 model User {
@@ -206,6 +236,8 @@ model User {
   settlements        OrderSettlement[]
   tips               OrderTip[]          @relation("OrderTipWaiter")
   orderRefunds       OrderRefund[]
+  wasteLogged        WasteEntry[]        @relation("WasteLoggedBy")
+  wasteApproved      WasteEntry[]        @relation("WasteApprovedBy")
 
   @@index([deletedAt])
   @@index([roleId])
@@ -258,12 +290,15 @@ model Warehouse {
   purchaseReturns PurchaseReturn[]
   sales           Sale[]
   saleReturns     SaleReturn[]
-  transfersOut    Transfer[]       @relation("TransferFrom")
-  transfersIn     Transfer[]       @relation("TransferTo")
+  transfersOut    Transfer[]        @relation("TransferFrom")
+  transfersIn     Transfer[]        @relation("TransferTo")
   expenses        Expense[]
   // Restaurant module.
   diningAreas     DiningArea[]
   orders          Order[]
+  wasteEntries    WasteEntry[]
+  // The restaurant's warehouse (BusinessSetting.restaurantWarehouseId).
+  restaurantFor   BusinessSetting[] @relation("RestaurantWarehouse")
 
   @@index([deletedAt])
 }
@@ -326,39 +361,39 @@ model Unit {
 }
 
 model Product {
-  id                 String    @id @default(cuid())
+  id                 String       @id @default(cuid())
   name               String
-  code               String    @unique
-  price              Decimal   @db.Decimal(12, 2)
+  code               String       @unique
+  price              Decimal      @db.Decimal(12, 2)
   // Default net unit cost for purchase lines; not yet on the Product form.
-  cost               Decimal?  @db.Decimal(12, 2)
+  cost               Decimal?     @db.Decimal(12, 2)
   categoryId         String
   brandId            String
   unitId             String
   stockAlert         Int?
-  orderTax           Decimal?  @db.Decimal(5, 2)
+  orderTax           Decimal?     @db.Decimal(5, 2)
   taxType            TaxType
   quantityLimitation Int?
-  notes              String?   @db.Text
+  notes              String?      @db.Text
   // Array of uploaded image paths; the first entry is the list thumbnail.
   // MySQL has no native array column, so this is stored as JSON.
   images             Json?
   // Restaurant module. Every existing product is STANDARD (retail); the
   // other columns only mean something for MENU_ITEM.
-  productType        ProductType @default(STANDARD)
+  productType        ProductType  @default(STANDARD)
   // Listed on the digital menu.
-  showOnMenu         Boolean   @default(false)
+  showOnMenu         Boolean      @default(false)
   // Can be ordered right now (off: "Unavailable" on the menu and order screen).
-  isAvailable        Boolean   @default(true)
+  isAvailable        Boolean      @default(true)
   // Superseded by stationId (kept so nothing existing changes).
   prepStation        PrepStation?
   // Where it's made (the kitchen display's station). None: the first active
   // station.
   stationId          String?
-  menuDescription    String?   @db.Text
+  menuDescription    String?      @db.Text
   menuImage          String?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
   deletedAt          DateTime?
 
   category            Category             @relation(fields: [categoryId], references: [id])
@@ -376,6 +411,8 @@ model Product {
   modifierGroups      ModifierGroup[]
   recipeLines         RecipeLine[]         @relation("RecipeMenuItem")
   usedInRecipes       RecipeLine[]         @relation("RecipeIngredient")
+  wasteEntries        WasteEntry[]
+  wasteLines          WasteEntryLine[]
   kitchenStation      KitchenStation?      @relation(fields: [stationId], references: [id], onDelete: SetNull)
 
   @@index([deletedAt])
@@ -596,15 +633,15 @@ model Sale {
   updatedAt      DateTime       @updatedAt
   deletedAt      DateTime?
 
-  customer  Customer      @relation(fields: [customerId], references: [id])
-  warehouse Warehouse     @relation(fields: [warehouseId], references: [id])
-  createdBy User          @relation(fields: [createdById], references: [id])
-  items     SaleItem[]
-  payments  SalePayment[]
-  returns   SaleReturn[]
+  customer              Customer          @relation(fields: [customerId], references: [id])
+  warehouse             Warehouse         @relation(fields: [warehouseId], references: [id])
+  createdBy             User              @relation(fields: [createdById], references: [id])
+  items                 SaleItem[]
+  payments              SalePayment[]
+  returns               SaleReturn[]
   // Restaurant module: the order this sale billed, if any, and each time
   // part of its bill was paid.
-  order     Order?
+  order                 Order?
   restaurantSettlements OrderSettlement[]
 
   @@index([deletedAt])
@@ -690,12 +727,12 @@ model SaleReturn {
   updatedAt      DateTime         @updatedAt
   deletedAt      DateTime?
 
-  sale      Sale?               @relation(fields: [saleId], references: [id])
-  customer  Customer            @relation(fields: [customerId], references: [id])
-  warehouse Warehouse           @relation(fields: [warehouseId], references: [id])
-  createdBy User                @relation(fields: [createdById], references: [id])
-  items     SaleReturnItem[]
-  payments  SaleReturnPayment[]
+  sale             Sale?               @relation(fields: [saleId], references: [id])
+  customer         Customer            @relation(fields: [customerId], references: [id])
+  warehouse        Warehouse           @relation(fields: [warehouseId], references: [id])
+  createdBy        User                @relation(fields: [createdById], references: [id])
+  items            SaleReturnItem[]
+  payments         SaleReturnPayment[]
   // Restaurant module: the refund of a settled bill this return records.
   restaurantRefund OrderRefund?
 
@@ -870,10 +907,10 @@ model Customer {
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
 
-  sales       Sale[]
-  saleReturns SaleReturn[]
+  sales        Sale[]
+  saleReturns  SaleReturn[]
   // Restaurant module.
-  orders      Order[]
+  orders       Order[]
   reservations Reservation[]
 
   @@index([deletedAt])
@@ -933,29 +970,29 @@ model Table {
 // Billing creates an ordinary Sale (saleId); revenue is counted only through
 // that link.
 model Order {
-  id            String      @id @default(cuid())
+  id                   String             @id @default(cuid())
   // Shown as ORD-0142; MySQL keeps the counter.
-  number        Int         @unique @default(autoincrement())
-  type          OrderType   @default(DINE_IN)
-  status        OrderStatus @default(OPEN)
-  tableId       String?
-  warehouseId   String
-  customerId    String?
-  waiterId      String?
-  guests        Int         @default(1)
-  saleId        String?     @unique
-  notes         String?     @db.Text
-  openedAt      DateTime    @default(now())
-  closedAt      DateTime?
+  number               Int                @unique @default(autoincrement())
+  type                 OrderType          @default(DINE_IN)
+  status               OrderStatus        @default(OPEN)
+  tableId              String?
+  warehouseId          String
+  customerId           String?
+  waiterId             String?
+  guests               Int                @default(1)
+  saleId               String?            @unique
+  notes                String?            @db.Text
+  openedAt             DateTime           @default(now())
+  closedAt             DateTime?
   // The guest's pre-bill ("NOT A RECEIPT") was last printed; cleared by any
   // change to the order after that.
-  billPrintedAt DateTime?
+  billPrintedAt        DateTime?
   // Set when a change clears billPrintedAt: the printed bill is out of date
   // ("Bill changed since print"). Cleared by the next print.
-  billChangedAt DateTime?
+  billChangedAt        DateTime?
   // The service charge (BusinessSetting.restaurantServiceChargePercent) is
   // added to this order's bill.
-  serviceCharge Boolean     @default(true)
+  serviceCharge        Boolean            @default(true)
   // The discount — none while discountType is NULL. One above the limit
   // (BusinessSetting.restaurantDiscountLimitPercent) has an approver.
   discountType         OrderDiscountType?
@@ -964,35 +1001,35 @@ model Order {
   discountById         String?
   discountApprovedById String?
   // Why it was cancelled ("Merged into ORD-0142", or the reason given).
-  cancelReason  String?
+  cancelReason         String?
   // +1 on every change to the order or its lines. Each change sends the
   // version its screen showed; a different one means someone else changed it.
-  version       Int         @default(0)
+  version              Int                @default(0)
   // GENERATED by MySQL (see the add_restaurant migration), never written by
   // the app: tableId while the order is OPEN, SENT or SERVED and not deleted,
   // otherwise NULL. Its unique index is the "one active order per table"
   // rule; NULLs don't collide.
-  activeTableId String?     @unique
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  deletedAt     DateTime?
+  activeTableId        String?            @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  deletedAt            DateTime?
 
   // RESTRICT: MySQL allows no CASCADE / SET NULL on a column a stored
   // generated column reads (tableId). Tables are only ever soft-deleted.
-  table       Table?       @relation(fields: [tableId], references: [id], onDelete: Restrict, onUpdate: Restrict)
-  warehouse   Warehouse    @relation(fields: [warehouseId], references: [id])
-  customer    Customer?    @relation(fields: [customerId], references: [id])
-  waiter      User?        @relation("OrderWaiter", fields: [waiterId], references: [id])
-  discountBy         User? @relation("OrderDiscountBy", fields: [discountById], references: [id])
-  discountApprovedBy User? @relation("OrderDiscountApprovedBy", fields: [discountApprovedById], references: [id])
-  sale        Sale?        @relation(fields: [saleId], references: [id])
-  items       OrderItem[]
-  reservation Reservation?
-  kots        Kot[]
-  billParts   OrderBillPart[]
-  settlements OrderSettlement[]
-  tips        OrderTip[]
-  refunds     OrderRefund[]
+  table              Table?            @relation(fields: [tableId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  warehouse          Warehouse         @relation(fields: [warehouseId], references: [id])
+  customer           Customer?         @relation(fields: [customerId], references: [id])
+  waiter             User?             @relation("OrderWaiter", fields: [waiterId], references: [id])
+  discountBy         User?             @relation("OrderDiscountBy", fields: [discountById], references: [id])
+  discountApprovedBy User?             @relation("OrderDiscountApprovedBy", fields: [discountApprovedById], references: [id])
+  sale               Sale?             @relation(fields: [saleId], references: [id])
+  items              OrderItem[]
+  reservation        Reservation?
+  kots               Kot[]
+  billParts          OrderBillPart[]
+  settlements        OrderSettlement[]
+  tips               OrderTip[]
+  refunds            OrderRefund[]
 
   @@index([deletedAt])
   @@index([status])
@@ -1041,22 +1078,30 @@ model OrderItem {
   // [{ productId, productName, quantity }]. A refund that goes back to stock
   // returns that many times this, even if the recipe has changed since.
   stockPerUnit  Json?
+  // A remake (Kitchen Display › Remake): the line it remakes. Made at no
+  // charge and never billed, settled, split or refunded — the waste entry
+  // for the spoilt one takes its stock, the original line is billed once.
+  remakeOfId    String?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
 
-  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product @relation(fields: [productId], references: [id])
-  cancelledBy User?   @relation("OrderItemCancelledBy", fields: [cancelledById], references: [id])
-  kitchenStation KitchenStation? @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  order          Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  remakeOf       OrderItem?          @relation("OrderItemRemake", fields: [remakeOfId], references: [id])
+  remakes        OrderItem[]         @relation("OrderItemRemake")
+  product        Product             @relation(fields: [productId], references: [id])
+  cancelledBy    User?               @relation("OrderItemCancelledBy", fields: [cancelledById], references: [id])
+  kitchenStation KitchenStation?     @relation(fields: [stationId], references: [id], onDelete: SetNull)
   kotLines       KotLine[]
   billPartLines  OrderBillPartLine[]
+  wasteEntries   WasteEntry[]
 
   @@index([orderId])
   @@index([productId])
   @@index([cancelledById])
   @@index([kitchenStatus])
   @@index([stationId, kitchenStatus])
+  @@index([remakeOfId])
   @@index([deletedAt])
 }
 
@@ -1228,6 +1273,80 @@ model OrderRefund {
   @@index([orderId])
   @@index([createdById])
   @@index([deletedAt])
+}
+
+// Food or stock thrown away (Restaurant › Food › Waste, the kitchen display,
+// a returned order line) — not a sale, not a refund: its own stock document,
+// like an Adjustment. productId is what was wasted (a menu item or an
+// ingredient); its stock lines (WasteEntryLine) say exactly what came out of
+// warehouseId — a dish's ingredients by its recipe then, or the item itself —
+// with their cost then (costSnapshot is their total; never recalculated).
+//
+// Immutable: a mistake is corrected by a VOID entry (voidOfId → the entry;
+// unique, so it can be voided once) that puts the same lines back, and the
+// entry itself is marked VOID.
+model WasteEntry {
+  id           String      @id @default(cuid())
+  // The single business (BusinessSetting "default").
+  businessId   String      @default("default")
+  warehouseId  String
+  productId    String
+  qty          Decimal     @db.Decimal(12, 3)
+  // The item's unit when it was logged (its own unit: kg, pc, btl…).
+  unit         String
+  reason       WasteReason
+  // Required when the reason is OTHER (checked on input).
+  note         String?     @db.VarChar(300)
+  costSnapshot Decimal     @db.Decimal(12, 2)
+  // Logged from an order line (a Remake, food returned by the guest).
+  orderItemId  String?
+  loggedById   String
+  // Above the approval limit: who approved it with their PIN.
+  approvedById String?
+  status       WasteStatus @default(ACTIVE)
+  voidOfId     String?     @unique
+  voidReason   String?     @db.VarChar(300)
+  // +1 when it's voided; Void sends the version its screen showed.
+  version      Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  deletedAt    DateTime?
+
+  business   BusinessSetting  @relation(fields: [businessId], references: [id])
+  warehouse  Warehouse        @relation(fields: [warehouseId], references: [id])
+  product    Product          @relation(fields: [productId], references: [id])
+  orderItem  OrderItem?       @relation(fields: [orderItemId], references: [id])
+  loggedBy   User             @relation("WasteLoggedBy", fields: [loggedById], references: [id])
+  approvedBy User?            @relation("WasteApprovedBy", fields: [approvedById], references: [id])
+  voidOf     WasteEntry?      @relation("WasteVoid", fields: [voidOfId], references: [id])
+  voidedBy   WasteEntry?      @relation("WasteVoid")
+  lines      WasteEntryLine[]
+
+  @@index([businessId, createdAt])
+  @@index([businessId, reason])
+  @@index([productId])
+  @@index([warehouseId])
+  @@index([orderItemId])
+  @@index([loggedById])
+  @@index([approvedById])
+  @@index([deletedAt])
+}
+
+// One stock line of a waste entry: what came out (or, on a VOID entry, went
+// back), and its cost when logged.
+model WasteEntryLine {
+  id        String  @id @default(cuid())
+  entryId   String
+  productId String
+  qty       Decimal @db.Decimal(12, 3)
+  unitCost  Decimal @db.Decimal(12, 2)
+  lineCost  Decimal @db.Decimal(12, 2)
+
+  entry   WasteEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  product Product    @relation(fields: [productId], references: [id])
+
+  @@index([entryId])
+  @@index([productId])
 }
 
 // One part of a split bill. The order's live parts (deletedAt NULL) add up

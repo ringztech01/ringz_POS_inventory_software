@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
-import { getDiscountApprovers } from "../server/queries/approvers";
+import { getDiscountApprovers, getWasteApprovers } from "../server/queries/approvers";
 import { getBill } from "../server/queries/bill";
 import { getRefundView } from "../server/queries/refund";
 import { getOrderScreen } from "../server/queries/orderScreen";
@@ -19,6 +19,8 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const { id } = await params;
   const [data, bill, approvers, current] = await Promise.all([getOrderScreen(id), getBill(id), getDiscountApprovers(), getCurrentUserPermissions()]);
   if (!data || !bill) notFound();
+  const canWaste = current.permissions.has(RESTAURANT_PERMISSIONS.LOG_WASTE);
+  const wasteApprovers = canWaste ? await getWasteApprovers() : [];
   const refundView = data.order.status === "BILLED" ? await getRefundView(id) : null;
 
   const floorHref = data.order.areaId ? `/restaurant/floor?area=${data.order.areaId}` : "/restaurant/floor";
@@ -30,6 +32,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         data={data}
         bill={bill}
         approvers={approvers}
+        waste={canWaste ? { approvers: wasteApprovers } : null}
         canSettle={current.permissions.has(RESTAURANT_PERMISSIONS.SETTLE_BILL)}
         refundView={refundView}
         floorHref={floorHref}
