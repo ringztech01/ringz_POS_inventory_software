@@ -1,0 +1,12 @@
+{
+  "//": "DB tests run outside Next: 'server-only' is mapped to Next's own empty server build of it, and 'next/cache' to no-op revalidate functions (stubs/next-cache.ts).",
+  "extends": "../../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../../..",
+    "paths": {
+      "@/*": ["./*"],
+      "server-only": ["./node_modules/next/dist/compiled/server-only/empty.js"],
+      "next/cache": ["./modules/restaurant/__tests__/stubs/next-cache.ts"]
+    }
+  }
+}

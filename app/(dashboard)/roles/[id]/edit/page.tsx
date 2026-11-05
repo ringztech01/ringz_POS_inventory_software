@@ -1,7 +1,8 @@
 import { notFound, redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { pageGuard } from "@/lib/auth/page-guard";
-import { PERMISSIONS } from "@/lib/permissions";
+import { PERMISSIONS, permissionGroups } from "@/lib/permissions";
+import { getEnabledModuleIds } from "@/lib/modules/enabled.server";
 import RoleForm from "@/components/roles/RoleForm";
 import { getRoleForEdit } from "../../queries";
 import { updateRole } from "../../actions";
@@ -29,6 +30,7 @@ export default async function EditRolePage({ params }: { params: Promise<{ id: s
       mode="edit"
       initial={role.initial}
       locked={role.isSystem}
+      groups={permissionGroups(await getEnabledModuleIds())}
       // Bound server action: the id is fixed here, never taken from the form.
       saveAction={updateRole.bind(null, role.id)}
     />

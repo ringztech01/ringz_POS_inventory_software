@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+body { margin:0; background:#f5f7f7; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+a { color:#0f7d6a; text-decoration:none; } a:hover { color:#0a6355; }
+* { box-sizing:border-box; } button, input, select { font-family:inherit; }
+</style>
+</helmet>
+<div style="min-height:100vh;min-width:1280px;display:flex;flex-direction:column">
+  <header style="height:60px;background:#fff;border-bottom:1px solid #eceff0;display:flex;align-items:center;gap:28px;padding:0 24px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:9px;background:#0f7d6a;color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700">R</div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#97a1a4">RingzPOS /</span>
+      <span style="font-size:14.5px;font-weight:600">Restaurant</span>
+    </div>
+    <nav style="display:flex;gap:4px">
+      <a href="RingzPOS Restaurant Dashboard.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;background:#eff8f6;color:#0a6355;font-size:13px;font-weight:600">Dashboard</a>
+      <a href="RingzPOS Floor Plan.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Floor</a>
+      <a href="RingzPOS Table Order.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Orders</a>
+      <a href="RingzPOS Kitchen Display.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Kitchen</a>
+      <a href="RingzPOS Food Management.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Food</a>
+      <a href="RingzPOS Tables.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Tables</a>
+      <a href="RingzPOS Digital Menu.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Digital menu</a>
+    </nav>
+    <div style="margin-left:auto;display:flex;align-items:center;gap:10px">
+      <select style="height:36px;border:1px solid #dde2e3;border-radius:8px;padding:0 10px;font-size:13px;background:#fff"><option>Today</option><option>Yesterday</option><option>Last 7 days</option></select>
+      <a href="RingzPOS Floor Plan.dc.html" style="height:36px;padding:0 14px;display:flex;align-items:center;background:#0f7d6a;border-radius:8px;color:#fff;font-size:13.5px;font-weight:600">Open floor</a>
+    </div>
+  </header>
+
+  <main style="padding:24px;display:flex;flex-direction:column;gap:20px">
+    <div style="display:flex;align-items:baseline;gap:12px">
+      <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600;letter-spacing:-.01em">Restaurant overview</h1>
+      <span style="font-size:13px;color:#6d777a">Main Branch · Thu 29 Oct</span>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px">
+      <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="8">
+        <div style="background:{{ k.bg }};border:1px solid {{ k.border }};border-radius:12px;padding:16px 18px;display:flex;flex-direction:column;gap:6px">
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="width:28px;height:28px;border-radius:8px;background:{{ k.accent }};color:#fff;display:flex;align-items:center;justify-content:center" dangerouslySetInnerHTML="{{ k.icon }}"></span>
+            <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:{{ k.ink }}">{{ k.label }}</span>
+          </div>
+          <span style="font-family:'Space Grotesk',sans-serif;font-size:26px;font-weight:600;color:#171b1c">{{ k.value }}</span>
+          <span style="font-size:12.5px;font-weight:500;color:{{ k.ink }}">{{ k.note }}</span>
+        </div>
+      </sc-for>
+    </div>
+
+    <div style="display:grid;grid-template-columns:minmax(0,2fr) minmax(0,1fr);gap:14px">
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+          <h2 style="margin:0;font-size:15px;font-weight:600">Sales by hour</h2>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6d777a">Peak 13:00 · $1,842</span>
+        </div>
+        <div style="height:200px;display:flex;align-items:flex-end;gap:8px;border-bottom:1px solid #eceff0">
+          <sc-for list="{{ hours }}" as="h" hint-placeholder-count="14">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end">
+              <div style="width:100%;height:{{ h.pct }};background:{{ h.color }};border-radius:4px 4px 0 0"></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <sc-for list="{{ hours }}" as="h" hint-placeholder-count="14">
+            <span style="flex:1;text-align:center;font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#97a1a4">{{ h.label }}</span>
+          </sc-for>
+        </div>
+      </section>
+
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px">
+        <h2 style="margin:0;font-size:15px;font-weight:600">Order type mix</h2>
+        <div style="display:flex;height:12px;border-radius:6px;overflow:hidden">
+          <div style="width:58%;background:#0f7d6a"></div><div style="width:29%;background:#5fb3a5"></div><div style="width:13%;background:#c9e6e0"></div>
+        </div>
+        <sc-for list="{{ mix }}" as="m" hint-placeholder-count="3">
+          <div style="display:flex;align-items:center;gap:10px;font-size:13.5px">
+            <span style="width:10px;height:10px;border-radius:3px;background:{{ m.color }}"></span>
+            <span style="flex:1">{{ m.label }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;color:#4d5659">{{ m.orders }}</span>
+            <span style="width:84px;text-align:right;font-weight:600">{{ m.amount }}</span>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px">
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px">
+        <h2 style="margin:0 0 12px;font-size:15px;font-weight:600">Live open orders</h2>
+        <sc-for list="{{ openOrders }}" as="o" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f0f2f3">
+            <span style="width:40px;height:32px;border-radius:7px;background:#eff8f6;color:#0a6355;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:600;font-size:13px">{{ o.table }}</span>
+            <div style="flex:1;display:flex;flex-direction:column"><span style="font-size:13.5px;font-weight:500">{{ o.waiter }} · {{ o.guests }} guests</span><span style="font-size:12px;color:#6d777a">{{ o.status }}</span></div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end"><span style="font-weight:600;font-size:13.5px">{{ o.total }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:{{ o.timeColor }}">{{ o.time }}</span></div>
+          </div>
+        </sc-for>
+      </section>
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px">
+        <h2 style="margin:0 0 12px;font-size:15px;font-weight:600">Top dishes</h2>
+        <sc-for list="{{ dishes }}" as="d" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f0f2f3">
+            <span style="width:20px;font-family:'IBM Plex Mono',monospace;font-size:12px;color:#97a1a4">{{ d.rank }}</span>
+            <span style="flex:1;font-size:13.5px;font-weight:500">{{ d.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#4d5659">{{ d.qty }}</span>
+            <span style="width:76px;text-align:right;font-weight:600;font-size:13.5px">{{ d.revenue }}</span>
+          </div>
+        </sc-for>
+      </section>
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px">
+        <h2 style="margin:0 0 12px;font-size:15px;font-weight:600">Low-stock ingredients</h2>
+        <sc-for list="{{ lowStock }}" as="s" hint-placeholder-count="5">
+          <div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid #f0f2f3">
+            <span style="flex:1;font-size:13.5px;font-weight:500">{{ s.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:12.5px;color:#4d5659">{{ s.qty }}</span>
+            <span style="height:22px;padding:0 8px;border-radius:11px;background:{{ s.bg }};color:{{ s.fg }};font-size:11.5px;font-weight:600;display:flex;align-items:center">{{ s.level }}</span>
+          </div>
+        </sc-for>
+      </section>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals() {
+    const hv = [12,18,34,62,100,88,46,30,26,40,72,84,58,22];
+    const hl = ['10','11','12','13','14','15','16','17','18','19','20','21','22','23'];
+    const ic = p => ({ __html: '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + p + '</svg>' });
+    const C = {
+      teal: { bg: '#eaf6f3', border: '#cfe9e2', accent: '#0f7d6a', ink: '#0a6355' },
+      blue: { bg: '#eaf1fb', border: '#d3e2f6', accent: '#2f6fc0', ink: '#1d5fa8' },
+      violet: { bg: '#f1edfb', border: '#e0d8f5', accent: '#6b4fc4', ink: '#553aa8' },
+      amber: { bg: '#fdf4e3', border: '#f4e2bd', accent: '#c98a12', ink: '#8a5a00' },
+      cyan: { bg: '#e6f5f8', border: '#c9e8ef', accent: '#1b8aa3', ink: '#136b80' },
+      orange: { bg: '#fdefe6', border: '#f7d9c6', accent: '#d2662a', ink: '#a24a17' },
+      green: { bg: '#ecf6e9', border: '#d4ebcd', accent: '#3d8b37', ink: '#2e6e29' },
+      rose: { bg: '#fcecef', border: '#f5d3da', accent: '#b4233c', ink: '#b4233c' }
+    };
+    const k = (label, value, note, c, icon) => ({ label, value, note, icon: ic(icon), ...C[c] });
+    return {
+      kpis: [
+        k('Revenue today', '$8,426.50', '+12% vs last Thu', 'teal', '<path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>'),
+        k('Orders', '142', '118 dine-in · 24 takeaway', 'blue', '<path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/>'),
+        k('Average bill', '$59.34', '+$3.10 vs last Thu', 'violet', '<path d="M4 2v20l3-2 3 2 3-2 3 2 3-2V2l-3 2-3-2-3 2-3-2-3 2Z"/><path d="M8 10h8M8 14h5"/>'),
+        k('Covers', '316', 'Guests served', 'amber', '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>'),
+        k('Tables occupied', '7 / 20', '35% of floor', 'cyan', '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'),
+        k('Open orders', '9', '2 waiting for bill', 'orange', '<path d="M3 11h18M5 11a7 7 0 0 1 14 0M2 15h20M12 4V2"/>'),
+        k('Avg prep time', '14m 20s', 'Target 15m', 'green', '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>'),
+        k('Cancelled lines', '6', '$84.00 voided', 'rose', '<circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/>')
+      ],
+      hours: hv.map((v, i) => ({ pct: v + '%', label: hl[i], color: v === 100 ? '#0f7d6a' : '#9fd3c9' })),
+      mix: [
+        { label: 'Dine-in', orders: '82', amount: '$4,887.37', color: '#0f7d6a' },
+        { label: 'Takeaway', orders: '41', amount: '$2,443.68', color: '#5fb3a5' },
+        { label: 'Delivery', orders: '19', amount: '$1,095.45', color: '#c9e6e0' }
+      ],
+      openOrders: [
+        { table: 'T4', waiter: 'Ada', guests: 4, status: 'Served · ready to bill', total: '$128.40', time: '58m', timeColor: '#b4233c' },
+        { table: 'T7', waiter: 'Musa', guests: 2, status: 'In kitchen', total: '$46.00', time: '22m', timeColor: '#6d777a' },
+        { table: 'T11', waiter: 'Ada', guests: 6, status: 'In kitchen', total: '$214.90', time: '17m', timeColor: '#6d777a' },
+        { table: 'P2', waiter: 'Kemi', guests: 3, status: 'Ordering', total: '$31.50', time: '6m', timeColor: '#6d777a' },
+        { table: 'B1', waiter: 'Musa', guests: 2, status: 'Served', total: '$72.00', time: '41m', timeColor: '#6d777a' }
+      ],
+      dishes: [
+        { rank: '01', name: 'Jollof Rice & Chicken', qty: '64', revenue: '$1,152.00' },
+        { rank: '02', name: 'Grilled Tilapia', qty: '38', revenue: '$988.00' },
+        { rank: '03', name: 'Beef Suya Platter', qty: '41', revenue: '$738.00' },
+        { rank: '04', name: 'Chapman', qty: '96', revenue: '$576.00' },
+        { rank: '05', name: 'Plantain Side', qty: '88', revenue: '$352.00' }
+      ],
+      lowStock: [
+        { name: 'Chicken thighs', qty: '3.2 kg', level: 'Critical', bg: '#fdecef', fg: '#b4233c' },
+        { name: 'Basmati rice', qty: '6 kg', level: 'Low', bg: '#fff4e0', fg: '#8a5a00' },
+        { name: 'Tilapia (whole)', qty: '8 pcs', level: 'Low', bg: '#fff4e0', fg: '#8a5a00' },
+        { name: 'Plantain', qty: '14 pcs', level: 'Low', bg: '#fff4e0', fg: '#8a5a00' },
+        { name: 'Grenadine syrup', qty: '0.4 L', level: 'Critical', bg: '#fdecef', fg: '#b4233c' }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

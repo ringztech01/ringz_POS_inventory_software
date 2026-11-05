@@ -8,7 +8,7 @@ import { useToggleState } from "@/components/layout/hooks";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import GhostButton from "@/components/ui/GhostButton";
 import PrimaryButton from "@/components/ui/PrimaryButton";
-import { ALL_PERMISSIONS, type Permission } from "@/lib/permissions";
+import { ALL_PERMISSIONS, type Permission, type PermissionGroup } from "@/lib/permissions";
 import type { RoleActionState, RoleFieldName, RoleFormValues } from "@/app/(dashboard)/roles/types";
 
 const LIST_HREF = "/roles";
@@ -17,16 +17,22 @@ const checkbox = { width: 18, height: 18, flex: "0 0 auto", accentColor: COLORS.
 
 // Create / edit a role — RingzPOS Roles design's create view. The checkbox
 // grid is rendered from PERMISSIONS (lib/permissions.ts), never hardcoded.
-// "All Permissions" is a UI toggle only: it checks/unchecks everything and
-// shows checked when all are selected; it is never sent or stored.
+// "All Permissions" is a UI toggle only: it checks/unchecks everything shown
+// and shows checked when all of those are selected; it is never sent or
+// stored.
 export default function RoleForm({
   mode = "create",
   initial,
   locked = false,
+  groups,
   saveAction,
 }: {
   mode?: "create" | "edit";
   initial?: RoleFormValues;
+  // The checkbox blocks (permissionGroups): the core set, plus each optional
+  // module that's switched on. A hidden module's permissions the role already
+  // has are still sent, so saving while it's off doesn't drop them.
+  groups: PermissionGroup[];
   // The isSystem admin role: every permission, always — the checkboxes show
   // checked and can't be changed (the server ignores them anyway).
   locked?: boolean;
@@ -43,7 +49,8 @@ export default function RoleForm({
   const [isPending, startTransition] = useTransition();
   const nameFocus = useToggleState();
 
-  const allChecked = ALL_PERMISSIONS.every((permission) => checked.has(permission));
+  const shown = groups.flatMap((group) => group.permissions);
+  const allChecked = shown.every((permission) => checked.has(permission));
 
   function toggle(permission: Permission) {
     setChecked((current) => {
@@ -55,7 +62,14 @@ export default function RoleForm({
   }
 
   function toggleAll() {
-    setChecked(allChecked ? new Set() : new Set(ALL_PERMISSIONS));
+    setChecked((current) => {
+      const next = new Set(current);
+      for (const permission of shown) {
+        if (allChecked) next.delete(permission);
+        else next.add(permission);
+      }
+      return next;
+    });
   }
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -149,20 +163,39 @@ export default function RoleForm({
             </label>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "14px 32px" }}>
-            {ALL_PERMISSIONS.map((permission) => (
-              <label key={permission} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "2px 0" }}>
-                <input
-                  type="checkbox"
-                  checked={checked.has(permission)}
-                  onChange={() => toggle(permission)}
-                  disabled={locked}
-                  style={checkbox}
-                />
-                <span style={{ fontSize: 13.5, color: COLORS.text }}>{permission}</span>
-              </label>
-            ))}
-          </div>
+          {groups.map((group) => (
+            <div key={group.label ?? ""} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {group.label && (
+                <span
+                  style={{
+                    paddingTop: 16,
+                    borderTop: `1px solid ${COLORS.border}`,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    letterSpacing: ".08em",
+                    textTransform: "uppercase",
+                    color: COLORS.slateMid,
+                  }}
+                >
+                  {group.label}
+                </span>
+              )}
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "14px 32px" }}>
+                {group.permissions.map((permission) => (
+                  <label key={permission} style={{ display: "flex", alignItems: "center", gap: 11, cursor: "pointer", padding: "2px 0" }}>
+                    <input
+                      type="checkbox"
+                      checked={checked.has(permission)}
+                      onChange={() => toggle(permission)}
+                      disabled={locked}
+                      style={checkbox}
+                    />
+                    <span style={{ fontSize: 13.5, color: COLORS.text }}>{permission}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
           {locked && (
             <span style={{ fontSize: 12.5, color: COLORS.slateMid }}>
               The Administrator role always has every permission.

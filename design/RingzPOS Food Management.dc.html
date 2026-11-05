@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+body { margin:0; background:#f5f7f7; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+a { color:#0f7d6a; text-decoration:none; } a:hover { color:#0a6355; }
+* { box-sizing:border-box; } button, input, select { font-family:inherit; }
+</style>
+</helmet>
+<div style="min-height:100vh;min-width:1280px;display:flex;flex-direction:column">
+  <header style="height:60px;background:#fff;border-bottom:1px solid #eceff0;display:flex;align-items:center;gap:28px;padding:0 24px">
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="width:32px;height:32px;border-radius:9px;background:#0f7d6a;color:#fff;display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700">R</div>
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#97a1a4">RingzPOS /</span>
+      <span style="font-size:14.5px;font-weight:600">Restaurant</span>
+    </div>
+    <nav style="display:flex;gap:4px">
+      <a href="RingzPOS Restaurant Dashboard.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Dashboard</a>
+      <a href="RingzPOS Floor Plan.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Floor</a>
+      <a href="RingzPOS Table Order.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Orders</a>
+      <a href="RingzPOS Kitchen Display.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Kitchen</a>
+      <a href="RingzPOS Food Management.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;background:#eff8f6;color:#0a6355;font-size:13px;font-weight:600">Food</a>
+      <a href="RingzPOS Tables.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Tables</a>
+      <a href="RingzPOS Digital Menu.dc.html" style="height:34px;padding:0 12px;display:flex;align-items:center;border-radius:7px;color:#4d5659;font-size:13px;font-weight:500">Digital menu</a>
+    </nav>
+  </header>
+
+  <main style="padding:24px;display:flex;flex-direction:column;gap:16px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <h1 style="margin:0;font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:600">Food</h1>
+      <div style="display:flex;gap:4px;background:#fff;border:1px solid #eceff0;border-radius:9px;padding:3px">
+        <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+          <button onClick="{{ t.onClick }}" style="height:32px;padding:0 14px;border:none;border-radius:6px;background:{{ t.bg }};color:{{ t.fg }};font-size:13px;font-weight:600;cursor:pointer">{{ t.label }}</button>
+        </sc-for>
+      </div>
+      <input placeholder="Search menu items" style="margin-left:auto;width:280px;height:38px;border:1px solid #dde2e3;border-radius:8px;padding:0 12px;font-size:13.5px;outline:none;background:#fff" style-focus="border-color:#0f7d6a;box-shadow:0 0 0 3px #d3ece7" />
+      <button style="height:38px;padding:0 14px;background:#0f7d6a;border:none;border-radius:8px;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer" style-hover="background:#0a6355">+ Add menu item</button>
+    </div>
+
+    <div style="display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:16px;align-items:start">
+      <section style="background:#fff;border:1px solid #eceff0;border-radius:12px;overflow:hidden">
+        <div style="display:grid;grid-template-columns:56px minmax(0,2fr) 1fr 90px 90px 80px 96px 96px;gap:12px;padding:12px 16px;background:#fafbfb;border-bottom:1px solid #eceff0;font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">
+          <span></span><span>Item</span><span>Category</span><span>Price</span><span>Station</span><span>Recipe</span><span>Available</span><span>On menu</span>
+        </div>
+        <sc-for list="{{ rows }}" as="r" hint-placeholder-count="8">
+          <div onClick="{{ r.select }}" style="display:grid;grid-template-columns:56px minmax(0,2fr) 1fr 90px 90px 80px 96px 96px;gap:12px;padding:10px 16px;border-bottom:1px solid #f0f2f3;align-items:center;font-size:13.5px;cursor:pointer;background:{{ r.bg }}">
+            <span style="width:44px;height:36px;border-radius:7px;background:#eef1f2"></span>
+            <div style="display:flex;flex-direction:column;min-width:0"><span style="font-weight:600">{{ r.name }}</span><span style="font-family:'IBM Plex Mono',monospace;font-size:11.5px;color:#97a1a4">{{ r.code }} · {{ r.mods }}</span></div>
+            <span style="color:#4d5659">{{ r.cat }}</span>
+            <span style="font-weight:600">{{ r.price }}</span>
+            <span style="color:#4d5659">{{ r.station }}</span>
+            <span style="font-size:12.5px;color:{{ r.recipeColor }}">{{ r.recipe }}</span>
+            <button onClick="{{ r.toggleAvail }}" style="width:40px;height:22px;border:none;border-radius:11px;background:{{ r.availBg }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ r.availX }};width:16px;height:16px;border-radius:8px;background:#fff"></span></button>
+            <button onClick="{{ r.toggleMenu }}" style="width:40px;height:22px;border:none;border-radius:11px;background:{{ r.menuBg }};position:relative;cursor:pointer"><span style="position:absolute;top:3px;left:{{ r.menuX }};width:16px;height:16px;border-radius:8px;background:#fff"></span></button>
+          </div>
+        </sc-for>
+      </section>
+
+      <aside style="background:#fff;border:1px solid #eceff0;border-radius:12px;padding:18px;display:flex;flex-direction:column;gap:14px">
+        <div style="display:flex;flex-direction:column;gap:2px">
+          <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Recipe</span>
+          <span style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600">{{ sel.name }}</span>
+          <span style="font-size:12.5px;color:#6d777a">Ingredients deducted from stock each time this item is billed.</span>
+        </div>
+        <sc-for list="{{ sel.recipe }}" as="i" hint-placeholder-count="4">
+          <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #f0f2f3;font-size:13.5px">
+            <span style="flex:1">{{ i.name }}</span>
+            <span style="font-family:'IBM Plex Mono',monospace;color:#4d5659">{{ i.qty }}</span>
+            <span style="width:64px;text-align:right;color:#6d777a;font-size:12.5px">{{ i.cost }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ sel.noRecipe }}" hint-placeholder-val="{{ false }}">
+          <p style="margin:0;font-size:13px;color:#6d777a">No recipe. This item tracks its own stock like a retail product.</p>
+        </sc-if>
+        <button style="height:36px;border:1px dashed #86cbc0;background:#fff;color:#0a6355;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer">+ Add ingredient</button>
+        <div style="display:flex;justify-content:space-between;font-size:13.5px;padding-top:4px"><span style="color:#6d777a">Food cost</span><span style="font-weight:600">{{ sel.cost }} · {{ sel.margin }}</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px;padding-top:6px;border-top:1px solid #eceff0">
+          <span style="font-size:11.5px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:#6d777a">Modifier groups</span>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            <sc-for list="{{ sel.groups }}" as="g" hint-placeholder-count="2">
+              <span style="height:28px;padding:0 10px;border-radius:14px;background:#eff8f6;color:#0a6355;font-size:12.5px;font-weight:600;display:flex;align-items:center">{{ g }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </aside>
+    </div>
+  </main>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    tab: 'Menu items', sel: 0,
+    items: [
+      { name: 'Jollof Rice & Chicken', code: 'MN-001', cat: 'Mains', price: 18, station: 'Kitchen', avail: true, menu: true, groups: ['Portion', 'Extras'], recipe: [['Basmati rice', '0.25 kg', 0.55], ['Chicken thighs', '0.3 kg', 1.8], ['Tomato base', '0.1 L', 0.4], ['Plantain', '1 pc', 0.3]] },
+      { name: 'Grilled Tilapia', code: 'MN-002', cat: 'Mains', price: 26, station: 'Kitchen', avail: true, menu: true, groups: ['Portion', 'Spice level'], recipe: [['Tilapia (whole)', '1 pc', 4.2], ['Pepper mix', '0.05 kg', 0.3]] },
+      { name: 'Beef Suya Platter', code: 'GR-001', cat: 'Grill', price: 18, station: 'Kitchen', avail: true, menu: true, groups: ['Spice level'], recipe: [['Beef sirloin', '0.25 kg', 3.1], ['Suya spice', '0.03 kg', 0.25]] },
+      { name: 'Chicken Wings', code: 'GR-002', cat: 'Grill', price: 14, station: 'Kitchen', avail: false, menu: true, groups: ['Sauce'], recipe: [['Chicken wings', '0.4 kg', 2.4]] },
+      { name: 'Pepper Soup', code: 'ST-001', cat: 'Starters', price: 12, station: 'Kitchen', avail: true, menu: true, groups: ['Protein'], recipe: [['Goat meat', '0.2 kg', 2.2], ['Pepper soup spice', '0.02 kg', 0.2]] },
+      { name: 'Chapman', code: 'DR-001', cat: 'Drinks', price: 6, station: 'Bar', avail: true, menu: true, groups: [], recipe: [['Grenadine syrup', '0.03 L', 0.35], ['Fanta', '1 btl', 0.6]] },
+      { name: 'Bottled Water', code: 'DR-004', cat: 'Drinks', price: 2, station: 'Bar', avail: true, menu: true, groups: [], recipe: [] },
+      { name: 'Staff Meal', code: 'MN-099', cat: 'Mains', price: 5, station: 'Kitchen', avail: true, menu: false, groups: [], recipe: [['Basmati rice', '0.2 kg', 0.44]] }
+    ]
+  };
+  renderVals() {
+    const f = n => '$' + n.toFixed(2);
+    const tog = (i, k) => e => { e.stopPropagation(); this.setState(s => { const items = [...s.items]; items[i] = { ...items[i], [k]: !items[i][k] }; return { items }; }); };
+    const it = this.state.items[this.state.sel];
+    const cost = it.recipe.reduce((a, r) => a + r[2], 0);
+    return {
+      tabs: ['Menu items', 'Modifiers', 'Recipes'].map(t => ({ label: t, bg: t === this.state.tab ? '#0f7d6a' : 'transparent', fg: t === this.state.tab ? '#fff' : '#4d5659', onClick: () => this.setState({ tab: t }) })),
+      rows: this.state.items.map((r, i) => ({
+        ...r, price: f(r.price), mods: r.groups.length ? r.groups.length + ' modifier groups' : 'No modifiers',
+        recipe: r.recipe.length ? r.recipe.length + ' ingredients' : 'Own stock', recipeColor: r.recipe.length ? '#0a6355' : '#6d777a',
+        bg: i === this.state.sel ? '#f3faf8' : '#fff', select: () => this.setState({ sel: i }),
+        availBg: r.avail ? '#0f7d6a' : '#cfd5d7', availX: r.avail ? '21px' : '3px', toggleAvail: tog(i, 'avail'),
+        menuBg: r.menu ? '#0f7d6a' : '#cfd5d7', menuX: r.menu ? '21px' : '3px', toggleMenu: tog(i, 'menu')
+      })),
+      sel: {
+        name: it.name, recipe: it.recipe.map(r => ({ name: r[0], qty: r[1], cost: f(r[2]) })), noRecipe: !it.recipe.length,
+        cost: f(cost), margin: Math.round((1 - cost / it.price) * 100) + '% margin', groups: it.groups.length ? it.groups : ['None']
+      }
+    };
+  }
+}
+</script>
+</body>
+</html>

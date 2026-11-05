@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
+import { MODULES } from "@/lib/modules/registry";
 
 // createTitle / editTitle: breadcrumb title on the child's /create and
 // /[id]/edit pages (default: label).
@@ -36,9 +37,20 @@ export type NavItem = {
   createTitle?: string;
   editTitle?: string;
   crumbTitle?: string;
+  // Set on an optional module's group: shown only while it's switched on.
+  module?: string;
 };
 
-export const NAV: NavItem[] = [
+// Each optional module's group (lib/modules/registry.ts), placed after Sales.
+const MODULE_NAV: NavItem[] = MODULES.map((mod) => ({
+  key: mod.id,
+  label: mod.label,
+  icon: mod.icon,
+  module: mod.id,
+  children: mod.nav.map(({ label, href }) => ({ label, href })),
+}));
+
+const CORE_NAV: NavItem[] = [
   { key: "dashboard", label: "Dashboard", icon: LayoutGrid, href: "/dashboard" },
   {
     key: "products",
@@ -119,10 +131,13 @@ export const NAV: NavItem[] = [
   { key: "settings", label: "Settings", icon: Settings, href: "/settings" },
 ];
 
-// Nav item (by href) → the permission that shows it. UX only — every page and
-// action enforces its own permission server-side (lib/auth). Hrefs not listed
-// here (e.g. Templates, which no permission covers yet) are always shown.
-export const NAV_PERMISSIONS: Partial<Record<string, Permission>> = {
+export const NAV: NavItem[] = CORE_NAV.flatMap((item) => (item.key === "sales" ? [item, ...MODULE_NAV] : [item]));
+
+// Nav item (by href) → the permission that shows it (or a list, any one of
+// which does). UX only — every page and action enforces its own permission
+// server-side (lib/auth). Hrefs not listed here (e.g. Templates, which no
+// permission covers yet) are always shown.
+export const NAV_PERMISSIONS: Partial<Record<string, Permission | readonly Permission[]>> = {
   "/dashboard": PERMISSIONS.MANAGE_DASHBOARD,
   "/products": PERMISSIONS.MANAGE_PRODUCTS,
   "/product-categories": PERMISSIONS.MANAGE_PRODUCT_CATEGORIES,
@@ -148,17 +163,21 @@ export const NAV_PERMISSIONS: Partial<Record<string, Permission>> = {
   "/currencies": PERMISSIONS.MANAGE_CURRENCY,
   "/languages": PERMISSIONS.MANAGE_LANGUAGE,
   "/settings": PERMISSIONS.MANAGE_SETTING,
+  ...Object.fromEntries(MODULES.flatMap((mod) => mod.nav.map((link) => [link.href, link.permissions]))),
 };
 
 const allowed = (href: string, permissions: ReadonlySet<Permission>) => {
   const needed = NAV_PERMISSIONS[href];
-  return !needed || permissions.has(needed);
+  if (!needed) return true;
+  return typeof needed === "string" ? permissions.has(needed) : needed.some((permission) => permissions.has(permission));
 };
 
 // The nav the user may see: items and children they have the permission for;
-// a group shows if any of its children does.
-export function visibleNav(permissions: ReadonlySet<Permission>): NavItem[] {
+// a group shows if any of its children does. A module's group needs the
+// module switched on (enabledModules) as well.
+export function visibleNav(permissions: ReadonlySet<Permission>, enabledModules: readonly string[]): NavItem[] {
   return NAV.flatMap((item) => {
+    if (item.module && !enabledModules.includes(item.module)) return [];
     if (item.children?.length) {
       const children = item.children.filter((child) => allowed(child.href, permissions));
       return children.length > 0 ? [{ ...item, children }] : [];

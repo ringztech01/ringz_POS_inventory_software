@@ -4,6 +4,7 @@ import { pageGuard } from "@/lib/auth/page-guard";
 import { PERMISSIONS } from "@/lib/permissions";
 import PurchaseDetails from "@/components/purchases/PurchaseDetails";
 import { SALE_COPY } from "@/components/purchases/purchase-display";
+import SaleOrderLink from "@/modules/restaurant/components/sales/SaleOrderLink";
 import { getSaleDocument } from "../queries";
 
 // The Sale Details view, on the shared document details layout.
@@ -25,5 +26,11 @@ export default async function SaleDetailsPage({ params }: { params: Promise<{ id
     notFound();
   }
 
-  return <PurchaseDetails purchase={sale} copy={SALE_COPY} />;
+  return (
+    <>
+      {/* A sale made by settling a restaurant bill links back to its order. */}
+      <SaleOrderLink saleId={sale.id} />
+      <PurchaseDetails purchase={sale} copy={SALE_COPY} />
+    </>
+  );
 }

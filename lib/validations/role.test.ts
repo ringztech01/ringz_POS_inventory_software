@@ -29,10 +29,11 @@ describe("roleSchema", () => {
     assert.deepEqual(issues({ name: "X", permissions: "Manage Products" }), ["permissions: Choose permissions."]);
   });
 
-  test("duplicates collapse; an empty set is allowed; all 27 are accepted", () => {
+  test("duplicates collapse; an empty set is allowed; all are accepted (core and module)", () => {
     const dup = roleSchema.parse({ name: "X", permissions: ["Manage Sale", "Manage Sale", "Manage Units"] });
     assert.deepEqual(dup.permissions, ["Manage Sale", "Manage Units"]);
     assert.deepEqual(roleSchema.parse({ name: "X", permissions: [] }).permissions, []);
-    assert.equal(roleSchema.parse({ name: "X", permissions: ALL_PERMISSIONS }).permissions.length, 27);
+    assert.equal(roleSchema.parse({ name: "X", permissions: ALL_PERMISSIONS }).permissions.length, ALL_PERMISSIONS.length);
+    assert.deepEqual(roleSchema.parse({ name: "X", permissions: [PERMISSIONS.KITCHEN_DISPLAY] }).permissions, ["Kitchen Display"]);
   });
 });
