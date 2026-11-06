@@ -4,6 +4,7 @@ import { auth } from "@/auth";
 import AuthSessionProvider from "@/components/providers/SessionProvider";
 import DeviceBeacon from "@/components/hardware/DeviceBeacon";
 import PrinterAlerts from "@/components/hardware/PrinterAlerts";
+import ScanProvider from "@/components/hardware/ScanProvider";
 
 // Full-screen POS: same auth and session as the dashboard, no sidebar or top
 // bar (RingzPOS POS.dc.html).
@@ -22,7 +23,10 @@ export default async function PosLayout({ children }: { children: ReactNode }) {
       <div className="no-print" style={{ position: "fixed", top: 8, right: 16, zIndex: 60 }}>
         <PrinterAlerts scope="till" />
       </div>
-      <div style={{ minHeight: "100vh", minWidth: 1440, background: "#eef1f4" }}>{children}</div>
+      {/* Barcode scans: the POS adds the item (its own handler). */}
+      <ScanProvider>
+        <div style={{ minHeight: "100vh", minWidth: 1440, background: "#eef1f4" }}>{children}</div>
+      </ScanProvider>
     </AuthSessionProvider>
   );
 }

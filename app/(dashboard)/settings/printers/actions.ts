@@ -11,7 +11,8 @@ import { currentDeviceId } from "@/lib/hardware/device";
 import { openDrawer } from "@/lib/hardware/drawer";
 import { enqueuePrint, waitForJob } from "@/lib/hardware/printQueue";
 import { printerRoles } from "@/lib/hardware/printerSetup";
-import { assignmentsSchema, deviceSchema, printerSchema, type PrinterField } from "@/lib/validations/printer";
+import { redetectLocal, suggestMoved, type MoveSuggestion, type Redetected } from "@/lib/hardware/redetect";
+import { assignmentsSchema, deviceSchema, movePrinterSchema, printerSchema, type PrinterField } from "@/lib/validations/printer";
 import type { DiscoveredPrinter, DiscoveryResult } from "@/desktop/bridge/types.ts";
 
 // Settings › Printers. Everything needs Manage Setting; inputs are parsed
@@ -59,11 +60,17 @@ export async function savePrinter(id: unknown, input: unknown): Promise<{ ok: tr
   return guarded("save printer", async () => {
     const parsed = printerSchema.safeParse(input);
     if (!parsed.success) return { ok: false as const, error: "Please fix the errors below.", fieldErrors: parsed.error.flatten().fieldErrors };
-    const data = { ...parsed.data, identity: parsed.data.identity ?? Prisma.JsonNull, model: parsed.data.model ?? null };
+    const data: Omit<typeof parsed.data, "identity"> & { identity: Prisma.InputJsonValue | typeof Prisma.JsonNull } = { ...parsed.data, identity: parsed.data.identity ?? Prisma.JsonNull, model: parsed.data.model ?? null };
     return prisma.$transaction(async (tx) => {
       const clash = await tx.printer.findFirst({ where: { ...live, name: data.name, ...(typeof id === "string" ? { id: { not: id } } : {}) }, select: { id: true } });
       if (clash) return { ok: false as const, error: "Please fix the errors below.", fieldErrors: { name: ["Another printer already has that name."] } };
       if (typeof id === "string") {
+        // An edit keeps what identifies the printer (Step 7 finds it again by
+        // it) unless it now points somewhere else.
+        const before = await tx.printer.findFirst({ where: { id, ...live }, select: { connection: true, address: true, identity: true } });
+        if (!before) return { ok: false as const, error: "That printer is no longer there — refreshed." };
+        const moved = before.connection !== data.connection || before.address.toLowerCase() !== data.address.toLowerCase();
+        if (!parsed.data.identity && !moved) data.identity = (before.identity as Prisma.InputJsonValue | null) ?? Prisma.JsonNull;
         const updated = await tx.printer.updateMany({ where: { id, ...live }, data });
         if (updated.count === 0) return { ok: false as const, error: "That printer is no longer there — refreshed." };
         // An OS printer can't stay on Reports if it stops being one.
@@ -144,19 +151,58 @@ export async function testDrawer(id: unknown): Promise<{ ok: true } | Fail> {
 }
 
 // The saved printers' status now (the list polls it); remembered on each.
-export async function printerStatusAction(): Promise<{ ok: true; statuses: Record<string, PrinterStatusOf> } | Fail> {
+// A local (OS / USB) printer that's offline is looked for again first (Step 7:
+// replugged, it may have a new queue name or USB instance) — `found` says
+// which were, at their new address, same assignments.
+export async function printerStatusAction(): Promise<{ ok: true; statuses: Record<string, PrinterStatusOf>; found: Redetected[] } | Fail> {
   return guarded("printer status", async () => {
-    const printers = await prisma.printer.findMany({ where: live, select: { id: true, connection: true, address: true } });
-    if (printers.length === 0) return { ok: true as const, statuses: {} };
-    const result = await printerStatuses(printers);
+    let printers = await prisma.printer.findMany({ where: live, select: { id: true, connection: true, address: true } });
+    if (printers.length === 0) return { ok: true as const, statuses: {}, found: [] };
+    let result = await printerStatuses(printers);
     if (!result.ok) return { ok: false as const, error: result.error };
+    const statuses = result.data.statuses;
+    const lost = printers.filter((p) => (p.connection === "OS" || p.connection === "USB") && statuses[p.id]?.status === "OFFLINE").map((p) => p.id);
+    const found = lost.length ? await redetectLocal(lost) : [];
+    if (found.length) {
+      refresh();
+      printers = await prisma.printer.findMany({ where: live, select: { id: true, connection: true, address: true } });
+      result = await printerStatuses(printers);
+      if (!result.ok) return { ok: false as const, error: result.error };
+    }
     const now = new Date();
     await Promise.all(
       Object.entries(result.data.statuses).map(([pid, s]) =>
         prisma.printer.updateMany({ where: { id: pid }, data: { lastStatus: s.status, ...(s.status === "ONLINE" || s.status === "PAPER_OUT" ? { lastSeenAt: now } : {}) } }),
       ),
     );
-    return { ok: true as const, statuses: result.data.statuses };
+    return { ok: true as const, statuses: result.data.statuses, found };
+  });
+}
+
+// A network printer that doesn't answer: scan the network for it (same MAC
+// address, else the one printer of its model) — a suggestion only.
+export async function findMovedPrinter(id: unknown): Promise<{ ok: true; suggestion: MoveSuggestion | null } | Fail> {
+  return guarded("find moved printer", async () => {
+    if (typeof id !== "string") return { ok: false as const, error: "Unknown printer." };
+    const result = await suggestMoved(id);
+    return result.ok ? { ok: true as const, suggestion: result.suggestion } : { ok: false as const, error: result.error };
+  });
+}
+
+// Use the suggested address (the same printer row: its assignments and
+// waiting jobs carry on there).
+export async function movePrinter(id: unknown, address: unknown): Promise<{ ok: true } | Fail> {
+  return guarded("move printer", async () => {
+    const parsed = movePrinterSchema.safeParse({ id, address });
+    if (!parsed.success) return { ok: false as const, error: parsed.error.issues[0]?.message ?? "That address isn't valid." };
+    return prisma.$transaction(async (tx) => {
+      const clash = await tx.printer.findFirst({ where: { ...live, connection: "NETWORK", address: parsed.data.address, id: { not: parsed.data.id } }, select: { name: true } });
+      if (clash) return { ok: false as const, error: `${clash.name} already uses that address.` };
+      const moved = await tx.printer.updateMany({ where: { id: parsed.data.id, connection: "NETWORK", ...live }, data: { address: parsed.data.address, lastStatus: null } });
+      if (moved.count === 0) return { ok: false as const, error: "That printer is no longer there — refreshed." };
+      refresh();
+      return { ok: true as const };
+    });
   });
 }
 

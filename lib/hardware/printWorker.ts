@@ -4,6 +4,7 @@ import { resolvePrinter } from "./assignments";
 import { printerStatuses, printRaw, type PrinterStatusOf } from "./bridgeClient";
 import { DRAWER_TTL_MS, drawerBytes } from "./drawerKick";
 import type { CodePage, Cut } from "./escpos";
+import { redetectLocal } from "./redetect";
 import { loadTicketLook } from "./ticketLook";
 import { renderTicket } from "./tickets";
 
@@ -22,6 +23,13 @@ import { renderTicket } from "./tickets";
 //                         queue screen show it; Retry puts it back)
 //   strict order          a job waiting for its retry holds the ones behind
 //                         it, so a printer never prints out of order
+//   each on its own       every printer has its own runner: a slow or
+//                         stuck printer holds up only its own jobs, never
+//                         another printer's (or the drawer)
+//   found again           an OS / USB printer that's gone offline with jobs
+//                         waiting is looked for among this computer's
+//                         printers (redetect.ts) — replugged, it prints on
+//                         under the same assignments
 //   drawer kicks          (DRAWER jobs, drawerKick.ts) aren't tickets: they
 //                         go before the tickets waiting on their printer,
 //                         never move to a fallback (no role), and are
@@ -37,7 +45,7 @@ const BACKOFF_MS = [2000, 8000, 30000];
 export const MAX_ATTEMPTS = 3;
 const STATUS_TTL_MS = 3000;
 
-type WorkerState = { timer: NodeJS.Timeout | null; running: boolean; again: boolean; status: Map<string, { at: number; value: PrinterStatusOf }> };
+type WorkerState = { timer: NodeJS.Timeout | null; running: boolean; again: boolean; status: Map<string, { at: number; value: PrinterStatusOf }>; busy: Set<string> };
 const g = globalThis as typeof globalThis & { __ringzPrintWorker?: WorkerState };
 
 const log = (message: string) => console.log(`[print] ${message}`);
@@ -62,7 +70,7 @@ export async function recoverInterrupted(): Promise<number> {
 
 export async function startPrintWorker(): Promise<void> {
   if (g.__ringzPrintWorker) return;
-  g.__ringzPrintWorker = { timer: null, running: false, again: false, status: new Map() };
+  g.__ringzPrintWorker = { timer: null, running: false, again: false, status: new Map(), busy: new Set() };
   const cut = await recoverInterrupted();
   if (cut) log(`${cut} job(s) were cut off mid-print and are marked Failed.`);
   g.__ringzPrintWorker.timer = setInterval(() => void tick(), TICK_MS);
@@ -113,15 +121,47 @@ async function tick(): Promise<void> {
       await expireDrawerKicks();
       const waiting = await prisma.printJob.groupBy({ by: ["printerId"], where: { status: "QUEUED" } });
       if (waiting.length === 0) break;
-      const printers = await prisma.printer.findMany({ where: { id: { in: waiting.map((w) => w.printerId) } } });
+      // A printer whose runner is still going is left to it.
+      const printers = (await prisma.printer.findMany({ where: { id: { in: waiting.map((w) => w.printerId) } } })).filter((p) => !state.busy.has(p.id));
+      if (printers.length === 0) break;
       const status = await statusOf(printers);
-      await Promise.all(printers.map((printer) => runPrinter(printer, status)));
+      // Plug and play: a local printer that's gone may be back under another name.
+      const lost = printers.filter((p) => !p.deletedAt && (p.connection === "OS" || p.connection === "USB") && status.get(p.id)?.status === "OFFLINE");
+      if (lost.length) {
+        const moved = await redetectLocal(lost.map((p) => p.id)).catch((error: Error) => {
+          log(`re-detect: ${error.message}`);
+          return [];
+        });
+        if (moved.length) {
+          for (const m of moved) state.status.delete(m.printerId);
+          state.again = true;
+          continue;
+        }
+      }
+      for (const printer of printers) start(printer, status);
     } while (state.again);
   } catch (error) {
     log(`worker: ${(error as Error).message}`);
   } finally {
     state.running = false;
   }
+}
+
+// A printer's own runner: one at a time per printer (strict order), never
+// waiting on another printer. Done and something printed: a look for more.
+function start(printer: Printer, status: Map<string, PrinterStatusOf>): void {
+  const state = g.__ringzPrintWorker;
+  if (!state || state.busy.has(printer.id)) return;
+  state.busy.add(printer.id);
+  void runPrinter(printer, status)
+    .catch((error: Error) => {
+      log(`${printer.name}: ${error.message}`);
+      return false;
+    })
+    .then((sent) => {
+      g.__ringzPrintWorker?.busy.delete(printer.id);
+      if (sent) wakePrintWorker();
+    });
 }
 
 // Jobs on a printer that's down: those whose role has a working fallback move.
@@ -162,29 +202,36 @@ const wakeAgain = () => {
   if (state) state.again = true;
 };
 
-async function runPrinter(printer: Printer, status: Map<string, PrinterStatusOf>): Promise<void> {
+// Prints what's waiting on one printer; answers whether anything was sent.
+async function runPrinter(printer: Printer, status: Map<string, PrinterStatusOf>): Promise<boolean> {
   if (printer.deletedAt) {
     await prisma.printJob.updateMany({ where: { printerId: printer.id, status: "QUEUED" }, data: { status: "FAILED", error: `${printer.name} was removed — reprint it on another printer.` } });
-    return;
+    return false;
   }
-  if (!available(status.get(printer.id))) return reroute(printer, status);
+  if (!available(status.get(printer.id))) {
+    await reroute(printer, status);
+    return false;
+  }
+  let sent = false;
   // Drawer kicks first: a cashier is waiting at the till.
   for (;;) {
     const kick = await prisma.printJob.findFirst({ where: { printerId: printer.id, status: "QUEUED", type: "DRAWER", nextAttemptAt: { lte: new Date() } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
     if (!kick) break;
     const claimed = await prisma.printJob.updateMany({ where: { id: kick.id, status: "QUEUED" }, data: { status: "PRINTING", attempts: { increment: 1 } } });
     if (claimed.count === 0) continue;
-    if (!(await printOne({ ...kick, attempts: kick.attempts + 1 }, printer))) return;
+    if (!(await printOne({ ...kick, attempts: kick.attempts + 1 }, printer))) return sent;
+    sent = true;
   }
   for (;;) {
     const head = await prisma.printJob.findFirst({ where: { printerId: printer.id, status: "QUEUED", type: { not: "DRAWER" } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] });
-    if (!head) return;
+    if (!head) return sent;
     // Strict order: the oldest job waits for its retry; nothing jumps it.
-    if (head.nextAttemptAt.getTime() > Date.now()) return;
+    if (head.nextAttemptAt.getTime() > Date.now()) return sent;
     const claimed = await prisma.printJob.updateMany({ where: { id: head.id, status: "QUEUED" }, data: { status: "PRINTING", attempts: { increment: 1 } } });
     if (claimed.count === 0) continue;
     const ok = await printOne({ ...head, attempts: head.attempts + 1 }, printer);
-    if (!ok) return;
+    if (!ok) return sent;
+    sent = true;
   }
 }
 

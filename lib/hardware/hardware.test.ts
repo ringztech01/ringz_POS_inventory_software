@@ -4,6 +4,10 @@ import assert from "node:assert/strict";
 import { missingRoles, PREBILL, RECEIPT, REPORTS, resolvePrinter, stationOf, stationRole, type Assignment } from "./assignments";
 import { decodeByte, encoderFor } from "./codePages";
 import { DRAWER_TTL_MS, drawerBytes, drawerOutcome, tookCash } from "./drawerKick";
+import { clampScanSettings, DEFAULT_SCAN, isTextEntry, ScanDetector, suggestedMaxGap } from "./scan";
+import { POLE_WIDTH, poleDisplayLines } from "./customerDisplay";
+import { findAgain, missingMessages, suggestNewAddress, type SavedForMatch } from "./reconnect";
+import type { DiscoveredPrinter } from "../../desktop/bridge/types.ts";
 import { columns, encodeText, EscPos, lineWidth } from "./escpos";
 import { previewEscPos, previewText } from "./escposPreview";
 import { blackAt, qrRaster, rasterCommand, toRaster } from "./raster";
@@ -323,4 +327,132 @@ test("Open drawer by hand needs a reason (trimmed, at most 140)", () => {
   assert.equal(drawerOpenSchema.safeParse({}).success, false);
   assert.equal(drawerOpenSchema.safeParse({ reason: "x".repeat(141) }).success, false);
   assert.equal(drawerOpenSchema.safeParse({ reason: "x".repeat(140) }).success, true);
+});
+
+// ---- Step 6: scanners, the customer display
+
+const typeKeys = (d: ScanDetector, text: string, start: number, gap: number, enterGap = gap) => {
+  let t = start;
+  for (const ch of text) {
+    d.key(ch, t);
+    t += gap;
+  }
+  return d.key("Enter", t - gap + enterGap);
+};
+
+test("a scan: fast characters then Enter; the code, its timing", () => {
+  const d = new ScanDetector();
+  const a = typeKeys(d, "6151234567890", 1000, 8);
+  assert.ok(a);
+  assert.deepEqual([a.code, a.accepted, a.reason, a.gaps.length, a.slowestGapMs, a.averageGapMs, a.durationMs], ["6151234567890", true, null, 13, 8, 8, 104]);
+});
+
+test("typing is not a scan: too slow, or too short; Shift is ignored; a pause starts over", () => {
+  const d = new ScanDetector();
+  const slow = typeKeys(d, "hello", 0, 120);
+  assert.ok(slow && !slow.accepted && slow.reason === "Too slow for a scanner: a 120 ms gap (the limit is 50 ms).");
+  const short = typeKeys(d, "ab1", 5000, 5);
+  assert.ok(short && !short.accepted && short.reason === "Too short: 3 characters (at least 4).");
+  // Shift between characters (scanners send capitals that way) changes nothing.
+  d.key("A", 9000);
+  d.key("Shift", 9004);
+  d.key("B", 9008);
+  d.key("C", 9016);
+  const caps = d.key("D", 9024) ?? d.key("Enter", 9032);
+  assert.ok(caps && caps.code === "ABCD" && caps.accepted);
+  // A stray key, then a scan more than a second later: only the scan counts.
+  d.key("x", 20000);
+  const later = typeKeys(d, "12345", 22000, 6);
+  assert.ok(later && later.code === "12345" && later.accepted);
+  assert.equal(d.key("Enter", 30000), null, "Enter alone is nothing");
+  // A slow Enter after fast characters is typing too.
+  const slowEnter = typeKeys(d, "98765", 40000, 6, 200);
+  assert.ok(slowEnter && !slowEnter.accepted);
+});
+
+test("the device's limits: clamped; a looser limit lets a slower scanner through", () => {
+  assert.deepEqual(clampScanSettings(null), DEFAULT_SCAN);
+  assert.deepEqual(clampScanSettings({ maxGapMs: 5, minLength: 99 }), { maxGapMs: 10, minLength: 30 });
+  assert.deepEqual(clampScanSettings({ maxGapMs: Number.NaN, minLength: 2.4 }), { maxGapMs: 50, minLength: 2 });
+  const d = new ScanDetector({ maxGapMs: 90, minLength: 2 });
+  const a = typeKeys(d, "ok", 0, 70);
+  assert.ok(a && a.accepted);
+  assert.equal(suggestedMaxGap(12), 34);
+  assert.equal(suggestedMaxGap(60), 80, "never up to human speed");
+  assert.equal(suggestedMaxGap(0), 10);
+});
+
+test("text fields keep their keys; buttons, checkboxes and sliders don't", () => {
+  const el = (tagName: string, extra: Record<string, unknown> = {}) => ({ tagName, isContentEditable: false, ...extra }) as unknown as Element;
+  assert.equal(isTextEntry(el("INPUT", { type: "text" })), true);
+  assert.equal(isTextEntry(el("INPUT", { type: "search" })), true);
+  assert.equal(isTextEntry(el("INPUT", { type: "number" })), true);
+  assert.equal(isTextEntry(el("TEXTAREA")), true);
+  assert.equal(isTextEntry(el("SELECT")), true);
+  assert.equal(isTextEntry(el("DIV", { isContentEditable: true })), true);
+  assert.equal(isTextEntry(el("INPUT", { type: "checkbox" })), false);
+  assert.equal(isTextEntry(el("INPUT", { type: "range" })), false);
+  assert.equal(isTextEntry(el("BUTTON")), false);
+  assert.equal(isTextEntry(null), false);
+});
+
+test("pole display: two lines of 20 — the latest item and the total; the change", () => {
+  const cart = poleDisplayLines({ kind: "cart", lines: [{ name: "Soap", quantity: 1, total: "N200" }, { name: "Very long product name here", quantity: 2, total: "N1,500.00" }], total: "N1,700.00" });
+  assert.ok(cart.every((l) => l.length === POLE_WIDTH));
+  assert.deepEqual(cart, ["2x Very lo N1,500.00", "Total      N1,700.00"]);
+  assert.deepEqual(poleDisplayLines({ kind: "idle" }), ["Welcome!".padEnd(20), " ".repeat(20)]);
+  assert.deepEqual(poleDisplayLines({ kind: "done", total: "N1,700.00", paid: "N2,000.00", change: "N300.00" }), ["Change       N300.00", "Thank you!".padEnd(20)]);
+});
+
+// ---- Step 7: plug and play
+
+const seen = (p: Partial<DiscoveredPrinter> & Pick<DiscoveredPrinter, "connection" | "address" | "name">): DiscoveredPrinter => ({ id: p.address, model: null, status: "ONLINE", statusDetail: null, identity: {}, ...p });
+const savedP = (p: Partial<SavedForMatch> & Pick<SavedForMatch, "connection" | "address">): SavedForMatch => ({ id: "p1", model: null, identity: null, ...p });
+
+test("replugged OS queue: “(Copy 1)” is the same printer; else the one queue with its driver; never two, never one in use", () => {
+  const receipt = savedP({ connection: "OS", address: "Receipt", model: "EPSON TM-T20II", identity: { osName: "Receipt" } });
+  const copy = seen({ connection: "OS", name: "Receipt (Copy 1)", address: "USB002", model: "EPSON TM-T20II" });
+  assert.deepEqual(findAgain(receipt, [copy]), { address: "Receipt (Copy 1)", identity: { osName: "Receipt (Copy 1)" }, model: "EPSON TM-T20II", by: "name" });
+  // Still there: nothing to do.
+  assert.equal(findAgain(receipt, [seen({ connection: "OS", name: "Receipt", address: "USB001" }), copy]), null);
+  // Renamed, but the only queue with its driver.
+  assert.equal(findAgain(receipt, [seen({ connection: "OS", name: "POS-80", address: "USB003", model: "EPSON TM-T20II" })])?.by, "model");
+  // Two queues with that driver: no guess.
+  assert.equal(findAgain(receipt, [seen({ connection: "OS", name: "A", address: "USB003", model: "EPSON TM-T20II" }), seen({ connection: "OS", name: "B", address: "USB004", model: "EPSON TM-T20II" })]), null);
+  // The copy already belongs to another saved printer.
+  assert.equal(findAgain(receipt, [copy], [receipt, savedP({ id: "p2", connection: "OS", address: "Receipt (Copy 1)" })]), null);
+});
+
+test("USB: vendor / product id and serial; no serial — the one device with those ids", () => {
+  const withSerial = savedP({ connection: "USB", address: "USB\\VID_04B8&PID_0202\\OLD", identity: { vendorId: "04B8", productId: "0202", serial: "X123" } });
+  const dev = (addr: string, serial?: string) => seen({ connection: "USB", name: "USB printer", address: addr, identity: { vendorId: "04B8", productId: "0202", ...(serial ? { serial } : {}) } });
+  assert.equal(findAgain(withSerial, [dev("USB\\VID_04B8&PID_0202\\X123", "X123"), dev("USB\\VID_04B8&PID_0202\\Y9", "Y9")])?.address, "USB\\VID_04B8&PID_0202\\X123");
+  assert.equal(findAgain(withSerial, [dev("USB\\VID_04B8&PID_0202\\Y9", "Y9")]), null, "another unit of the same model");
+  const noSerial = savedP({ connection: "USB", address: "USB\\VID_04B8&PID_0202\\5&1&0&2", identity: { vendorId: "04B8", productId: "0202" } });
+  assert.equal(findAgain(noSerial, [dev("USB\\VID_04B8&PID_0202\\5&1&0&4")])?.by, "usb");
+  assert.equal(findAgain(noSerial, [dev("a"), dev("b")]), null);
+  assert.equal(findAgain(savedP({ connection: "USB", address: "/dev/usb/lp0" }), [dev("/dev/usb/lp1")]), null, "nothing to know it by");
+  assert.equal(findAgain(savedP({ connection: "SERIAL", address: "COM3" }), [seen({ connection: "SERIAL", name: "COM4", address: "COM4" })]), null);
+});
+
+test("network: a new IP suggested by MAC; by model only when no MAC tells them apart; never its own or a taken address", () => {
+  const kitchen = savedP({ connection: "NETWORK", address: "192.168.1.50:9100", model: "TM-T88V", identity: { mac: "00:26:AB:12:34:56" } });
+  const at = (ip: string, mac?: string, model = "TM-T88V") => seen({ connection: "NETWORK", name: ip, address: `${ip}:9100`, model, identity: mac ? { mac } : {} });
+  assert.deepEqual(suggestNewAddress(kitchen, [at("192.168.1.77", "00-26-ab-12-34-56"), at("192.168.1.78", "00:26:AB:00:00:01")]), { address: "192.168.1.77:9100", identity: { mac: "00-26-ab-12-34-56" }, model: "TM-T88V", by: "mac" });
+  assert.equal(suggestNewAddress(kitchen, [at("192.168.1.78", "00:26:AB:00:00:01")]), null, "a different MAC is a different printer");
+  assert.equal(suggestNewAddress(kitchen, [at("192.168.1.79")])?.by, "model", "its MAC unreadable: the one of its model");
+  assert.equal(suggestNewAddress(kitchen, [at("192.168.1.50", "00:26:AB:12:34:56")]), null, "its own address isn't a move");
+  assert.equal(suggestNewAddress(kitchen, [at("192.168.1.77", "00:26:AB:12:34:56")], [kitchen, savedP({ id: "p2", connection: "NETWORK", address: "192.168.1.77" })]), null);
+  const noMac = savedP({ connection: "NETWORK", address: "192.168.1.60", model: "XP-80" });
+  assert.equal(suggestNewAddress(noMac, [at("192.168.1.61", "aa:bb:cc:dd:ee:ff", "XP-80")])?.address, "192.168.1.61:9100");
+  assert.equal(suggestNewAddress(noMac, [at("192.168.1.61", undefined, "XP-80"), at("192.168.1.62", undefined, "XP-80")]), null, "two of that model");
+});
+
+test("missing assignments: admins are told, once a printer exists", () => {
+  const roles = [{ role: "STATION:k", label: "Kitchen" }, { role: "STATION:b", label: "Bar" }];
+  assert.deepEqual(missingMessages(roles, new Set(["STATION:k"]), true), ["No printer assigned for Bar. Set up."]);
+  assert.deepEqual(missingMessages(roles, new Set(), false), [], "nothing set up yet: no nagging");
+  assert.deepEqual(missingMessages(roles, new Set(), true), ["No printer assigned for Kitchen and Bar. Set up."], "one notice");
+  assert.deepEqual(missingMessages([...roles, { role: "STATION:g", label: "Grill" }], new Set(), true), ["No printer assigned for Kitchen, Bar and Grill. Set up."]);
+  assert.deepEqual(missingMessages(roles, new Set(["STATION:k", "STATION:b"]), true), []);
 });

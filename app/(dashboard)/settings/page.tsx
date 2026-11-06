@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import ForbiddenState from "@/components/ui/ForbiddenState";
 import Link from "next/link";
-import { ChevronRight, Printer } from "lucide-react";
+import { ChevronRight, Printer, ScanLine } from "lucide-react";
 import ModuleSwitch from "@/components/settings/ModuleSwitch";
 
 // /settings — business settings: the optional modules' switches
@@ -95,6 +95,16 @@ export default async function SettingsPage() {
             <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
               <span style={{ fontSize: 14, fontWeight: 600 }}>Printers</span>
               <span style={{ fontSize: 13, color: COLORS.slateMid }}>Receipt, kitchen and report printers, which one does each job, and per-device printers.</span>
+            </span>
+            <ChevronRight size={16} strokeWidth={1.8} color={COLORS.slateMid} />
+          </Link>
+          <Link href="/settings/scanner" style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 24px", color: COLORS.ink, textDecoration: "none", borderTop: `1px solid ${COLORS.border}` }}>
+            <span style={{ width: 40, height: 40, flex: "0 0 auto", borderRadius: 10, background: COLORS.tealTint, color: COLORS.tealDark, display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <ScanLine size={19} strokeWidth={1.6} />
+            </span>
+            <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Scanner test</span>
+              <span style={{ fontSize: 13, color: COLORS.slateMid }}>Scan a barcode to see the code and its timing, and tune this device&apos;s scanner. Also the camera and the customer display.</span>
             </span>
             <ChevronRight size={16} strokeWidth={1.8} color={COLORS.slateMid} />
           </Link>

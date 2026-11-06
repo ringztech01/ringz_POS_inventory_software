@@ -167,6 +167,9 @@ export default function MenuPanel({
           padding: "16px 20px 20px",
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(170px, 1fr))",
+          // Each card keeps its full height and the list scrolls (the cards
+          // clip their photo, so without this a long menu squashes them).
+          gridAutoRows: "max-content",
           gap: 12,
           alignContent: "start",
         }}

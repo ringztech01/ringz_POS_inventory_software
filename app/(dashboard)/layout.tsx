@@ -7,6 +7,8 @@ import { SidebarProvider } from "@/components/layout/sidebar-context";
 import Sidebar from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import Footer from "@/components/layout/Footer";
+import ScanProvider from "@/components/hardware/ScanProvider";
+import ProductScanRoute from "@/components/hardware/ProductScanRoute";
 
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await auth();
@@ -21,6 +23,10 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   return (
     <AuthSessionProvider session={session}>
       <SidebarProvider>
+        {/* Barcode scans anywhere (components/hardware/ScanProvider.tsx);
+            with no screen of its own taking them, a scan opens the product. */}
+        <ScanProvider>
+        <ProductScanRoute />
         {/* Fills the window exactly — no fixed page width, so no sideways
             scroll; a wide table scrolls inside its own card instead. */}
         <div style={{ display: "flex", minHeight: "100vh", width: "100%" }}>
@@ -33,6 +39,7 @@ export default async function DashboardLayout({ children }: { children: ReactNod
             </main>
           </div>
         </div>
+        </ScanProvider>
       </SidebarProvider>
     </AuthSessionProvider>
   );

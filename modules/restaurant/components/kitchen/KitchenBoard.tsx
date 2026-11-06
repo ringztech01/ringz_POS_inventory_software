@@ -214,6 +214,7 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
       color: on ? "#fff" : KDS.soft,
       fontSize: 13,
       fontWeight: 600,
+      whiteSpace: "nowrap",
       display: "flex",
       alignItems: "center",
       textDecoration: "none",
@@ -242,11 +243,10 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
             </Link>
           ))}
         </nav>
-        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 20, fontFamily: FONTS.mono, fontSize: 13, color: KDS.muted }}>
+        <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 20, fontFamily: FONTS.mono, fontSize: 13, color: KDS.muted, whiteSpace: "nowrap" }}>
           <span aria-live="polite" style={{ minWidth: 60, color: KDS.qty, fontFamily: FONTS.body, fontWeight: 600 }}>
             {saving > 0 ? "Saving…" : ""}
           </span>
-          <PrinterAlerts scope="kitchen" dark />
           <span data-count="tickets">{data.active.length} tickets</span>
           <span data-count="late" style={{ color: KDS.lateText }}>
             {late} late
@@ -276,6 +276,8 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
           </Link>
         </div>
       </header>
+      {/* Printer trouble and missing printers, just under the header (it's full). */}
+      <PrinterAlerts scope="kitchen" dark style={{ margin: "10px 24px 0" }} />
 
       {error && (
         <div role="alert" style={{ margin: "16px 20px 0", padding: "10px 14px", borderRadius: 9, background: KDS.lateHead, border: `1px solid ${KDS.lateBorder}`, display: "flex", alignItems: "center", gap: 10, fontSize: 13.5 }}>

@@ -4,7 +4,7 @@ import { useEffect, useRef, type ReactNode, type CSSProperties } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut, useSession } from "next-auth/react";
-import { Menu, Search, Plus, Maximize, Minimize, ChevronDown, User as UserIcon, KeyRound, LogOut, type LucideIcon } from "lucide-react";
+import { Menu, Search, Plus, Maximize, Minimize, ScanLine, ChevronDown, User as UserIcon, KeyRound, LogOut, type LucideIcon } from "lucide-react";
 import { useSidebar } from "./sidebar-context";
 import { useToggleState } from "./hooks";
 import { resolveBreadcrumb } from "./nav-data";
@@ -12,6 +12,7 @@ import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { COLORS, FONTS } from "./theme";
 import ReportTabs from "@/components/reports/ReportTabs";
 import { useFullscreen } from "@/components/pos/use-fullscreen";
+import CameraScanButton from "@/components/hardware/CameraScanner";
 
 function IconButton({
   title,
@@ -255,6 +256,15 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
           POS
         </Link>
         )}
+
+        {/* Tablets: scan a product's barcode with the camera (opens it). */}
+        <CameraScanButton
+          render={(open) => (
+            <IconButton title="Scan with the camera" onClick={open}>
+              <ScanLine size={16} strokeWidth={1.6} />
+            </IconButton>
+          )}
+        />
 
         <IconButton title={fullscreen.active ? "Exit fullscreen" : "Fullscreen"} onClick={() => void fullscreen.toggle()}>
           {fullscreen.active ? <Minimize size={16} strokeWidth={1.6} /> : <Maximize size={16} strokeWidth={1.6} />}

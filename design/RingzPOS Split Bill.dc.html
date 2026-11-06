@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<script src="https://unpkg.com/lucide@0.446.0/dist/umd/lucide.min.js"></script>
+<style>
+body { margin:0; background:#e4e9ea; color:#171b1c; font-family:'IBM Plex Sans',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+* { box-sizing:border-box; } button, input { font-family:inherit; }
+.num { font-variant-numeric: tabular-nums; }
+</style>
+</helmet>
+
+<!-- Split bill (Table Order › Bill & pay › Split bill) — redesign for fast waiter use.
+     The bar on top only switches design states; it isn't part of the app. -->
+<div style="min-height:100vh;padding:20px 24px 48px;display:flex;flex-direction:column;align-items:center;gap:14px">
+  <div style="width:100%;max-width:1120px;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+    <span style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;margin-right:8px">Split bill · design states</span>
+    <sc-for list="{{ stateTabs }}" as="t" hint-placeholder-count="7">
+      <button onClick="{{ t.onClick }}" style="height:34px;padding:0 12px;border-radius:17px;border:1px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};font-size:12.5px;font-weight:600;cursor:pointer">{{ t.label }}</button>
+    </sc-for>
+    <span style="margin-left:auto;font-size:12px;color:#6d777a">Frame</span>
+    <sc-for list="{{ frameTabs }}" as="t" hint-placeholder-count="2">
+      <button onClick="{{ t.onClick }}" style="height:30px;padding:0 10px;border-radius:8px;border:1px solid {{ t.border }};background:{{ t.bg }};color:{{ t.fg }};font-size:12px;font-weight:600;cursor:pointer">{{ t.label }}</button>
+    </sc-for>
+  </div>
+  <div style="width:100%;max-width:1120px;font-size:13px;color:#4d5659;line-height:1.5">{{ caption }}</div>
+
+  <!-- The tablet -->
+  <div style="width:{{ frameW }}px;height:{{ frameH }}px;position:relative;background:#f5f7f7;border:10px solid #171b1c;border-radius:22px;overflow:hidden;box-shadow:0 18px 40px -16px rgba(23,27,28,.45)">
+
+    <!-- The order screen behind (sketched) -->
+    <div style="position:absolute;inset:0;display:grid;grid-template-columns:minmax(0,1fr) {{ asideW }}px">
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="height:40px;border-radius:8px;background:#fff;border:1px solid #eceff0"></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px">
+          <sc-for list="{{ skeleton }}" as="s" hint-placeholder-count="9"><div style="height:120px;border-radius:12px;background:#fff;border:1px solid #eceff0"></div></sc-for>
+        </div>
+      </div>
+      <aside style="background:#fff;border-left:1px solid #eceff0;display:flex;flex-direction:column;min-height:0">
+        <div style="padding:16px 18px;border-bottom:1px solid #eceff0;display:flex;align-items:center;gap:10px">
+          <span style="font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:600">Table G3</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#6d777a">ORD-0154 · 5 guests</span>
+        </div>
+
+        <sc-if value="{{ showPanel }}" hint-placeholder-val="{{ false }}">
+          <!-- 6 · After splitting: the parts in the Bill panel -->
+          <div style="flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px">
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="font-size:12px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:#6d777a">Split · {{ panelMode }}</span>
+              <button onClick="{{ editSplit }}" style="margin-left:auto;height:36px;padding:0 12px;border-radius:8px;border:1px solid {{ editBorder }};background:#fff;color:{{ editFg }};font-size:13px;font-weight:600;cursor:{{ editCursor }};display:flex;align-items:center;gap:6px"><i data-lucide="pencil" style="width:14px;height:14px"></i>Edit split</button>
+            </div>
+            <sc-if value="{{ locked }}" hint-placeholder-val="{{ false }}">
+              <div style="font-size:12.5px;color:#4d5659;background:#f5f7f7;border-radius:8px;padding:8px 10px;display:flex;gap:8px;align-items:center"><i data-lucide="lock" style="width:14px;height:14px"></i>Split locked — a part is paid. Each remaining guest pays on their own.</div>
+            </sc-if>
+            <sc-for list="{{ parts }}" as="p" hint-placeholder-count="3">
+              <div style="border:1px solid #eceff0;border-left:5px solid {{ p.color }};border-radius:12px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;background:{{ p.bg }}">
+                <div style="display:flex;align-items:center;gap:10px">
+                  <span style="font-size:15px;font-weight:600">{{ p.name }}</span>
+                  <span class="num" style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600;margin-left:auto">{{ p.amount }}</span>
+                </div>
+                <span style="font-size:12.5px;color:#6d777a;line-height:1.45">{{ p.items }}</span>
+                <sc-if value="{{ p.paid }}" hint-placeholder-val="{{ false }}">
+                  <span style="align-self:flex-start;height:28px;padding:0 12px;border-radius:14px;background:#e3f4ee;color:#0a6355;font-size:12.5px;font-weight:700;display:flex;align-items:center;gap:6px"><i data-lucide="check" style="width:14px;height:14px"></i>Paid · {{ p.method }}</span>
+                </sc-if>
+                <sc-if value="{{ p.open }}" hint-placeholder-val="{{ true }}">
+                  <button onClick="{{ p.pay }}" style="height:48px;border:none;border-radius:10px;background:#0f7d6a;color:#fff;font-size:14.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="banknote" style="width:17px;height:17px"></i>Pay {{ p.amount }}</button>
+                </sc-if>
+              </div>
+            </sc-for>
+          </div>
+          <div style="padding:14px 18px;border-top:1px solid #eceff0;display:flex;flex-direction:column;gap:6px">
+            <div class="num" style="display:flex;justify-content:space-between;font-size:13.5px;color:#4d5659"><span>Paid</span><span>{{ paidSum }}</span></div>
+            <div class="num" style="display:flex;justify-content:space-between;font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:600"><span>Left to pay</span><span>{{ leftSum }}</span></div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ showModal }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1;padding:16px 18px;display:flex;flex-direction:column;gap:12px">
+            <sc-for list="{{ skeletonLines }}" as="s" hint-placeholder-count="5"><div style="height:44px;border-radius:8px;background:#f5f7f7"></div></sc-for>
+          </div>
+        </sc-if>
+      </aside>
+    </div>
+
+    <sc-if value="{{ showModal }}" hint-placeholder-val="{{ true }}">
+    <div style="position:absolute;inset:0;background:rgba(23,27,28,.45);display:flex;justify-content:center;align-items:flex-start;padding:{{ pad }}px">
+      <div style="width:100%;max-width:760px;height:100%;background:#fff;border-radius:16px;display:flex;flex-direction:column;overflow:hidden;position:relative">
+
+        <!-- Header: the bill total always in view -->
+        <div style="padding:14px 16px 12px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #eceff0">
+          <div style="display:flex;flex-direction:column;gap:2px;min-width:0">
+            <span style="font-family:'Space Grotesk',sans-serif;font-size:20px;font-weight:600">Split bill</span>
+            <span style="font-size:12.5px;color:#6d777a">Table G3 · ORD-0154</span>
+          </div>
+          <span class="num" style="margin-left:auto;font-family:'Space Grotesk',sans-serif;font-size:22px;font-weight:700">₦43,450.00</span>
+          <button onClick="{{ askReset }}" title="Clear all assignments" style="width:48px;height:48px;border-radius:10px;border:1px solid #dde2e3;background:#fff;color:#4d5659;cursor:pointer;display:{{ resetDisplay }};align-items:center;justify-content:center"><i data-lucide="rotate-ccw" style="width:18px;height:18px"></i></button>
+          <button title="Close" style="width:48px;height:48px;border-radius:10px;border:1px solid #dde2e3;background:#fff;color:#4d5659;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="x" style="width:20px;height:20px"></i></button>
+        </div>
+
+        <!-- Mode: the last one used on this tablet opens first -->
+        <div style="padding:12px 20px 0">
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);background:#f0f3f3;border-radius:12px;padding:4px;gap:4px">
+            <sc-for list="{{ modeTabs }}" as="m" hint-placeholder-count="3">
+              <button onClick="{{ m.onClick }}" style="height:44px;border:none;border-radius:9px;background:{{ m.bg }};color:{{ m.fg }};font-size:14px;font-weight:600;cursor:pointer;box-shadow:{{ m.shadow }};display:flex;align-items:center;justify-content:center;gap:8px"><i data-lucide="{{ m.icon }}" style="width:16px;height:16px"></i>{{ m.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- ===== BY ITEM ===== -->
+        <sc-if value="{{ isItem }}" hint-placeholder-val="{{ true }}">
+          <div style="flex:1;min-height:0;display:flex;flex-direction:column">
+            <sc-if value="{{ conflict }}" hint-placeholder-val="{{ false }}">
+              <div style="margin:12px 20px 0;padding:10px 12px;border-radius:10px;background:#fff7e8;border:1px solid #f1dcb0;display:flex;align-items:center;gap:10px;font-size:13.5px;color:#5c4510">
+                <i data-lucide="refresh-cw" style="width:16px;height:16px;flex:0 0 auto"></i>
+                <span style="flex:1">This bill changed on another device (1 Zobo added). Your assignments are kept.</span>
+                <button onClick="{{ reload }}" style="height:44px;padding:0 14px;border-radius:9px;border:none;background:#8a5a00;color:#fff;font-size:13.5px;font-weight:600;cursor:pointer">Reload bill</button>
+              </div>
+            </sc-if>
+
+            <!-- Guests: tap the name to pick; tap the total to see / return their items -->
+            <div style="padding:12px 20px 0;display:flex;flex-wrap:wrap;gap:8px">
+              <sc-for list="{{ guestChips }}" as="g" hint-placeholder-count="3">
+                <div style="height:48px;display:flex;border-radius:24px;border:2px solid {{ g.border }};background:{{ g.bg }};overflow:hidden;box-shadow:{{ g.shadow }}">
+                  <button onClick="{{ g.activate }}" style="height:100%;padding:0 10px 0 6px;border:none;background:transparent;cursor:pointer;display:flex;align-items:center;gap:8px;color:{{ g.fg }};font-size:14px;font-weight:600">
+                    <span style="width:30px;height:30px;border-radius:15px;background:{{ g.color }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ g.n }}</span>{{ g.name }}
+                  </button>
+                  <button onClick="{{ g.open }}" title="See this guest's items" class="num" style="height:100%;padding:0 14px;border:none;border-left:1px solid {{ g.divider }};background:transparent;cursor:pointer;color:{{ g.fg }};font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px">{{ g.total }}<i data-lucide="chevron-down" style="width:14px;height:14px;opacity:.7"></i></button>
+                </div>
+              </sc-for>
+              <button onClick="{{ addGuest }}" title="Add a guest" style="height:48px;padding:0 16px;border-radius:24px;border:2px dashed #c3cacc;background:#fff;color:#4d5659;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><i data-lucide="plus" style="width:16px;height:16px"></i>Guest</button>
+            </div>
+
+            <!-- Neutral progress + the big shortcut -->
+            <div style="padding:12px 20px 4px;display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+              <div style="flex:1;min-width:220px;display:flex;flex-direction:column;gap:6px">
+                <span class="num" style="font-size:14px;color:#4d5659;font-weight:500">{{ progressText }}</span>
+                <div style="height:6px;border-radius:3px;background:#eceff0;overflow:hidden"><div style="height:100%;width:{{ progressPct }}%;background:#0f7d6a;border-radius:3px"></div></div>
+              </div>
+              <button onClick="{{ restToActive }}" style="height:48px;padding:0 16px;border-radius:10px;border:1.5px solid {{ restBorder }};background:#fff;color:{{ restFg }};font-size:14px;font-weight:600;cursor:pointer;display:{{ restDisplay }};align-items:center;gap:8px"><i data-lucide="chevrons-right" style="width:16px;height:16px"></i>{{ restLabel }}</button>
+            </div>
+
+            <!-- Items: tap = one unit to the active guest -->
+            <div style="flex:1;min-height:0;overflow-y:auto;padding:10px 20px 16px">
+              <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax({{ cardMin }}px,1fr));gap:10px;align-content:start">
+                <sc-for list="{{ cards }}" as="c" hint-placeholder-count="6">
+                  <div style="position:relative">
+                    <button onClick="{{ c.tap }}" style="width:100%;min-height:76px;text-align:left;border:1.5px solid {{ c.border }};border-radius:12px;padding:10px 52px 10px 12px;background:{{ c.bg }};cursor:{{ c.cursor }};display:flex;flex-direction:column;gap:5px;opacity:{{ c.opacity }}">
+                      <span style="font-size:14.5px;font-weight:600;color:#171b1c;line-height:1.3">{{ c.name }}</span>
+                      <span class="num" style="font-size:13.5px;font-weight:600;color:#0a6355">{{ c.price }}</span>
+                      <span style="font-size:12px;color:#6d777a;display:{{ c.modsDisplay }}">{{ c.mods }}</span>
+                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:24px">
+                        <span class="num" style="height:24px;padding:0 9px;border-radius:12px;background:{{ c.leftBg }};color:{{ c.leftFg }};font-size:12px;font-weight:700;display:flex;align-items:center">{{ c.left }}</span>
+                        <sc-for list="{{ c.dots }}" as="d" hint-placeholder-count="2">
+                          <span class="num" style="height:24px;min-width:24px;padding:0 7px;border-radius:12px;background:{{ d.color }};color:#fff;font-size:11.5px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ d.label }}</span>
+                        </sc-for>
+                      </div>
+                    </button>
+                    <button onClick="{{ c.share }}" title="Share between guests (long-press the card in the app)" style="position:absolute;top:8px;right:8px;width:40px;height:40px;border-radius:10px;border:1px solid #dde2e3;background:#fff;color:#4d5659;cursor:pointer;display:{{ c.shareDisplay }};align-items:center;justify-content:center"><i data-lucide="split" style="width:16px;height:16px"></i></button>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== EQUAL ===== -->
+        <sc-if value="{{ isEqual }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;min-height:0;display:flex;flex-direction:column;align-items:center;padding:18px 20px 8px;gap:14px">
+            <span style="font-size:13.5px;color:#4d5659">How many guests?</span>
+            <div style="display:flex;align-items:center;gap:18px">
+              <button onClick="{{ waysDown }}" style="width:72px;height:72px;border-radius:36px;border:1.5px solid #dde2e3;background:#fff;color:#171b1c;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="minus" style="width:26px;height:26px"></i></button>
+              <span class="num" style="width:110px;text-align:center;font-family:'Space Grotesk',sans-serif;font-size:60px;font-weight:700;line-height:1">{{ ways }}</span>
+              <button onClick="{{ waysUp }}" style="width:72px;height:72px;border-radius:36px;border:none;background:#0f7d6a;color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center"><i data-lucide="plus" style="width:26px;height:26px"></i></button>
+            </div>
+            <span style="font-size:12.5px;color:#6d777a">2 to 20 · any kobo of rounding goes on the last guest</span>
+            <div style="width:100%;max-width:520px;flex:1;min-height:0;overflow-y:auto;border:1px solid #eceff0;border-radius:12px">
+              <sc-for list="{{ equalRows }}" as="r" hint-placeholder-count="3">
+                <div style="height:48px;padding:0 14px;display:flex;align-items:center;gap:10px;border-bottom:1px solid #f0f2f3">
+                  <span style="width:26px;height:26px;border-radius:13px;background:{{ r.color }};color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ r.n }}</span>
+                  <span style="font-size:14px;font-weight:500">{{ r.name }}</span>
+                  <span class="num" style="margin-left:auto;font-size:15px;font-weight:600">{{ r.amount }}</span>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ===== BY AMOUNT ===== -->
+        <sc-if value="{{ isAmount }}" hint-placeholder-val="{{ false }}">
+          <div style="flex:1;min-height:0;overflow-y:auto;padding:14px 20px 8px;display:flex;flex-wrap:wrap;gap:16px;align-content:flex-start">
+            <div style="flex:1 1 300px;display:flex;flex-direction:column;gap:8px">
+              <sc-for list="{{ amountRows }}" as="r" hint-placeholder-count="3">
+                <button onClick="{{ r.focus }}" style="min-height:56px;padding:0 14px;border-radius:12px;border:2px solid {{ r.border }};background:{{ r.bg }};cursor:{{ r.cursor }};display:flex;align-items:center;gap:10px;text-align:left">
+                  <span style="width:28px;height:28px;border-radius:14px;background:{{ r.color }};color:#fff;font-size:12.5px;font-weight:700;display:flex;align-items:center;justify-content:center;flex:0 0 auto">{{ r.n }}</span>
+                  <span style="display:flex;flex-direction:column;gap:1px">
+                    <span style="font-size:14px;font-weight:600;color:#171b1c">{{ r.name }}</span>
+                    <span style="font-size:11.5px;color:#6d777a">{{ r.hint }}</span>
+                  </span>
+                  <span class="num" style="margin-left:auto;font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:600;color:{{ r.valueFg }}">{{ r.value }}</span>
+                </button>
+              </sc-for>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;padding-top:2px">
+                <button onClick="{{ amountAddGuest }}" style="height:44px;padding:0 4px;border:none;background:none;color:#0a6355;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px"><i data-lucide="plus" style="width:15px;height:15px"></i>Add a guest</button>
+                <button onClick="{{ amountRemoveGuest }}" style="height:44px;padding:0 4px;border:none;background:none;color:#4d5659;font-size:13.5px;font-weight:600;cursor:pointer;display:{{ amountRemoveDisplay }};align-items:center;gap:6px"><i data-lucide="minus" style="width:15px;height:15px"></i>Remove the last guest</button>
+                <button onClick="{{ splitRemainder }}" style="height:44px;padding:0 4px;border:none;background:none;color:#0a6355;font-size:13.5px;font-weight:600;cursor:pointer;display:{{ remainderDisplay }};align-items:center;gap:6px;margin-left:auto"><i data-lucide="equal" style="width:15px;height:15px"></i>Split remainder equally</button>
+              </div>
+            </div>
+            <div style="flex:0 1 264px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:8px;align-self:flex-start">
+              <sc-for list="{{ keypad }}" as="k" hint-placeholder-count="12">
+                <button onClick="{{ k.press }}" class="num" style="height:60px;border-radius:12px;border:1px solid #dde2e3;background:{{ k.bg }};color:#171b1c;font-size:20px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center">{{ k.label }}</button>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- Footer: the button always says what's next -->
+        <div style="padding:14px 20px;border-top:1px solid #eceff0;display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+          <span class="num" style="flex:1 1 200px;font-size:13px;color:#6d777a;line-height:1.45">{{ footNote }}</span>
+          <button onClick="{{ primary }}" class="num" style="flex:1 1 280px;height:56px;padding:0 22px;border:none;border-radius:12px;background:{{ primaryBg }};color:{{ primaryFg }};font-size:15.5px;font-weight:600;cursor:{{ primaryCursor }}">{{ primaryLabel }}</button>
+        </div>
+
+        <!-- Undo toast (4 s) -->
+        <sc-if value="{{ toastOn }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;left:50%;bottom:96px;transform:translateX(-50%);background:#171b1c;color:#fff;border-radius:24px;height:48px;padding:0 6px 0 18px;display:flex;align-items:center;gap:12px;font-size:14px;box-shadow:0 10px 24px -10px rgba(0,0,0,.5);white-space:nowrap;max-width:calc(100% - 32px)">
+            <span style="overflow:hidden;text-overflow:ellipsis">{{ toastText }}</span>
+            <button onClick="{{ undo }}" style="height:36px;padding:0 14px;border-radius:18px;border:none;background:#2c3436;color:#7fd8c6;font-size:14px;font-weight:700;cursor:pointer">Undo</button>
+          </div>
+        </sc-if>
+
+        <!-- Sheets: a guest's items / share an item / reset -->
+        <sc-if value="{{ sheetOn }}" hint-placeholder-val="{{ false }}">
+          <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(23,27,28,.35);display:flex;align-items:flex-end;justify-content:center">
+            <div onClick="{{ stop }}" style="width:100%;max-width:560px;background:#fff;border-radius:16px 16px 0 0;padding:18px 20px 20px;display:flex;flex-direction:column;gap:12px;max-height:80%;overflow-y:auto">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="width:30px;height:30px;border-radius:15px;background:{{ sheetColor }};color:#fff;font-size:13px;font-weight:700;display:{{ sheetDotDisplay }};align-items:center;justify-content:center">{{ sheetN }}</span>
+                <span style="font-family:'Space Grotesk',sans-serif;font-size:18px;font-weight:600">{{ sheetTitle }}</span>
+                <span class="num" style="margin-left:auto;font-size:16px;font-weight:600">{{ sheetAmount }}</span>
+              </div>
+              <span style="font-size:13px;color:#6d777a;display:{{ sheetHintDisplay }}">{{ sheetHint }}</span>
+
+              <sc-for list="{{ sheetRows }}" as="r" hint-placeholder-count="2">
+                <button onClick="{{ r.onClick }}" style="min-height:52px;padding:0 14px;border-radius:10px;border:1px solid #eceff0;background:#fff;cursor:pointer;display:flex;align-items:center;gap:10px;text-align:left">
+                  <span style="flex:1;font-size:14px;font-weight:500">{{ r.label }}</span>
+                  <span class="num" style="font-size:14px;font-weight:600">{{ r.amount }}</span>
+                  <span style="height:32px;padding:0 12px;border-radius:8px;background:#f0f3f3;color:#4d5659;font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:6px"><i data-lucide="undo-2" style="width:14px;height:14px"></i>Return</span>
+                </button>
+              </sc-for>
+
+              <div style="display:{{ shareDisplay }};flex-wrap:wrap;gap:8px">
+                <sc-for list="{{ shareChips }}" as="g" hint-placeholder-count="3">
+                  <button onClick="{{ g.toggle }}" style="height:48px;padding:0 14px 0 6px;border-radius:24px;border:2px solid {{ g.border }};background:{{ g.bg }};cursor:pointer;display:flex;align-items:center;gap:8px;font-size:14px;font-weight:600;color:#171b1c">
+                    <span style="width:30px;height:30px;border-radius:15px;background:{{ g.color }};color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center">{{ g.n }}</span>{{ g.name }}<span style="font-size:16px;font-weight:700;color:{{ g.color }};width:16px;text-align:center">{{ g.mark }}</span>
+                  </button>
+                </sc-for>
+              </div>
+
+              <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap;margin-top:4px">
+                <button onClick="{{ sheetSecondary }}" style="height:48px;padding:0 16px;border-radius:10px;border:1px solid #dde2e3;background:#fff;color:#4d5659;font-size:14px;font-weight:600;cursor:pointer;display:{{ sheetSecondaryDisplay }};align-items:center;gap:8px">{{ sheetSecondaryLabel }}</button>
+                <button onClick="{{ sheetPrimary }}" style="height:48px;padding:0 20px;border-radius:10px;border:none;background:{{ sheetPrimaryBg }};color:#fff;font-size:14px;font-weight:600;cursor:pointer">{{ sheetPrimaryLabel }}</button>
+              </div>
+            </div>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    </sc-if>
+  </div>
+
+  <div style="width:100%;max-width:1120px;font-size:12px;color:#6d777a">Sample: the G3 demo bill — 39,500 of food and drink + 10% service = ₦43,450.00. Guest totals include their share of the service charge; the parts always add up exactly to the bill, with any rounding on the last part.</div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+// ---- Sample bill (kobo). Identical lines are merged; different modifiers or notes stay apart.
+const LINES = [
+  { id: 'egusi', name: 'Egusi Soup', mods: 'Pounded yam · Goat meat', unit: 650000, qty: 2 },
+  { id: 'pepper', name: 'Goat Meat Pepper Soup', mods: 'Hot', unit: 500000, qty: 1 },
+  { id: 'rice1', name: 'Fried Rice & Turkey', mods: 'Large · “One without pepper”', unit: 700000, qty: 1 },
+  { id: 'rice2', name: 'Fried Rice & Turkey', mods: 'Large', unit: 700000, qty: 1 },
+  { id: 'star', name: 'Star Lager', mods: 'Chilled', unit: 150000, qty: 3 },
+  { id: 'zobo', name: 'Zobo', mods: '', unit: 150000, qty: 2 },
+];
+const ITEMS = 3950000, TOTAL = 4345000;
+const COLORS = ['#0f7d6a', '#1d5fa8', '#c2410c', '#7c3aed', '#b45309', '#be185d', '#0e7490', '#4d7c0f'];
+const naira = (k) => '₦' + (k / 100).toLocaleString('en-NG', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const nairaShort = (k) => '₦' + Math.round(k / 100).toLocaleString('en-NG');
+const FRACTION = { 2: '½', 3: '⅓', 4: '¼', 5: '⅕', 6: '⅙' };
+// Evenly to the kobo; the last share takes the rounding.
+const splitEven = (amount, n) => { const base = Math.floor(amount / n); return Array.from({ length: n }, (_, i) => (i === n - 1 ? amount - base * (n - 1) : base)); };
+const emptyUnits = () => Object.fromEntries(LINES.map((l) => [l.id, Array(l.qty).fill(null)]));
+const lineOf = (id) => LINES.find((l) => l.id === id);
+
+const PRESETS = {
+  empty: () => ({ guests: [1, 2], nextId: 3, active: 1, units: emptyUnits() }),
+  half: () => { const u = emptyUnits(); u.egusi[0] = [1]; u.pepper[0] = [1]; u.rice1[0] = [2]; u.star[0] = [2]; return { guests: [1, 2, 3], nextId: 4, active: 3, units: u }; },
+  complete: () => { const u = emptyUnits(); u.egusi = [[1], [3]]; u.pepper = [[1, 2]]; u.rice1 = [[2]]; u.rice2 = [[3]]; u.star = [[2], [2], [3]]; u.zobo = [[1], [3]]; return { guests: [1, 2, 3], nextId: 4, active: 3, units: u }; },
+};
+const STATES = [
+  ['empty', 'By item · empty', 'item'], ['half', 'By item · half-assigned', 'item'], ['complete', 'By item · complete (one shared)', 'item'],
+  ['equal', 'Equal', 'equal'], ['amount', 'By amount', 'amount'], ['conflict', 'Bill changed', 'item'], ['panel', 'After splitting · Bill panel', 'panel'],
+];
+const CAPTIONS = {
+  empty: 'Opens with 2 guests and Guest 1 picked. Tap an item: one unit goes to the picked guest. Tap a guest’s name to pick them; tap their total to see and return their items. Nothing is red while you work.',
+  half: 'Guest 3 was just added with + (and picked). The coloured numbers on a card show who has its units. “Rest to Guest 3” gives everything left to them in one tap — the whole split took 7 taps.',
+  complete: 'Everything is assigned; the Pepper Soup is shared ½–½ (the split button on a card is the long-press in the app). The button now says exactly what it will do.',
+  equal: 'A big guest-count stepper (2–20) and the live list; the kobo of rounding lands on the last guest.',
+  amount: 'Tap a guest, type on the keypad. The last guest always pays what’s left; “Split remainder equally” shares it between the guests still blank.',
+  conflict: 'The server refused the split because the order changed. One short message, assignments kept, “Reload bill” brings in the change (here: one more Zobo to assign).',
+  panel: 'After splitting: one card per guest with its own Pay. Paid parts show a green pill. “Edit split” reopens the pop-up with the assignments kept — until the first part is paid, then the split locks. Tap Pay here to see it lock.',
+};
+
+class Component extends DCLogic {
+  state = { view: 'item', preset: 'empty', frame: 'portrait', ...PRESETS.empty(), sheet: null, shareSel: [], toast: null, undoSnap: null, ways: 3, amtCount: 3, amounts: ['', ''], amtActive: 0, conflict: false, paid: {} };
+
+  componentDidMount() { this.paintIcons(); }
+  componentDidUpdate() { this.paintIcons(); }
+  paintIcons() { if (window.lucide && window.lucide.createIcons) { try { window.lucide.createIcons(); } catch (e) {} } else setTimeout(() => this.paintIcons(), 200); }
+
+  snapshot() { const { guests, nextId, active, units } = this.state; return { guests: [...guests], nextId, active, units: JSON.parse(JSON.stringify(units)) }; }
+  toast(text, snap) {
+    clearTimeout(this.toastTimer);
+    this.setState({ toast: text, undoSnap: snap });
+    this.toastTimer = setTimeout(() => this.setState({ toast: null, undoSnap: null }), 4000);
+  }
+  gName(id) { return 'Guest ' + (this.state.guests.indexOf(id) + 1); }
+  gColor(id) { return COLORS[(id - 1) % COLORS.length]; }
+
+  // Each guest's share of the items (kobo), then of the bill.
+  subtotals(units, guests) {
+    const sub = Object.fromEntries(guests.map((g) => [g, 0]));
+    for (const l of LINES) for (const u of units[l.id]) if (u) { const order = guests.filter((g) => u.includes(g)); splitEven(l.unit, order.length).forEach((v, i) => (sub[order[i]] += v)); }
+    return sub;
+  }
+  billTotals(units, guests, complete) {
+    const sub = this.subtotals(units, guests);
+    const out = {}; let given = 0;
+    guests.forEach((g, i) => { if (complete && i === guests.length - 1) out[g] = TOTAL - given; else { out[g] = Math.round((sub[g] * TOTAL) / ITEMS); given += out[g]; } });
+    return out;
+  }
+
+  pick(key) {
+    clearTimeout(this.toastTimer);
+    const view = STATES.find((s) => s[0] === key)[2];
+    const base = { preset: key, view, sheet: null, toast: null, undoSnap: null, conflict: key === 'conflict', paid: {} };
+    if (key === 'conflict' || key === 'panel') this.setState({ ...base, ...PRESETS.complete() });
+    else if (PRESETS[key]) this.setState({ ...base, ...PRESETS[key]() });
+    else this.setState({ ...base, ...PRESETS.empty(), ...(key === 'amount' ? { amtCount: 3, amounts: ['15000', ''], amtActive: 1 } : {}) });
+  }
+
+  assign(lineId) {
+    const s = this.state; const idx = s.units[lineId].indexOf(null);
+    if (idx < 0) return;
+    const snap = this.snapshot(); const units = { ...s.units, [lineId]: [...s.units[lineId]] };
+    units[lineId][idx] = [s.active];
+    this.setState({ units });
+    this.toast(`Gave ${lineOf(lineId).name} to ${this.gName(s.active)}`, snap);
+  }
+  restToActive() {
+    const s = this.state; const snap = this.snapshot(); let n = 0;
+    const units = Object.fromEntries(LINES.map((l) => [l.id, s.units[l.id].map((u) => (u ? u : (n++, [s.active])))]));
+    if (!n) return;
+    this.setState({ units });
+    this.toast(`Gave the rest (${n} item${n === 1 ? '' : 's'}) to ${this.gName(s.active)}`, snap);
+  }
+  addGuest() {
+    const s = this.state; if (s.guests.length >= 20) return;
+    this.setState({ guests: [...s.guests, s.nextId], active: s.nextId, nextId: s.nextId + 1 });
+  }
+  removeGuest(id) {
+    const s = this.state; if (s.guests.length <= 2) return;
+    const snap = this.snapshot();
+    const units = Object.fromEntries(LINES.map((l) => [l.id, s.units[l.id].map((u) => { if (!u || !u.includes(id)) return u; const rest = u.filter((g) => g !== id); return rest.length ? rest : null; })]));
+    const guests = s.guests.filter((g) => g !== id);
+    this.setState({ guests, units, active: guests[0], sheet: null });
+    this.toast(`Removed ${this.gName(id)} — their items are unassigned`, snap);
+  }
+  returnUnit(lineId, idx, guest) {
+    const s = this.state; const snap = this.snapshot(); const units = { ...s.units, [lineId]: [...s.units[lineId]] };
+    const u = units[lineId][idx]; const rest = u.filter((g) => g !== guest);
+    units[lineId][idx] = rest.length ? rest : null;
+    this.setState({ units });
+    this.toast(`Returned ${lineOf(lineId).name} from ${this.gName(guest)}`, snap);
+  }
+  share(lineId) {
+    const s = this.state; const idx = s.units[lineId].indexOf(null); if (idx < 0 || s.shareSel.length < 2) return;
+    const snap = this.snapshot(); const units = { ...s.units, [lineId]: [...s.units[lineId]] };
+    const who = s.guests.filter((g) => s.shareSel.includes(g));
+    units[lineId][idx] = who;
+    this.setState({ units, sheet: null, shareSel: [] });
+    this.toast(`Shared ${lineOf(lineId).name} ${FRACTION[who.length] || '1/' + who.length} each`, snap);
+  }
+
+  renderVals() {
+    const s = this.state;
+    const portrait = s.frame === 'portrait';
+    const frameW = portrait ? 768 : 1024, frameH = portrait ? 1024 : 768;
+    const units = s.units;
+    const unassignedUnits = LINES.reduce((n, l) => n + units[l.id].filter((u) => !u).length, 0);
+    const unassignedSub = LINES.reduce((k, l) => k + units[l.id].filter((u) => !u).length * l.unit, 0);
+    const complete = unassignedUnits === 0;
+    const totals = this.billTotals(units, s.guests, complete);
+    const emptyGuest = s.guests.find((g) => totals[g] === 0);
+
+    // ---- Footer per mode
+    let footNote = '', primaryLabel = '', ready = false;
+    if (s.view === 'item') {
+      if (s.conflict) { primaryLabel = 'Reload the bill to continue'; footNote = 'Nothing was saved — the bill changed first.'; }
+      else if (!complete) { primaryLabel = `Assign ${unassignedUnits} more item${unassignedUnits === 1 ? '' : 's'}`; footNote = 'Tap items to give them to the picked guest.'; }
+      else if (emptyGuest) { primaryLabel = `${this.gName(emptyGuest)} has nothing yet`; footNote = `Give ${this.gName(emptyGuest)} an item, or open their total and remove them.`; }
+      else { ready = true; primaryLabel = `Split into ${s.guests.length} bills · ${naira(TOTAL)}`; footNote = 'Each guest then pays on their own from the Bill panel.'; }
+    }
+    const equalAmounts = splitEven(TOTAL, s.ways);
+    if (s.view === 'equal') { ready = true; primaryLabel = `Split into ${s.ways} bills · ${naira(TOTAL)}`; footNote = `${s.ways} × about ${naira(equalAmounts[0])}`; }
+    const typed = s.amounts.slice(0, s.amtCount - 1).map((v) => Math.round(Number(v || 0) * 100));
+    const typedSum = typed.reduce((a, b) => a + b, 0);
+    const lastAmount = TOTAL - typedSum;
+    if (s.view === 'amount') {
+      if (lastAmount < 0) { primaryLabel = `Lower an amount by ${naira(-lastAmount)}`; footNote = 'The amounts are more than the bill.'; }
+      else if (typed.some((v) => v === 0) || lastAmount === 0) { primaryLabel = 'Enter each guest’s amount'; footNote = 'Every guest needs an amount above ₦0 — or use “Split remainder equally”.'; }
+      else { ready = true; primaryLabel = `Split into ${s.amtCount} bills · ${naira(TOTAL)}`; footNote = `The last guest pays the rest: ${naira(lastAmount)}.`; }
+    }
+
+    // ---- Sheets
+    let sheet = { on: false };
+    if (s.sheet && s.sheet.type === 'guest') {
+      const g = s.sheet.id; const rows = [];
+      for (const l of LINES) units[l.id].forEach((u, i) => { if (u && u.includes(g)) { const order = s.guests.filter((x) => u.includes(x)); const part = splitEven(l.unit, order.length)[order.indexOf(g)]; rows.push({ label: (u.length > 1 ? (FRACTION[u.length] || '1/' + u.length) + ' ' : '') + l.name, amount: naira(part), onClick: () => this.returnUnit(l.id, i, g) }); } });
+      sheet = { on: true, color: this.gColor(g), n: s.guests.indexOf(g) + 1, dot: 'flex', title: this.gName(g), amount: naira(totals[g]), hint: rows.length ? 'Tap an item to send it back to unassigned. The total includes their share of the 10% service charge.' : `Nothing yet — pick ${this.gName(g)} and tap items.`, rows, share: 'none',
+        secondary: () => this.removeGuest(g), secondaryLabel: s.guests.length > 2 ? `Remove ${this.gName(g)}` : 'A split needs 2 guests', secondaryIcon: 'user-minus', secondaryDisplay: 'flex', primary: () => this.setState({ sheet: null, active: g }), primaryLabel: `Done · ${this.gName(g)} picked`, primaryBg: '#0f7d6a' };
+    } else if (s.sheet && s.sheet.type === 'share') {
+      const l = lineOf(s.sheet.line); const n = s.shareSel.length;
+      sheet = { on: true, dot: 'none', title: `Share ${l.name}`, amount: naira(l.unit), hint: n >= 2 ? `${FRACTION[n] || '1/' + n} each: ${splitEven(l.unit, n).map(naira).join(' + ')} (rounding on the last)` : 'Tap the guests who are sharing it (2 or more).', rows: [], share: 'flex',
+        secondaryDisplay: 'none', primary: () => this.share(l.id), primaryLabel: n >= 2 ? `Share between ${n}` : 'Pick 2 or more guests', primaryBg: n >= 2 ? '#0f7d6a' : '#c3cacc' };
+    } else if (s.sheet && s.sheet.type === 'reset') {
+      sheet = { on: true, dot: 'none', title: 'Clear all assignments?', amount: '', hint: 'The guests stay; every item goes back to unassigned. You can undo this.', rows: [], share: 'none',
+        secondary: () => this.setState({ sheet: null }), secondaryLabel: 'Keep them', secondaryIcon: 'x', secondaryDisplay: 'flex',
+        primary: () => { const snap = this.snapshot(); this.setState({ units: emptyUnits(), sheet: null }); this.toast('Cleared all assignments', snap); }, primaryLabel: 'Clear all', primaryBg: '#b3261e' };
+    }
+
+    // ---- Bill panel parts (after splitting)
+    const finalTotals = this.billTotals(PRESETS.complete().units, [1, 2, 3], true);
+    const done = PRESETS.complete().units;
+    const itemsOf = (g) => LINES.flatMap((l) => {
+      const whole = done[l.id].filter((u) => u && u.length === 1 && u[0] === g).length;
+      const shared = done[l.id].filter((u) => u && u.length > 1 && u.includes(g));
+      return [...(whole ? [(whole > 1 ? whole + '× ' : '') + l.name] : []), ...shared.map((u) => (FRACTION[u.length] || '1/' + u.length) + ' ' + l.name)];
+    });
+    const anyPaid = Object.keys(s.paid).length > 0;
+    const parts = [1, 2, 3].map((g, i) => ({ name: `Guest ${i + 1}`, color: COLORS[i], amount: naira(finalTotals[g]), items: itemsOf(g).join(', '), paid: !!s.paid[g], open: !s.paid[g], method: s.paid[g] || '', bg: s.paid[g] ? '#fafbfb' : '#fff', pay: () => this.setState({ paid: { ...s.paid, [g]: g === 1 ? 'Cash' : 'Card' } }) }));
+    const paidSum = [1, 2, 3].reduce((a, g) => a + (s.paid[g] ? finalTotals[g] : 0), 0);
+
+    const tab = (on) => ({ bg: on ? '#171b1c' : '#fff', fg: on ? '#fff' : '#4d5659', border: on ? '#171b1c' : '#c3cacc' });
+    const keys = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '00', '0', '⌫'];
+    const restOn = s.view === 'item' && unassignedUnits > 0;
+
+    return {
+      stateTabs: STATES.map(([key, label]) => ({ label, ...tab(s.preset === key), onClick: () => this.pick(key) })),
+      frameTabs: [['portrait', '10" portrait · 768'], ['landscape', '10" landscape · 1024']].map(([key, label]) => ({ label, ...tab(s.frame === key), onClick: () => this.setState({ frame: key }) })),
+      caption: CAPTIONS[s.preset],
+      frameW, frameH, pad: portrait ? 16 : 24, asideW: portrait ? 340 : 400, cardMin: portrait ? 210 : 220,
+      skeleton: Array(9).fill(0), skeletonLines: Array(5).fill(0),
+      showModal: s.view !== 'panel', showPanel: s.view === 'panel',
+      isItem: s.view === 'item', isEqual: s.view === 'equal', isAmount: s.view === 'amount',
+      conflict: s.conflict, reload: () => this.setState({ conflict: false, units: { ...units, zobo: [...units.zobo, null] } }),
+      resetDisplay: s.view === 'item' ? 'flex' : 'none',
+      askReset: () => this.setState({ sheet: { type: 'reset' } }),
+      modeTabs: [['item', 'By item', 'list-checks'], ['equal', 'Equal', 'equal'], ['amount', 'By amount', 'calculator']].map(([key, label, icon]) => {
+        const on = s.view === key;
+        return { label, icon, bg: on ? '#fff' : 'transparent', fg: on ? '#171b1c' : '#4d5659', shadow: on ? '0 1px 3px rgba(23,27,28,.15)' : 'none', onClick: () => this.setState({ view: key, preset: key === 'item' ? s.preset : key }) };
+      }),
+      // By item
+      guestChips: s.guests.map((g, i) => {
+        const on = g === s.active;
+        return { n: i + 1, name: 'Guest ' + (i + 1), color: this.gColor(g), total: nairaShort(totals[g]), border: on ? this.gColor(g) : '#dde2e3', bg: on ? this.gColor(g) + '14' : '#fff', fg: '#171b1c', divider: on ? this.gColor(g) + '55' : '#eceff0', shadow: on ? `0 0 0 3px ${this.gColor(g)}22` : 'none',
+          activate: () => this.setState({ active: g }), open: () => this.setState({ sheet: { type: 'guest', id: g } }) };
+      }),
+      addGuest: () => this.addGuest(),
+      progressText: complete ? `Everything is assigned · ${s.guests.length} guests` : `${naira(Math.round((unassignedSub * TOTAL) / ITEMS))} left to assign · ${unassignedUnits} item${unassignedUnits === 1 ? '' : 's'}`,
+      progressPct: Math.round(((ITEMS - unassignedSub) / ITEMS) * 100),
+      restLabel: `Rest to ${this.gName(s.active)}`, restDisplay: restOn ? 'flex' : 'none', restBorder: '#0f7d6a', restFg: '#0a6355',
+      restToActive: () => this.restToActive(),
+      cards: [...LINES].sort((a, b) => (units[a.id].includes(null) ? 0 : 1) - (units[b.id].includes(null) ? 0 : 1)).map((l) => {
+        const left = units[l.id].filter((u) => !u).length;
+        const dots = [];
+        // One dot per unit in its guest's colour (more than 4 for one guest: "+n").
+        s.guests.forEach((g, gi) => { const mine = units[l.id].filter((u) => u && u.length === 1 && u[0] === g).length; for (let k = 0; k < Math.min(mine, 4); k++) dots.push({ color: this.gColor(g), label: `${gi + 1}` }); if (mine > 4) dots.push({ color: this.gColor(g), label: `+${mine - 4}` }); });
+        units[l.id].forEach((u) => { if (u && u.length > 1) dots.push({ color: '#4d5659', label: `${FRACTION[u.length] || '1/' + u.length} ${u.map((g) => s.guests.indexOf(g) + 1).join('+')}` }); });
+        const full = left === 0;
+        return { name: (l.qty > 1 ? l.qty + '× ' : '') + l.name, mods: l.mods, modsDisplay: l.mods ? 'block' : 'none', price: naira(l.unit) + (l.qty > 1 ? ' ea' : ''),
+          left: full ? 'All assigned' : `${left} left`, leftBg: full ? '#eef1f2' : '#e3f4ee', leftFg: full ? '#6d777a' : '#0a6355',
+          dots, border: full ? '#eceff0' : '#cfe3de', bg: full ? '#fafbfb' : '#fff', opacity: full ? 0.75 : 1, cursor: full ? 'default' : 'pointer',
+          shareDisplay: full ? 'none' : 'flex', tap: () => this.assign(l.id), share: () => this.setState({ sheet: { type: 'share', line: l.id }, shareSel: [] }) };
+      }),
+      // Equal
+      ways: s.ways,
+      waysDown: () => this.setState({ ways: Math.max(2, s.ways - 1) }), waysUp: () => this.setState({ ways: Math.min(20, s.ways + 1) }),
+      equalRows: equalAmounts.map((a, i) => ({ n: i + 1, name: 'Guest ' + (i + 1), color: COLORS[i % COLORS.length], amount: naira(a) })),
+      // By amount
+      amountRows: Array.from({ length: s.amtCount }, (_, i) => {
+        const last = i === s.amtCount - 1; const on = !last && i === s.amtActive; const v = s.amounts[i] || '';
+        return { n: i + 1, name: 'Guest ' + (i + 1), color: COLORS[i % COLORS.length], hint: last ? 'Pays the rest' : on ? 'Typing…' : 'Tap to enter', value: last ? naira(Math.max(0, lastAmount)) : v ? naira(Math.round(Number(v) * 100)) : '—',
+          valueFg: last ? '#0a6355' : v ? '#171b1c' : '#97a1a4', border: on ? '#0f7d6a' : last ? '#cfe3de' : '#eceff0', bg: last ? '#f3faf8' : '#fff', cursor: last ? 'default' : 'pointer', focus: () => !last && this.setState({ amtActive: i }) };
+      }),
+      keypad: keys.map((k) => ({ label: k, bg: k === '⌫' ? '#f5f7f7' : '#fff', press: () => this.setState((st) => {
+        const amounts = [...st.amounts]; const cur = amounts[st.amtActive] || '';
+        amounts[st.amtActive] = k === '⌫' ? cur.slice(0, -1) : (cur + k).replace(/^0+(?=\d)/, '').slice(0, 9);
+        return { amounts };
+      }) })),
+      amountAddGuest: () => this.setState({ amtCount: Math.min(20, s.amtCount + 1), amounts: [...s.amounts.slice(0, s.amtCount - 1), '', ''] }),
+      amountRemoveGuest: () => this.setState({ amtCount: Math.max(2, s.amtCount - 1), amtActive: Math.min(s.amtActive, Math.max(0, s.amtCount - 3)) }),
+      amountRemoveDisplay: s.amtCount > 2 ? 'flex' : 'none',
+      remainderDisplay: typed.some((v) => v === 0) && lastAmount > 0 ? 'flex' : 'none',
+      splitRemainder: () => this.setState((st) => {
+        const blanks = Array.from({ length: st.amtCount - 1 }, (_, i) => i).filter((i) => !Number(st.amounts[i] || 0));
+        const shares = splitEven(lastAmount, blanks.length + 1); const amounts = [...st.amounts];
+        blanks.forEach((i, j) => (amounts[i] = (shares[j] / 100).toFixed(2)));
+        return { amounts };
+      }),
+      // Footer
+      footNote, primaryLabel, primaryBg: ready ? '#0f7d6a' : '#e4e8e9', primaryFg: ready ? '#fff' : '#6d777a', primaryCursor: ready ? 'pointer' : 'default',
+      primary: () => ready && this.setState({ view: 'panel', preset: 'panel', paid: {} }),
+      // Toast
+      toastOn: !!s.toast, toastText: s.toast || '', undo: () => { clearTimeout(this.toastTimer); if (s.undoSnap) this.setState({ ...s.undoSnap, toast: null, undoSnap: null }); },
+      // Sheets
+      sheetOn: sheet.on, closeSheet: () => this.setState({ sheet: null }), stop: (e) => e && e.stopPropagation && e.stopPropagation(),
+      sheetColor: sheet.color || '#0f7d6a', sheetN: sheet.n || '', sheetDotDisplay: sheet.dot || 'none', sheetTitle: sheet.title || '', sheetAmount: sheet.amount || '',
+      sheetHint: sheet.hint || '', sheetHintDisplay: sheet.hint ? 'block' : 'none', sheetRows: sheet.rows || [], shareDisplay: sheet.share || 'none',
+      shareChips: s.guests.map((g, i) => { const on = s.shareSel.includes(g); return { n: i + 1, name: 'Guest ' + (i + 1), color: this.gColor(g), border: on ? this.gColor(g) : '#dde2e3', bg: on ? this.gColor(g) + '14' : '#fff', mark: on ? '✓' : '', toggle: () => this.setState({ shareSel: on ? s.shareSel.filter((x) => x !== g) : [...s.shareSel, g] }) }; }),
+      sheetSecondary: sheet.secondary || (() => {}), sheetSecondaryLabel: sheet.secondaryLabel || '', sheetSecondaryIcon: sheet.secondaryIcon || 'x', sheetSecondaryDisplay: sheet.secondaryDisplay || 'none',
+      sheetPrimary: sheet.primary || (() => {}), sheetPrimaryLabel: sheet.primaryLabel || '', sheetPrimaryBg: sheet.primaryBg || '#0f7d6a',
+      // Bill panel
+      panelMode: 'By item · 3 guests', parts, locked: anyPaid,
+      editSplit: () => !anyPaid && this.setState({ view: 'item', preset: 'complete', ...PRESETS.complete() }),
+      editBorder: anyPaid ? '#eceff0' : '#0f7d6a', editFg: anyPaid ? '#97a1a4' : '#0a6355', editCursor: anyPaid ? 'default' : 'pointer',
+      paidSum: naira(paidSum), leftSum: naira(TOTAL - paidSum),
+    };
+  }
+}
+</script>
+</body>
+</html>

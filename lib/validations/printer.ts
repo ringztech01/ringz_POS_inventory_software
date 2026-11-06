@@ -39,6 +39,12 @@ export const printerSchema = z
   });
 
 export type PrinterInput = z.infer<typeof printerSchema>;
+
+// Step 7: a network printer to its new address (the scan's suggestion).
+export const movePrinterSchema = z.object({
+  id: z.string().min(1),
+  address: z.string().trim().regex(/^[A-Za-z0-9.-]{1,253}(:\d{1,5})?$/, "That isn't an IP address."),
+});
 export type PrinterField = keyof z.input<typeof printerSchema>;
 
 // The assignment grid: one row per role; no printer = not assigned.

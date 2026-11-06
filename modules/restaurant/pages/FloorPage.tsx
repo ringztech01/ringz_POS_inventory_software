@@ -35,7 +35,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
   const drawer = permissions.has(PERMISSIONS.OPEN_DRAWER) ? await drawerPrinterFor(await currentDeviceId()) : null;
 
   const header = (
-    <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 16, rowGap: 10, flexWrap: "wrap" }}>
       {floor.areas.length > 0 && (
         <nav aria-label="Areas" style={{ display: "flex", gap: 4, background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 9, padding: 3 }}>
           {floor.areas.map((a) => {
@@ -58,6 +58,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
                   display: "flex",
                   alignItems: "center",
                   textDecoration: "none",
+                  whiteSpace: "nowrap",
                 }}
               >
                 {a.name}
@@ -66,9 +67,9 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
           })}
         </nav>
       )}
-      <div aria-label="Legend" style={{ marginLeft: "auto", display: "flex", gap: 16 }}>
+      <div aria-label="Legend" style={{ marginLeft: "auto", display: "flex", gap: 16, flexWrap: "wrap" }}>
         {TABLE_STATUSES.map((status) => (
-          <span key={status} data-legend={status} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: COLORS.slate }}>
+          <span key={status} data-legend={status} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: COLORS.slate, whiteSpace: "nowrap" }}>
             <span style={{ width: 10, height: 10, borderRadius: 3, background: FLOOR_LEGEND[status] }} />
             {status} · {floor.legend[status]}
           </span>

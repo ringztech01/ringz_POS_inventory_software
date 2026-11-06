@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { ChevronLeft, Pencil, Printer as PrinterIcon, Trash2 } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
@@ -13,6 +14,7 @@ import { CODE_PAGES } from "@/lib/hardware/escpos";
 import type { DeviceRow, PrinterRow, PrinterSetup, RoleRow } from "@/lib/hardware/printerSetup";
 import PrinterModal from "./PrinterModal";
 import PrinterStatusPill from "./PrinterStatusPill";
+import MovedPrinterFinder from "./MovedPrinterFinder";
 
 // Settings › Printers: the printers (status polled every 15 s from the
 // hardware bridge), the role → printer grid, and devices with their own
@@ -181,13 +183,17 @@ export default function PrintersPanel({ setup }: { setup: PrinterSetup }) {
   const [testing, setTesting] = useState<string | null>(null);
   const [kicking, setKicking] = useState<string | null>(null);
 
+  const router = useRouter();
   const poll = useCallback(async () => {
     const result = await printerStatusAction();
     if (result.ok) {
       setStatus(result.statuses);
       setBridgeError(null);
+      // Replugged printers found again (Step 7): same printer, new address.
+      for (const f of result.found) toast.success(`${f.name} was found again (${f.to}) — same assignments.`);
+      if (result.found.length) router.refresh();
     } else setBridgeError(result.error);
-  }, []);
+  }, [router]);
   useEffect(() => {
     const first = setTimeout(() => void poll(), 0);
     const timer = setInterval(() => void poll(), STATUS_POLL_MS);
@@ -290,6 +296,7 @@ export default function PrintersPanel({ setup }: { setup: PrinterSetup }) {
                     <td style={td}>{p.openDrawer ? `Pin ${p.drawerPin}` : "None"}</td>
                     <td style={td}>
                       <PrinterStatusPill status={live?.status ?? (bridgeError ? (p.lastStatus ?? "UNKNOWN") : "CHECKING")} detail={live?.detail} />
+                      {p.connection === "NETWORK" && live?.status === "OFFLINE" && <MovedPrinterFinder printerId={p.id} name={p.name} />}
                     </td>
                     <td style={{ ...td, whiteSpace: "nowrap" }}>
                       <span style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 6 }}>
@@ -323,6 +330,9 @@ export default function PrintersPanel({ setup }: { setup: PrinterSetup }) {
               Tablets and PCs that have opened POS, the kitchen display or an order screen. Give one its own Receipt or Pre-bill printer here (e.g. Cashier tablet 2 → Receipt printer 2).
             </p>
           </div>
+          <Link href="/settings/scanner" style={{ ...small, marginLeft: "auto", display: "inline-flex", alignItems: "center", color: COLORS.slate, textDecoration: "none", whiteSpace: "nowrap" }}>
+            Scanner test
+          </Link>
         </div>
         {devices.length === 0 ? (
           <p style={{ margin: 0, padding: "20px", fontSize: 13.5, color: COLORS.slateMid }}>No devices yet.</p>

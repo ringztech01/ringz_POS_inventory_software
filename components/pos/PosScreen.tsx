@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import toast from "react-hot-toast";
 import {
@@ -15,6 +15,7 @@ import {
   Maximize,
   Minimize,
   RotateCw,
+  ScanLine,
   Search,
   ShoppingBag,
   User,
@@ -40,6 +41,9 @@ import PosSaleCompleteModal, { type CompletedSale } from "./PosSaleCompleteModal
 import PosCalculator from "./PosCalculator";
 import { useFullscreen } from "./use-fullscreen";
 import { OpenDrawerModal } from "@/components/hardware/OpenDrawerButton";
+import CameraScanButton from "@/components/hardware/CameraScanner";
+import { useScan } from "@/components/hardware/ScanProvider";
+import { postToCustomerDisplay } from "@/lib/hardware/customerDisplay";
 import { POS } from "./theme";
 
 const panel: CSSProperties = {
@@ -320,6 +324,35 @@ export default function PosScreen({
     setQuery("");
   }
 
+  // A barcode scan (or the camera) while no text field has focus: the product
+  // with that code joins the cart. Paused while a pop-up is open.
+  const popupOpen = paying || !!completed || showHeld || showCalculator || openingDrawer || !!editingProductId;
+  useScan(
+    (code) => {
+      const match = products.find((product) => product.code.toLowerCase() === code.toLowerCase());
+      if (!match) {
+        toast.error(`No product with code ${code} in ${warehouseName}.`);
+        return;
+      }
+      addProduct(match);
+    },
+    { enabled: !popupOpen },
+  );
+
+  // The customer display (a stub — /pos/display on a second screen): the cart as it is.
+  useEffect(() => {
+    if (completed) return;
+    postToCustomerDisplay(
+      lines.length === 0
+        ? { kind: "idle" }
+        : { kind: "cart", lines: lines.map((line, i) => ({ name: line.name, quantity: line.quantity, total: formatNaira(subtotals[i].toFixed(2)) })), total: formatNaira(order.grandTotal.toFixed(2)) },
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the totals follow `lines` and the order fields
+  }, [lines, orderTax, discount, shipping, completed]);
+  useEffect(() => {
+    if (completed) postToCustomerDisplay({ kind: "done", total: formatNaira(completed.total), paid: formatNaira(completed.paid), change: formatNaira(completed.change) });
+  }, [completed]);
+
   return (
     <div
       style={{
@@ -494,6 +527,13 @@ export default function PosScreen({
           >
             {fullscreen.active ? <Minimize size={21} strokeWidth={1.6} /> : <Maximize size={21} strokeWidth={1.6} />}
           </ToolButton>
+          <CameraScanButton
+            render={(open) => (
+              <ToolButton title="Scan with the camera" color={POS.indigo} hover={POS.indigoHover} onClick={open}>
+                <ScanLine size={21} strokeWidth={1.5} />
+              </ToolButton>
+            )}
+          />
           {drawerPrinter && (
             <ToolButton title="Open drawer" color={POS.indigo} hover={POS.indigoHover} onClick={() => setOpeningDrawer(true)}>
               <Archive size={21} strokeWidth={1.5} />
