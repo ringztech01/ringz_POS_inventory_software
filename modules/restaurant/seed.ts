@@ -276,7 +276,8 @@ async function main() {
       (await prisma.diningArea.create({ data: { name: areaName, warehouseId: warehouse.id, sortOrder: index } }));
     for (const [name, seats] of rows) {
       const table =
-        (await prisma.table.findFirst({ where: { name, areaId: area.id, deletedAt: null } })) ??
+        // A table number is unique across the business: reuse it wherever it is.
+        (await prisma.table.findFirst({ where: { name, deletedAt: null } })) ??
         (await prisma.table.create({
           data: { name, seats, areaId: area.id, qrToken: newQrToken(), needsCleaning: NEEDS_CLEANING.has(name) },
         }));

@@ -22,7 +22,8 @@ export type RefundRequest = {
   reason: string;
   idempotencyKey: string;
 };
-export type RefundOutcome = { ok: true } | { ok: false; error: string };
+// needsManager: a refund needs a manager's PIN (the PIN pad asks).
+export type RefundOutcome = { ok: true } | { ok: false; error: string; needsManager?: boolean };
 
 const TYPE_OPTIONS = (Object.keys(PAYMENT_TYPE_LABELS) as PaymentType[]).map((value) => ({ value, label: PAYMENT_TYPE_LABELS[value] }));
 const money = (value: { toFixed: (n: number) => string }) => formatNaira(value.toFixed(2));

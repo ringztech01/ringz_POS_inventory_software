@@ -91,3 +91,15 @@ describe("edge cases", () => {
     assert.deepEqual(reservationHoldRange(NOW, RULES), { from: at(-30), to: at(60) });
   });
 });
+
+test("separate checks: a shared table is Occupied while any check is open, and lists them all", () => {
+  const first = { id: "c1", status: "SENT" as const, deletedAt: null };
+  const second = { id: "c2", status: "OPEN" as const, deletedAt: null };
+  const paid = { id: "c3", status: "BILLED" as const, deletedAt: null };
+  const state = tableStatus(table({ orders: [first, second, paid] }), RULES, NOW);
+  assert.equal(state?.status, "Occupied");
+  assert.equal(state?.order?.id, "c1", "its first check");
+  assert.deepEqual(state?.orders.map((o) => o.id), ["c1", "c2"], "paid checks no longer hold it");
+  assert.equal(status(table({ orders: [paid] })), "Available", "the last check paid: it lets go");
+  assert.deepEqual(tableStatus(table(), RULES, NOW)?.orders, []);
+});

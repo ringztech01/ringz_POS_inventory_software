@@ -81,7 +81,22 @@ export type ReceiptTicket = {
   footer: string;
 };
 
-export type TicketTemplate = "KOT" | "PREBILL" | "RECEIPT" | "TEST";
+// A till's Z-report (Part 6f Step 7b, cash-up): the till, who opened and
+// closed it, then sections of label / value rows (the cash, takings by
+// method, counts). Printed exactly as the screen shows it.
+export type ZReportTicket = {
+  till: string;
+  openedBy: string;
+  openedAt: string;
+  closedBy: string;
+  closedAt: string;
+  sections: { heading: string; rows: [string, string][] }[];
+  // The variance, big: "Balanced", "Short ₦1,250.00".
+  result: string;
+  note: string | null;
+};
+
+export type TicketTemplate = "KOT" | "PREBILL" | "RECEIPT" | "TEST" | "ZREPORT";
 
 export type RenderOptions = {
   paperWidth: number;
@@ -231,6 +246,27 @@ export function renderReceipt(d: ReceiptTicket, o: RenderOptions): Uint8Array {
   return p.cut(o.cut).bytes();
 }
 
+export function renderZReport(d: ZReportTicket, o: RenderOptions): Uint8Array {
+  const look = o.look ?? DEFAULT_LOOK;
+  const w = lineWidth(o.paperWidth);
+  const p = new EscPos(o.codePage);
+  marks(p, o);
+  p.align("center");
+  if (look.header[0]) p.line(look.header[0].slice(0, w));
+  p.bold(true).size(2, 2).line("Z-REPORT").size(1, 1).line(d.till.slice(0, w)).bold(false).align("left");
+  p.line("-".repeat(w));
+  p.line(columns("Opened", appTime(d.openedAt), w)).line(columns("  by", d.openedBy, w));
+  p.line(columns("Closed", appTime(d.closedAt), w)).line(columns("  by", d.closedBy, w));
+  for (const section of d.sections) {
+    p.line("-".repeat(w)).bold(true).line(section.heading.toUpperCase()).bold(false);
+    for (const [label, value] of section.rows) p.line(columns(label, value, w));
+  }
+  p.line("-".repeat(w)).bold(true).size(1, 2).line(d.result.slice(0, w)).size(1, 1).bold(false);
+  if (d.note) for (const l of wrap(d.note, w)) p.line(l);
+  p.feed(1).align("center").line("Counted and closed. Keep with the cash.");
+  return p.cut(o.cut).bytes();
+}
+
 // A job's bytes: its template and data, for this printer, `copies` times.
 export function renderTicket(template: string, data: unknown, o: RenderOptions, copies = 1): Uint8Array {
   let one: Uint8Array;
@@ -243,6 +279,9 @@ export function renderTicket(template: string, data: unknown, o: RenderOptions, 
       break;
     case "RECEIPT":
       one = renderReceipt(data as ReceiptTicket, o);
+      break;
+    case "ZREPORT":
+      one = renderZReport(data as ZReportTicket, o);
       break;
     case "TEST": {
       const t = data as Omit<TestPrintTarget, "paperWidth" | "codePage" | "cut"> & { when: string };

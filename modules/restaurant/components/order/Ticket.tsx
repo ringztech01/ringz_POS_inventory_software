@@ -6,7 +6,7 @@ import { Pencil } from "lucide-react";
 import type { OrderType } from "@prisma/client";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { MAX_LINE_QUANTITY } from "../../lib/modifiers";
-import { LINE_STATUS_LABEL, MAX_GUESTS, ORDER_TYPE_LABEL } from "../../lib/orderLines";
+import { LINE_STATUS_LABEL, MAX_GUESTS, noTableLabel, ORDER_TYPE_LABEL } from "../../lib/orderLines";
 import { LINE_STATUS_PILL, R } from "../../lib/theme";
 import type { OrderDetailsChange } from "../../schemas/order";
 import { updateOrderDetails } from "../../server/actions/orders";
@@ -17,7 +17,9 @@ import ReadyToServe from "./ReadyToServe";
 import PrintButton from "@/components/hardware/PrintButton";
 import { printReceiptAction } from "../../server/actions/printing";
 
-const ORDER_TYPES: OrderType[] = ["DINE_IN", "TAKEAWAY", "DELIVERY"];
+// Bar tab is picked when a tab is opened on the touch POS (it needs a name),
+// so here it only shows on a tab.
+const ORDER_TYPES: OrderType[] = ["DINE_IN", "TAKEAWAY", "DELIVERY", "BAR_TAB"];
 
 function HeaderSelect({
   label,
@@ -257,7 +259,7 @@ export default function Ticket({
     });
   }
 
-  const title = order.tableName ? `Table ${order.tableName}` : ORDER_TYPE_LABEL[order.type];
+  const title = order.tableName ? `Table ${order.tableName}` : noTableLabel(order.type, order.tabName);
   // A line stepped down to 0 disappears at once (it's removed on the server).
   const visible = lines.filter((line) => shownQuantity(line) > 0);
 
@@ -299,9 +301,9 @@ export default function Ticket({
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
-          <HeaderSelect label="Order type" value={shown.type} disabled={locked} onChange={(value) => save({ field: "type", value: value as OrderType })}>
+          <HeaderSelect label="Order type" value={shown.type} disabled={locked} onChange={(value) => save({ field: "type", value: value as Exclude<OrderType, "BAR_TAB"> })}>
             {ORDER_TYPES.map((type) => (
-              <option key={type} value={type} disabled={type === "DINE_IN" && !order.tableName}>
+              <option key={type} value={type} disabled={(type === "DINE_IN" && !order.tableName) || (type === "BAR_TAB" && order.type !== "BAR_TAB")}>
                 {ORDER_TYPE_LABEL[type]}
               </option>
             ))}

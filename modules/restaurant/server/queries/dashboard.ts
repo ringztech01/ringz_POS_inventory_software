@@ -62,7 +62,8 @@ const billedSaleSql = (range: DateRange) => {
 
 const ordersOpenedIn = (range: DateRange): Prisma.OrderWhereInput => {
   const { start, end } = periodBounds(range);
-  return { deletedAt: null, status: { not: "CANCELLED" }, openedAt: { gte: start, lt: end } };
+  // Never training orders (Part 6f Step 7f).
+  return { deletedAt: null, training: false, status: { not: "CANCELLED" }, openedAt: { gte: start, lt: end } };
 };
 
 const money = (value: Prisma.Decimal | string | number | null | undefined) => new Prisma.Decimal(value ?? 0).toFixed(2);
@@ -107,7 +108,7 @@ export async function getFloorNow(): Promise<FloorNow> {
   const onFloor: Prisma.TableWhereInput = { deletedAt: null, area: { deletedAt: null } };
   const [total, occupied] = await Promise.all([
     prisma.table.count({ where: onFloor }),
-    prisma.table.count({ where: { ...onFloor, orders: { some: { deletedAt: null, status: { in: [...TABLE_HOLDING_STATUSES] } } } } }),
+    prisma.table.count({ where: { ...onFloor, orders: { some: { deletedAt: null, training: false, status: { in: [...TABLE_HOLDING_STATUSES] } } } } }),
   ]);
   return { occupied, total };
 }
@@ -132,7 +133,7 @@ const LIVE_LIST_SIZE = 6;
 // Every Open, Sent or Served order, oldest first (the longest waiting at
 // the top); the list shows the first few.
 export async function getOpenOrders(now: Date = new Date()): Promise<OpenOrders> {
-  const where: Prisma.OrderWhereInput = { deletedAt: null, status: { in: [...TABLE_HOLDING_STATUSES] } };
+  const where: Prisma.OrderWhereInput = { deletedAt: null, training: false, status: { in: [...TABLE_HOLDING_STATUSES] } };
   const [byStatus, orders, settings] = await Promise.all([
     prisma.order.groupBy({ by: ["status"], where, _count: { _all: true } }),
     prisma.order.findMany({
@@ -142,6 +143,7 @@ export async function getOpenOrders(now: Date = new Date()): Promise<OpenOrders>
       select: {
         id: true,
         type: true,
+        tabName: true,
         status: true,
         guests: true,
         openedAt: true,
@@ -167,7 +169,7 @@ export async function getOpenOrders(now: Date = new Date()): Promise<OpenOrders>
       const minutes = Math.max(0, Math.floor((now.getTime() - order.openedAt.getTime()) / 60_000));
       return {
         id: order.id,
-        badge: order.table?.name ?? NO_TABLE_BADGE[order.type],
+        badge: order.table?.name ?? (order.type === "BAR_TAB" && order.tabName ? order.tabName.slice(0, 8) : NO_TABLE_BADGE[order.type]),
         waiter: order.waiter?.firstName ?? "No waiter",
         guests: order.guests,
         status: OPEN_ORDER_STATUS_LABEL[order.status] ?? order.status,
@@ -205,7 +207,7 @@ export async function getCancelledLines(period: DashboardPeriod): Promise<Cancel
         FROM \`OrderItem\` i
         JOIN \`Order\` o ON o.\`id\` = i.\`orderId\`
         WHERE i.\`cancelledAt\` >= ${start} AND i.\`cancelledAt\` < ${end}
-          AND i.\`deletedAt\` IS NULL AND o.\`deletedAt\` IS NULL AND i.\`remakeOfId\` IS NULL`;
+          AND i.\`deletedAt\` IS NULL AND o.\`deletedAt\` IS NULL AND i.\`remakeOfId\` IS NULL AND o.\`training\` = 0`;
       return { count: Number(row?.count ?? 0), value: money(row?.value) };
     }),
   );

@@ -7,10 +7,12 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 import { RESERVATION_STATUS_LABEL } from "../../lib/reservations";
 import type { ReservationRow } from "../../server/queries/reservations";
 import { ReservationPill } from "./ReservationPill";
+import { useServiceRoutes } from "../ServiceRoutes";
 
 // "View" on a booking that's no longer Booked: its details, read-only, and
 // the order it opened when seated.
 export default function ReservationDetailsModal({ row, dayText, onClose }: { row: ReservationRow; dayText: string; onClose: () => void }) {
+  const routes = useServiceRoutes();
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") onClose();
@@ -62,7 +64,7 @@ export default function ReservationDetailsModal({ row, dayText, onClose }: { row
             <div style={{ display: "contents" }}>
               <dt style={{ color: COLORS.slateMid }}>Order</dt>
               <dd style={{ margin: 0 }}>
-                <Link href={`/restaurant/orders/${row.orderId}`} style={{ fontFamily: FONTS.mono, fontWeight: 600, color: COLORS.teal, textDecoration: "none" }}>
+                <Link href={routes.order(row.orderId)} style={{ fontFamily: FONTS.mono, fontWeight: 600, color: COLORS.teal, textDecoration: "none" }}>
                   {row.orderRef}
                 </Link>
               </dd>

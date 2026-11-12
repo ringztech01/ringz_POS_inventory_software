@@ -1,4 +1,5 @@
 import "server-only";
+import { trainingOf } from "./orders";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getBusinessSettings } from "@/lib/business-settings";
@@ -8,7 +9,7 @@ import { bookingClash } from "../../lib/reservations";
 import { tableStatus } from "../../lib/tableStatus";
 import { appDateTime, formatAppTime } from "../../lib/time";
 import type { ReservationField, ReservationInput } from "../../schemas/reservation";
-import { lockTable } from "../locks";
+import { heldOrders, lockTable, tableTransaction } from "../locks";
 import { isUniqueViolation } from "../prismaErrors";
 import { tableStateSelect } from "../queries/tables";
 import { getTableStatusRules } from "../rules";
@@ -103,20 +104,21 @@ export async function bookTable(input: ReservationInput, createdById: string): P
 export async function seatBooking(id: string, waiterId: string): Promise<SeatResult> {
   const rules = await getTableStatusRules();
   try {
-    return await prisma.$transaction(async (tx): Promise<SeatResult> => {
+    return await tableTransaction(async (tx): Promise<SeatResult> => {
       const booking = await lockReservation(tx, id);
       if (!booking || booking.status !== "BOOKED") return { ok: false, error: NOT_OPEN };
 
       if (!(await lockTable(tx, booking.tableId))) {
         return { ok: false, error: "Its table has been deleted. Cancel this booking and book another table." };
       }
+      const held = (await heldOrders(tx, booking.tableId)).length > 0;
       const now = new Date();
       const table = await tx.table.findUniqueOrThrow({
         where: { id: booking.tableId },
         select: { name: true, area: { select: { warehouseId: true } }, ...tableStateSelect(now, rules) },
       });
       const state = tableStatus(table, rules, now);
-      if (state?.status === "Occupied") {
+      if (held || state?.status === "Occupied") {
         return { ok: false, error: `${table.name} already has an open order. Close or move it before seating ${booking.guestName}.` };
       }
       if (state?.status === "Cleaning") {
@@ -127,10 +129,12 @@ export async function seatBooking(id: string, waiterId: string): Promise<SeatRes
         data: {
           type: "DINE_IN",
           status: "OPEN",
+          checkNumber: 1,
           tableId: booking.tableId,
           warehouseId: table.area.warehouseId,
           customerId: booking.customerId,
           waiterId,
+          training: await trainingOf(tx, waiterId),
           guests: booking.partySize,
         },
         select: { id: true, number: true },

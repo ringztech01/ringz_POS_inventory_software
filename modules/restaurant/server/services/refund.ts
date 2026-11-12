@@ -2,6 +2,7 @@ import "server-only";
 import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/index-browser";
 import { prisma } from "@/lib/db";
+import { logOverride, type NeedsManager, requireManager } from "./approvalPins";
 import { todayInAppZone } from "@/lib/dateRanges";
 import { formatNaira } from "@/lib/format";
 import { sumSubtotals } from "@/lib/pricing";
@@ -9,6 +10,7 @@ import { increaseStock } from "@/lib/stock";
 import { DocumentChangedError, isReferenceCollision, MAX_REFERENCE_ATTEMPTS } from "@/app/(dashboard)/purchases/document-actions";
 import type { PurchaseActionState } from "@/app/(dashboard)/purchases/types";
 import { returnedBySaleItem } from "@/app/(dashboard)/sales/returns/returnable";
+import { tillSessionIdFor } from "./till";
 import { OverReturnError, overReturnMessage, prepareSaleReturn, writeSaleReturnInTx } from "@/app/(dashboard)/sales/returns/save-return";
 import type { ActionFailure } from "../../lib/actionResult";
 import { orderRef } from "../../lib/format";
@@ -33,7 +35,7 @@ import type { RefundInput } from "../../schemas/bill";
 //
 // One transaction; a retry with the same key answers with the first refund.
 
-export type RefundResult = { ok: true; saleReturnId: string; reference: string; amount: string; returnedToStock: boolean } | ActionFailure;
+export type RefundResult = { ok: true; saleReturnId: string; reference: string; amount: string; returnedToStock: boolean } | ActionFailure | NeedsManager;
 export type StockMove = { productId: string; productName: string; quantity: number };
 
 class RefundAbort extends Error {}
@@ -87,7 +89,10 @@ export async function refundableSale(db: Prisma.TransactionClient, saleId: strin
   };
 }
 
-export async function refundOrder(input: RefundInput, userId: string): Promise<RefundResult> {
+// `mayRefund`: the user has Approve Voids & Refunds; without it, a
+// manager's PIN (managerApproval) — the return's notes say who approved.
+// `deviceId`: the till it's paid out of (an open one counts it, Step 7b).
+export async function refundOrder(input: RefundInput, userId: string, { mayRefund = true, deviceId = null }: { mayRefund?: boolean; deviceId?: string | null } = {}): Promise<RefundResult> {
   const today = todayInAppZone();
   for (let attempt = 1; ; attempt++) {
     try {
@@ -95,6 +100,8 @@ export async function refundOrder(input: RefundInput, userId: string): Promise<R
         async (tx): Promise<RefundResult> => {
           const prior = await priorRefund(tx, input.idempotencyKey, input.orderId);
           if (prior) return prior;
+          const manager = await requireManager(tx, { for: "REFUND", may: mayRefund, approval: input.managerApproval });
+          if (!manager.ok) return manager;
 
           // Refunds of an order one at a time (the order, then its sale).
           const locked = await tx.$queryRaw<{ status: string; saleId: string | null }[]>`
@@ -127,7 +134,7 @@ export async function refundOrder(input: RefundInput, userId: string): Promise<R
 
           const ref = orderRef(order.number);
           const productOf = new Map(lines.map((line) => [line.saleItemId, line.productId]));
-          const notes = `Restaurant ${ref} refund · ${input.reason} · ${input.returnToStock ? "returned to stock" : "not returned to stock"}`;
+          const notes = `Restaurant ${ref} refund · ${input.reason} · ${input.returnToStock ? "returned to stock" : "not returned to stock"}${manager.approvedBy ? ` · approved by ${manager.approvedBy}` : ""}`;
           const ready = await prepareSaleReturn({
             saleId: head.saleId,
             date: today,
@@ -143,6 +150,7 @@ export async function refundOrder(input: RefundInput, userId: string): Promise<R
           const amount = ready.prepared.order.grandTotal.toFixed(2);
           const created = await writeSaleReturnInTx(tx, ready.prepared, userId, {
             moveStock: false,
+            tillSessionId: await tillSessionIdFor(deviceId, tx),
             refunds: new Decimal(amount).isZero() ? [] : [{ amount, paymentType: input.paymentType, date: new Date(`${today}T00:00:00.000Z`), notes: `Restaurant ${ref} refund` }],
           });
 
@@ -180,6 +188,7 @@ export async function refundOrder(input: RefundInput, userId: string): Promise<R
             for (const move of stockMoves) await increaseStock(tx, { productId: move.productId, warehouseId: order.warehouseId, quantity: move.quantity });
           }
 
+          if (manager.approverId) await logOverride(tx, { kind: "refund", actorId: userId, approverId: manager.approverId, entityType: "Order", entityId: input.orderId, meta: { amount } });
           await tx.orderRefund.create({
             data: {
               orderId: input.orderId,

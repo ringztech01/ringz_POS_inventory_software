@@ -55,7 +55,8 @@ describe("Waste schema and seed (database copy)", { skip: enabled ? false : "set
       for (const line of entry.lines) out.set(line.product.name, (out.get(line.product.name) ?? 0) + sign * Number(line.qty));
     }
     for (const [name, started] of Object.entries(STARTED)) {
-      const product = await prisma.product.findFirstOrThrow({ where: { name, deletedAt: null } });
+      // The sample seed's own product, not a same-named one from the restaurant demo (DM- / DI- codes).
+      const product = await prisma.product.findFirstOrThrow({ where: { name, deletedAt: null, NOT: [{ code: { startsWith: "DM-" } }, { code: { startsWith: "DI-" } }] } });
       const stock = await prisma.productStock.findUniqueOrThrow({ where: { productId_warehouseId: { productId: product.id, warehouseId: setting.restaurantWarehouseId! } } });
       assert.equal(started - stock.quantity, out.get(name) ?? 0, name);
     }

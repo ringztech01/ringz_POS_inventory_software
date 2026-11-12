@@ -1,9 +1,10 @@
 import "server-only";
+import { withCheck } from "../../lib/orderLines";
 import type { KitchenStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { orderRef } from "../../lib/format";
 import { kotRef, type KdsView } from "../../lib/kds";
-import { ORDER_TYPE_LABEL } from "../../lib/orderLines";
+import { noTableLabel, ORDER_TYPE_LABEL } from "../../lib/orderLines";
 
 // The kitchen display's data: active stations and the tickets for the view.
 //   Active: NEW tickets not bumped yet, oldest first, up to 60.
@@ -58,7 +59,7 @@ export type KitchenBoardData = {
 };
 
 const orderInfo = {
-  select: { number: true, type: true, table: { select: { name: true } }, waiter: { select: { firstName: true } } },
+  select: { number: true, type: true, tabName: true, checkNumber: true, checkName: true, table: { select: { name: true } }, waiter: { select: { firstName: true } } },
 } satisfies Prisma.OrderDefaultArgs;
 
 const ticketSelect = {
@@ -91,7 +92,7 @@ function toTicket(kot: TicketRow): KdsTicket | null {
   return {
     id: kot.id,
     ref: kotRef(kot.number),
-    table: order.table?.name ?? ORDER_TYPE_LABEL[order.type],
+    table: order.table ? withCheck(order.table.name, order) : noTableLabel(order.type, order.tabName),
     type: ORDER_TYPE_LABEL[order.type],
     station: kot.station,
     orderRef: orderRef(order.number),
@@ -123,7 +124,8 @@ export async function getKitchenStations() {
 }
 
 export async function getKitchenBoard(filter: { station: string | null; view: KdsView }, now: Date = new Date()): Promise<Omit<KitchenBoardData, "stations">> {
-  const forStation: Prisma.KotWhereInput = { type: "NEW", ...(filter.station ? { station: { code: filter.station } } : {}) };
+  // Never a training order's tickets (Step 7f).
+  const forStation: Prisma.KotWhereInput = { type: "NEW", order: { training: false }, ...(filter.station ? { station: { code: filter.station } } : {}) };
   const [activeRows, doneRows] = await Promise.all([
     prisma.kot.findMany({ where: { ...forStation, bumpedAt: null }, orderBy: [{ createdAt: "asc" }, { number: "asc" }], take: ACTIVE_LIMIT, select: ticketSelect }),
     filter.view === "done"
@@ -192,7 +194,9 @@ export async function getKotForPrint(id: string): Promise<KotForPrint | null> {
     select: {
       number: true,
       type: true,
+      tabName: true,
       guests: true,
+      checkNumber: true, checkName: true, 
       table: { select: { name: true, area: { select: { name: true } } } },
       waiter: { select: { firstName: true } },
     },
@@ -203,7 +207,7 @@ export async function getKotForPrint(id: string): Promise<KotForPrint | null> {
     type: kot.type,
     note: kot.note,
     station: kot.station.name,
-    table: order.table?.name ?? ORDER_TYPE_LABEL[order.type],
+    table: order.table ? withCheck(order.table.name, order) : noTableLabel(order.type, order.tabName),
     orderRef: orderRef(order.number),
     orderType: ORDER_TYPE_LABEL[order.type],
     area: order.table?.area.name ?? null,

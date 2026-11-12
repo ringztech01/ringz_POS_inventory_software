@@ -13,6 +13,14 @@ export function readModifiers(json: unknown): ChosenModifier[] {
   return parsed.success ? parsed.data : [];
 }
 
+// A separate check at a shared table, after the table's name: "5 · Ada",
+// "5 · Check 2" — or just "5" for a table's only (first, unnamed) check.
+export function withCheck(tableName: string, check: { checkNumber: number | null; checkName: string | null }): string {
+  if (check.checkName) return `${tableName} · ${check.checkName}`;
+  if (check.checkNumber && check.checkNumber > 1) return `${tableName} · Check ${check.checkNumber}`;
+  return tableName;
+}
+
 // The ticket's grey line under a dish: "Large · Extra plantain · no pepper".
 export function lineDetail(modifiers: readonly ChosenModifier[], note: string | null): string {
   return [...modifiers.map((m) => m.name), note ?? ""].filter(Boolean).join(" · ");
@@ -32,7 +40,14 @@ export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
   DINE_IN: "Dine-in",
   TAKEAWAY: "Takeaway",
   DELIVERY: "Delivery",
+  BAR_TAB: "Bar tab",
 };
+
+// An order with no table, where a table's name would go: a bar tab by its
+// name ("Tab · Ada"), others by their type ("Takeaway").
+export function noTableLabel(type: OrderType, tabName?: string | null): string {
+  return type === "BAR_TAB" && tabName ? `Tab · ${tabName}` : ORDER_TYPE_LABEL[type];
+}
 
 // The order screen takes changes only while the order is in one of these.
 export const EDITABLE_ORDER_STATUSES: readonly OrderStatus[] = ["OPEN", "SENT", "SERVED"];

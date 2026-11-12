@@ -3,6 +3,10 @@ import { prisma } from "@/lib/db";
 import { formatDateTime } from "@/lib/format";
 import { ALL_PERMISSIONS, type Permission } from "@/lib/permissions";
 import type { RoleRow } from "@/components/roles/RoleTable";
+import { getCurrentUserPermissions, isSystemAdmin } from "@/lib/auth/permissions.server";
+import { assignRoleProblem } from "@/lib/auth/roleRules";
+import { isModuleEnabled } from "@/lib/modules/enabled.server";
+import { restaurantModule } from "@/modules/restaurant/manifest";
 
 export type RoleListParams = { q?: string; page?: number; perPage?: number };
 
@@ -18,7 +22,7 @@ export async function getRoleList({ q, page = 1, perPage = 10 }: RoleListParams)
     prisma.role.count({ where }),
     prisma.role.findMany({
       where,
-      select: { id: true, name: true, isSystem: true, createdAt: true },
+      select: { id: true, name: true, isSystem: true, systemRole: true, createdAt: true },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * perPage,
       take: perPage,
@@ -31,6 +35,7 @@ export async function getRoleList({ q, page = 1, perPage = 10 }: RoleListParams)
     id: row.id,
     name: row.name,
     isSystem: row.isSystem,
+    builtIn: row.systemRole !== null,
     createdDate: formatDateTime(row.createdAt).date,
   }));
 
@@ -64,4 +69,18 @@ export async function getActiveRoles() {
     select: { id: true, name: true },
     orderBy: { name: "asc" },
   });
+}
+
+// The user form's Role dropdown (Part 6f): the active roles the signed-in
+// user may give someone — not the Administrator role (or, with the
+// restaurant module on, a back-office role) unless they're an Administrator
+// — plus the person's current role, which they keep.
+export async function getAssignableRoles(currentRoleId: string | null = null) {
+  const [roles, actor, restaurantOn] = await Promise.all([
+    prisma.role.findMany({ where: { deletedAt: null }, select: { id: true, name: true, isSystem: true, accessLevel: true }, orderBy: { name: "asc" } }),
+    getCurrentUserPermissions(),
+    isModuleEnabled(restaurantModule.id),
+  ]);
+  const isAdmin = await isSystemAdmin(actor);
+  return roles.filter((role) => role.id === currentRoleId || !assignRoleProblem({ isAdmin }, role, restaurantOn)).map(({ id, name }) => ({ id, name }));
 }

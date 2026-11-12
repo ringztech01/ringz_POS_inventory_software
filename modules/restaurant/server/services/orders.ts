@@ -1,6 +1,8 @@
 import "server-only";
+import { TRAINING_REAL_ORDER } from "../../lib/training";
 import type { OrderStatus, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
+import type { Permission } from "@/lib/permissions";
 import type { ActionFailure } from "../../lib/actionResult";
 import { EDITABLE_ORDER_STATUSES } from "../../lib/orderLines";
 import { RESTAURANT_PERMISSIONS, type RestaurantPermission } from "../../manifest";
@@ -19,7 +21,7 @@ export const PART_PAID = "Part of this bill has been paid, so the order can't ch
 export type OrderFailure = ActionFailure & { stale?: true };
 export type OrderChangeResult = { ok: true; version: number } | OrderFailure;
 
-type LockedOrder = { status: OrderStatus; tableId: string | null; version: number };
+type LockedOrder = { status: OrderStatus; tableId: string | null; version: number; training: number | boolean };
 
 // Locks the order row for the rest of the transaction and checks a change
 // may go ahead: the order exists, is still Open, Sent or Served, and is at
@@ -34,9 +36,11 @@ export async function lockOrderAt(
   { whilePartPaid = false }: { whilePartPaid?: boolean } = {},
 ): Promise<{ ok: true; order: LockedOrder } | OrderFailure> {
   const rows = await tx.$queryRaw<LockedOrder[]>`
-    SELECT status, tableId, version FROM \`Order\` WHERE id = ${orderId} AND deletedAt IS NULL FOR UPDATE`;
+    SELECT status, tableId, version, training FROM \`Order\` WHERE id = ${orderId} AND deletedAt IS NULL FOR UPDATE`;
   const order = rows[0];
   if (!order) return { ok: false, error: ORDER_GONE, stale: true };
+  // Training mode (Step 7f): someone in training can't change a real order.
+  if (!Number(order.training) && (await actorInTraining())) return { ok: false, error: TRAINING_REAL_ORDER };
   if (!EDITABLE_ORDER_STATUSES.includes(order.status)) return { ok: false, error: ORDER_CLOSED, stale: true };
   if (order.version !== version) return { ok: false, error: STALE, stale: true };
   if (!whilePartPaid && (await hasPaidPart(tx, orderId))) return { ok: false, error: PART_PAID };
@@ -64,9 +68,11 @@ export async function markBillChanged(tx: Prisma.TransactionClient, orderId: str
 }
 
 // Live users with a permission: the admin role, or a role that has it.
-export function hasPermissionWhere(permission: RestaurantPermission): Prisma.UserWhereInput {
+export function hasPermissionWhere(permission: RestaurantPermission | Permission): Prisma.UserWhereInput {
   return {
     deletedAt: null,
+    // A disabled person (Part 6f) can't sign in, approve or take orders.
+    disabledAt: null,
     userRole: {
       deletedAt: null,
       OR: [{ isSystem: true }, { permissions: { some: { permission } } }],
@@ -105,4 +111,21 @@ export async function changeOrderDetails(orderId: string, version: number, chang
     });
     return { ok: true, version: updated.version };
   });
+}
+
+// Is whoever's asking in training mode (Step 7f)? Read with the request's
+// permissions (cached); no request (a script, a test): no.
+export async function actorInTraining(): Promise<boolean> {
+  try {
+    const { getCurrentUserPermissions } = await import("@/lib/auth/permissions.server");
+    return (await getCurrentUserPermissions()).training;
+  } catch {
+    return false;
+  }
+}
+
+// The opener's training flag, for a new order (Step 7f).
+export async function trainingOf(db: Prisma.TransactionClient | typeof import("@/lib/db").prisma, userId: string | null): Promise<boolean> {
+  if (!userId) return false;
+  return (await db.user.findUnique({ where: { id: userId }, select: { trainingMode: true } }))?.trainingMode ?? false;
 }

@@ -1,3 +1,4 @@
+import { pinTerminalId } from "@/lib/auth/pinTerminal";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { readKdsFilter } from "../lib/kds";
 import { RESTAURANT_PERMISSIONS as P } from "../manifest";
@@ -17,5 +18,7 @@ export default async function KitchenPage({ searchParams }: { searchParams: Prom
   const [{ permissions }, stations] = await Promise.all([getCurrentUserPermissions(), getKitchenStations()]);
   const filter = readKdsFilter(await searchParams, stations.map((s) => s.code));
   const [board, printers] = await Promise.all([getKitchenBoard(filter), stationPrinters()]);
-  return <KitchenBoard data={{ ...board, stations }} canManage={permissions.has(P.MANAGE_KITCHEN)} canWaste={permissions.has(P.LOG_WASTE)} printers={printers} />;
+  // A paired device (the Kitchen screen, Step 7c): Lock — back to its PIN screen.
+  const terminal = !!(await pinTerminalId());
+  return <KitchenBoard data={{ ...board, stations }} canManage={permissions.has(P.MANAGE_KITCHEN)} canWaste={permissions.has(P.LOG_WASTE)} printers={printers} terminal={terminal} />;
 }

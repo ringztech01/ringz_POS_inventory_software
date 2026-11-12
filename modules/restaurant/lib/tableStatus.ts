@@ -3,7 +3,8 @@ import type { OrderStatus, ReservationStatus } from "@prisma/client";
 // THE table-status rule. Every screen gets a table's status from here; it is
 // never stored and never worked out anywhere else.
 //
-//   Occupied   it has an Open, Sent or Served order
+//   Occupied   it has an Open, Sent or Served order (a shared table may
+//              have several — separate checks; it's free when the last goes)
 //   Cleaning   its last order was billed and cleaning is manual (needsCleaning)
 //   Reserved   a Booked reservation is due: from `reservedWindowMinutes`
 //              before its time until RESERVATION_GRACE_MINUTES after
@@ -36,7 +37,7 @@ type ReservationLike = { status: ReservationStatus; startsAt: Date; deletedAt: D
 export type TableStatusInput<O extends OrderLike, R extends ReservationLike> = {
   deletedAt: Date | null;
   needsCleaning: boolean;
-  // Candidates; this picks the one holding the table (there's at most one).
+  // Candidates; this picks the ones holding the table (its open checks).
   orders: readonly O[];
   // Candidates; this picks the earliest Booked one that's due.
   reservations: readonly R[];
@@ -44,8 +45,10 @@ export type TableStatusInput<O extends OrderLike, R extends ReservationLike> = {
 
 export type TableState<O, R> = {
   status: TableStatus;
-  // The order holding the table (Occupied).
+  // The order holding the table (Occupied): its first check.
   order: O | null;
+  // Every open check on it, in the order given (first: `order`).
+  orders: O[];
   // The booking that's due, whatever the status — so an Occupied or
   // Cleaning table can still show "booked for 19:30".
   reservation: R | null;
@@ -71,15 +74,16 @@ export function tableStatus<O extends OrderLike, R extends ReservationLike>(
 ): TableState<O, R> | null {
   if (table.deletedAt) return null;
 
-  const order = table.orders.find((o) => !o.deletedAt && TABLE_HOLDING_STATUSES.includes(o.status)) ?? null;
+  const orders = table.orders.filter((o) => !o.deletedAt && TABLE_HOLDING_STATUSES.includes(o.status));
+  const order = orders[0] ?? null;
   const { from, to } = reservationHoldRange(now, rules);
   const reservation =
     table.reservations
       .filter((r) => !r.deletedAt && r.status === "BOOKED" && r.startsAt >= from && r.startsAt <= to)
       .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime())[0] ?? null;
 
-  if (order) return { status: "Occupied", order, reservation };
-  if (table.needsCleaning && rules.manualCleaning) return { status: "Cleaning", order: null, reservation };
-  if (reservation) return { status: "Reserved", order: null, reservation };
-  return { status: "Available", order: null, reservation: null };
+  if (order) return { status: "Occupied", order, orders, reservation };
+  if (table.needsCleaning && rules.manualCleaning) return { status: "Cleaning", order: null, orders: [], reservation };
+  if (reservation) return { status: "Reserved", order: null, orders: [], reservation };
+  return { status: "Available", order: null, orders: [], reservation: null };
 }

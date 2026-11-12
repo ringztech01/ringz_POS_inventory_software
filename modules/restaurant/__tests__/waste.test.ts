@@ -110,10 +110,10 @@ test("the summary strip: total, entries, the reason that cost the most", () => {
 
 test("the Food tabs follow the permissions; Waste for Log or Approve Waste", () => {
   const keys = (permissions: string[]) => visibleFoodTabs(new Set(permissions)).map((t) => t.key);
-  assert.deepEqual(keys(["Manage Food"]), ["items", "modifiers", "recipes"]);
+  assert.deepEqual(keys(["Manage Food"]), ["items", "modifiers", "recipes", "buttons"]);
   assert.deepEqual(keys(["Log Waste"]), ["waste"]);
   assert.deepEqual(keys(["Approve Waste"]), ["waste"]);
-  assert.deepEqual(keys(["Manage Food", "Log Waste"]), ["items", "modifiers", "recipes", "waste"]);
+  assert.deepEqual(keys(["Manage Food", "Log Waste"]), ["items", "modifiers", "recipes", "buttons", "waste"]);
   assert.deepEqual(keys(["Manage Orders"]), []);
   assert.deepEqual([...FOOD_PERMISSIONS], ["Manage Food", "Log Waste", "Approve Waste"]);
 });

@@ -16,6 +16,7 @@ import { NO_ACTIVE_STATION, registerPrint, syncKotBump } from "../server/service
 import { advanceLine, bumpTicket, recallLine, recallTicket, UPDATED_ELSEWHERE } from "../server/services/kitchen";
 import { getKitchenBoard, getKotForPrint } from "../server/queries/kds";
 import { mergeOrders } from "../server/services/tableMoves";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -29,7 +30,7 @@ const station: Record<"KIT" | "BAR" | "GRL", string> = { KIT: "", BAR: "", GRL: 
 const versionOf = async (orderId: string) => (await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { version: true } })).version;
 async function newOrder() {
   tableCount += 1;
-  const table = await prisma.table.create({ data: { name: `Q${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
+  const table = await prisma.table.create({ data: { name: testTable(`Q${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
   const opened = await openTableOrder(table.id, userId);
   assert.ok(opened.ok);
   return opened.orderId;
@@ -332,7 +333,7 @@ describe("KOTs (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_TE
       const { number } = await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { number: true } });
       assert.deepEqual(
         [printed.type, printed.station, printed.table, printed.area, printed.orderRef, printed.orderType, printed.guests, printed.note, printed.lines, printed.items, printed.printCount],
-        ["NEW", "Kitchen", `Q${tableCount}`, "KOT check", `ORD-${String(number).padStart(4, "0")}`, "Dine-in", 3, null, [{ quantity: 2, name: "KC Jollof", modifiers: "Large · Plantain", note: "no pepper" }], 2, 0],
+        ["NEW", "Kitchen", testTable(`Q${tableCount}`), "KOT check", `ORD-${String(number).padStart(4, "0")}`, "Dine-in", 3, null, [{ quantity: 2, name: "KC Jollof", modifiers: "Large · Plantain", note: "no pepper" }], 2, 0],
       );
 
       const chapman = await prisma.orderItem.findFirstOrThrow({ where: { orderId, productId: dish.chapman }, select: { id: true } });
@@ -346,7 +347,7 @@ describe("KOTs (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_TE
     test("after a merge, the ticket prints the table the food now goes to", async () => {
       const source = await newOrder();
       const target = await newOrder();
-      const targetTable = `Q${tableCount}`;
+      const targetTable = testTable(`Q${tableCount}`);
       await tap(source, dish.jollof);
       assert.ok((await send(source)).ok);
       await tap(target, dish.chapman);

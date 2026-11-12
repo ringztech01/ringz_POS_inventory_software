@@ -40,7 +40,8 @@ export const approvalPinSchema = z
 
 // Split bill. EQUAL: how many ways. AMOUNT: the first parts' amounts (the
 // last part pays the rest). ITEMS: per guest, how many of each line's units
-// they pay for. Only ids and counts come from the browser; the server works
+// they pay for — `quantity` shares of 1/`shareOf` of a unit when an item is
+// shared (½: 1 of 2). Only ids and counts come from the browser; the server works
 // out every part's amount.
 const moneySchema = z.string().trim().regex(/^\d{1,10}(\.\d{1,2})?$/, "Enter amounts like 5000 or 2500.50.");
 export const splitBillSchema = z.object({
@@ -52,7 +53,7 @@ export const splitBillSchema = z.object({
     z.object({
       mode: z.literal("ITEMS"),
       parts: z
-        .array(z.array(z.object({ lineId: idSchema, quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY) })).max(200))
+        .array(z.array(z.object({ lineId: idSchema, quantity: z.number().int().min(1).max(MAX_LINE_QUANTITY * MAX_BILL_PARTS), shareOf: z.number().int().min(1).max(MAX_BILL_PARTS).default(1) })).max(200))
         .min(2)
         .max(MAX_BILL_PARTS),
     }),
@@ -60,7 +61,8 @@ export const splitBillSchema = z.object({
 });
 
 export type SplitBillInput = z.infer<typeof splitBillSchema>;
-export type BillSplit = SplitBillInput["split"];
+// As sent (shareOf may be left out: whole units). The server reads it the same way.
+export type BillSplit = z.input<typeof splitBillSchema>["split"];
 
 // Pay as one bill: the split's parts go.
 export const clearSplitSchema = z.object({ orderId: idSchema, version: orderVersionSchema });
@@ -98,6 +100,8 @@ export const refundSchema = z.object({
   paymentType: z.enum(["CASH", "BANK_TRANSFER", "CARD", "CHEQUE"]),
   reason: z.string().trim().min(1, "Give a reason for the refund.").max(REFUND_REASON_MAX, `The reason can be at most ${REFUND_REASON_MAX} characters.`),
   idempotencyKey: z.uuid(),
+  // A manager's PIN, for someone without Approve Voids & Refunds (Part 6e).
+  managerApproval: z.object({ approverId: idSchema, pin: pinSchema }).optional(),
 });
 
 export type RefundInput = z.infer<typeof refundSchema>;

@@ -16,6 +16,7 @@ import { addLine } from "../server/services/orderLines";
 import { cancelLine, markLineServed, sendToKitchen } from "../server/services/orderFlow";
 import { getBill } from "../server/queries/bill";
 import { BILL_ORDER_GONE, registerBillPrint } from "../server/services/bill";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -28,7 +29,7 @@ const dish: Record<"jollof" | "chapman" | "soup", string> = { jollof: "", chapma
 const versionOf = async (orderId: string) => (await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { version: true } })).version;
 async function newOrder() {
   tableCount += 1;
-  const table = await prisma.table.create({ data: { name: `B${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
+  const table = await prisma.table.create({ data: { name: testTable(`B${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
   const opened = await openTableOrder(table.id, userId);
   assert.ok(opened.ok);
   return opened.orderId;

@@ -6,7 +6,10 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { prisma } from "@/lib/db";
 import { PERMISSIONS } from "@/lib/permissions";
-import { requirePermission } from "@/lib/auth/permissions.server";
+import { getCurrentUserPermissions, isSystemAdmin, requirePermission } from "@/lib/auth/permissions.server";
+import { assignRoleProblem, unassignRoleProblem } from "@/lib/auth/roleRules";
+import { isModuleEnabled } from "@/lib/modules/enabled.server";
+import { restaurantModule } from "@/modules/restaurant/manifest";
 import { saveAvatarImage } from "@/lib/uploads";
 import { createUserSchema, updateUserSchema } from "@/lib/validations/user";
 import type { UserActionState } from "./types";
@@ -29,6 +32,28 @@ async function saveUploadedImage(formData: FormData, idForFilename: string): Pro
   }
 }
 
+// Part 6f: may the signed-in user give this person this role? Only an
+// Administrator assigns the Administrator role (or, with the restaurant
+// module on, a back-office role), or moves an Administrator off theirs.
+async function roleChangeProblem(roleId: string, currentRoleId: string | null): Promise<string | null> {
+  if (roleId === currentRoleId) return null;
+  const [role, current, actor, restaurantOn] = await Promise.all([
+    prisma.role.findFirst({ where: { id: roleId, deletedAt: null }, select: { isSystem: true, accessLevel: true } }),
+    currentRoleId ? prisma.role.findUnique({ where: { id: currentRoleId }, select: { isSystem: true } }) : null,
+    getCurrentUserPermissions(),
+    isModuleEnabled(restaurantModule.id),
+  ]);
+  const isAdmin = await isSystemAdmin(actor);
+  return unassignRoleProblem({ isAdmin }, current) ?? (role ? assignRoleProblem({ isAdmin }, role, restaurantOn) : null);
+}
+
+// Part 6f: with the Restaurant module on, only an Administrator adds, changes
+// or removes users (staff are managed in Settings › Staff). Null: allowed.
+async function restaurantAdminProblem(): Promise<string | null> {
+  if (!(await isModuleEnabled(restaurantModule.id))) return null;
+  return (await isSystemAdmin()) ? null : "While the Restaurant module is on, only an Administrator adds or changes users.";
+}
+
 // Permission check (lib/auth/permissions.server.ts): DB-backed, per request.
 const requireManageUsers = () => requirePermission(PERMISSIONS.MANAGE_USERS);
 
@@ -37,6 +62,8 @@ export async function createUser(formData: FormData): Promise<UserActionState> {
   if (authCheck.error) {
     return { status: "error", message: authCheck.error };
   }
+  const adminProblem = await restaurantAdminProblem();
+  if (adminProblem) return { status: "error", message: adminProblem };
 
   const parsed = createUserSchema.safeParse({
     firstName: formData.get("firstName"),
@@ -57,6 +84,8 @@ export async function createUser(formData: FormData): Promise<UserActionState> {
   if (!(await findActiveRole(roleId))) {
     return { status: "error", message: "That role no longer exists. Choose another one." };
   }
+  const createProblem = await roleChangeProblem(roleId, null);
+  if (createProblem) return { status: "error", message: createProblem };
 
   // Checked against every user regardless of soft-delete status: the email
   // column has a hard unique constraint at the DB level that isn't aware of
@@ -98,6 +127,8 @@ export async function updateUser(id: string, formData: FormData): Promise<UserAc
   if (authCheck.error) {
     return { status: "error", message: authCheck.error };
   }
+  const adminProblem = await restaurantAdminProblem();
+  if (adminProblem) return { status: "error", message: adminProblem };
 
   // Re-read the target record server-side rather than trusting that the id
   // still refers to a live, non-deleted user by the time this runs.
@@ -125,6 +156,8 @@ export async function updateUser(id: string, formData: FormData): Promise<UserAc
   if (!(await findActiveRole(roleId))) {
     return { status: "error", message: "That role no longer exists. Choose another one." };
   }
+  const updateProblem = await roleChangeProblem(roleId, existing.roleId);
+  if (updateProblem) return { status: "error", message: updateProblem };
 
   // Demoting the last admin (moving them off the isSystem Administrator role)
   // is refused, like deleting them: someone must always be able to manage
@@ -180,6 +213,8 @@ export async function deleteUser(id: string): Promise<UserActionState> {
   if (authCheck.error) {
     return { status: "error", message: authCheck.error };
   }
+  const adminProblem = await restaurantAdminProblem();
+  if (adminProblem) return { status: "error", message: adminProblem };
 
   const session = await auth();
 

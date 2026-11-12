@@ -5,7 +5,7 @@ import { orderRef } from "../../lib/format";
 import { EDITABLE_ORDER_STATUSES } from "../../lib/orderLines";
 import { mergedOrderStatus } from "../../lib/tableMoves";
 import { tableStatus } from "../../lib/tableStatus";
-import { lockTable } from "../locks";
+import { heldOrders, lockTable, tableTransaction } from "../locks";
 import { isUniqueViolation } from "../prismaErrors";
 import { tableStateSelect } from "../queries/tables";
 import { getTableStatusRules } from "../rules";
@@ -30,13 +30,14 @@ async function orderWarehouse(tx: Prisma.TransactionClient, orderId: string) {
 export async function moveOrder(orderId: string, version: number, tableId: string): Promise<OrderChangeResult> {
   const rules = await getTableStatusRules();
   try {
-    return await prisma.$transaction(async (tx): Promise<OrderChangeResult> => {
+    return await tableTransaction(async (tx): Promise<OrderChangeResult> => {
       const locked = await lockOrderAt(tx, orderId, version, { whilePartPaid: true });
       if (!locked.ok) return locked;
       if (locked.order.tableId === tableId) return { ok: false, error: "The order is already at that table." };
       const { warehouseId } = await orderWarehouse(tx, orderId);
 
       if (!(await lockTable(tx, tableId))) return { ok: false, error: "That table is no longer on the floor.", stale: true };
+      if ((await heldOrders(tx, tableId)).length) return { ok: false, error: TAKEN, stale: true };
       const now = new Date();
       const table = await tx.table.findUniqueOrThrow({
         where: { id: tableId },
@@ -51,7 +52,8 @@ export async function moveOrder(orderId: string, version: number, tableId: strin
       await markBillChanged(tx, orderId);
       const moved = await tx.order.update({
         where: { id: orderId },
-        data: { tableId, version: { increment: 1 } },
+        // Alone at its new (free) table: its first check.
+        data: { tableId, checkNumber: 1, version: { increment: 1 } },
         select: { version: true },
       });
       return { ok: true, version: moved.version };

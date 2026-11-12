@@ -153,7 +153,7 @@ function NavRow({ item, expanded }: { item: NavItem; expanded: boolean }) {
 // `permissions`: the current user's set (from the layout, read from the DB).
 // Items they lack are hidden — UX only; pages and actions enforce access.
 // `modules`: the optional modules switched on (see Sidebar.tsx).
-export default function SidebarPanel({ permissions, modules }: { permissions: Permission[]; modules: string[] }) {
+export default function SidebarPanel({ permissions, modules, serviceOnly = false }: { permissions: Permission[]; modules: string[]; serviceOnly?: boolean }) {
   const { collapsed } = useSidebar();
   const expanded = !collapsed;
   const search = useToggleState();
@@ -234,7 +234,7 @@ export default function SidebarPanel({ permissions, modules }: { permissions: Pe
       )}
 
       <nav style={{ flex: 1, overflowY: "auto", padding: "6px 12px 20px", display: "flex", flexDirection: "column", gap: 2 }}>
-        {visibleNav(new Set(permissions), modules).map((item) => (
+        {visibleNav(new Set(permissions), modules, serviceOnly).map((item) => (
           <NavRow key={item.key} item={item} expanded={expanded} />
         ))}
       </nav>

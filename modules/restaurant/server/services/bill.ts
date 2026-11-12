@@ -4,10 +4,10 @@ import { prisma } from "@/lib/db";
 import { getBusinessSettings } from "@/lib/business-settings";
 import type { ActionFailure, ActionResult } from "../../lib/actionResult";
 import { checkDiscount, isBilled, summariseBill } from "../../lib/bill";
-import { splitByAmounts, splitByItems, splitEqually, type SplitResult } from "../../lib/billSplit";
+import { addShares, splitByAmounts, splitByItems, splitEqually, type SplitResult } from "../../lib/billSplit";
 import { EDITABLE_ORDER_STATUSES } from "../../lib/orderLines";
 import type { BillSplit, OrderDiscountInput } from "../../schemas/bill";
-import { checkApproverPin } from "./approvalPins";
+import { checkApproverPin, logOverride } from "./approvalPins";
 import { clearSplit, lockOrderAt, markBillChanged, type OrderChangeResult } from "./orders";
 
 // Bill & settle — without the permission check and input parsing
@@ -67,6 +67,7 @@ export async function applyOrderDiscount(input: OrderDiscountInput, userId: stri
         approvedById = approval.approverId;
       }
       data = { discountType: type, discountValue: value, discountReason: reason, discountById: userId, discountApprovedById: approvedById };
+      if (approvedById) await logOverride(tx, { kind: "discount", actorId: userId, approverId: approvedById, entityType: "Order", entityId: orderId, meta: { type, value: String(value) } });
     }
 
     await markBillChanged(tx, orderId);
@@ -126,13 +127,14 @@ export async function splitOrderBill(orderId: string, version: number, split: Bi
           number: i + 1,
           mode: split.mode,
           amount: amount.toFixed(2),
-          // By item: the units this guest pays for (a line twice → added up).
+          // By item: what this guest pays for of each line — whole units, or
+          // shares of a shared unit — added up into one q/s in lowest terms.
           lines:
             split.mode === "ITEMS"
               ? {
                   create: [...Map.groupBy(split.parts[i], (a) => a.lineId)].map(([orderItemId, picks]) => ({
                     orderItemId,
-                    quantity: picks.reduce((n, a) => n + a.quantity, 0),
+                    ...addShares(picks),
                   })),
                 }
               : undefined,

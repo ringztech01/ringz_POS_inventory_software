@@ -5,14 +5,35 @@ import AuthSessionProvider from "@/components/providers/SessionProvider";
 import DeviceBeacon from "@/components/hardware/DeviceBeacon";
 import PrinterAlerts from "@/components/hardware/PrinterAlerts";
 import ScanProvider from "@/components/hardware/ScanProvider";
+import { isModuleEnabled } from "@/lib/modules/enabled.server";
+import { restaurantModule } from "@/modules/restaurant/manifest";
+import { ServiceViewProvider } from "@/modules/restaurant/components/ServiceRoutes";
+import { getServiceView } from "@/modules/restaurant/server/serviceView";
 
 // Full-screen POS: same auth and session as the dashboard, no sidebar or top
-// bar (RingzPOS POS.dc.html).
+// bar (RingzPOS POS.dc.html). In Restaurant mode the touch POS fills the
+// window itself (fixed, no minimum width) and shows the printer alerts in
+// its own header.
 export default async function PosLayout({ children }: { children: ReactNode }) {
   const session = await auth();
 
   if (!session) {
     redirect("/");
+  }
+
+  if (await isModuleEnabled(restaurantModule.id)) {
+    // Service view: the touch screens fill the window themselves. Classic:
+    // /pos is the retail POS (below), its frame and all.
+    const view = await getServiceView();
+    if (view === "SERVICE")
+      return (
+        <AuthSessionProvider session={session}>
+          <ServiceViewProvider view={view}>
+            <DeviceBeacon />
+            <ScanProvider>{children}</ScanProvider>
+          </ServiceViewProvider>
+        </AuthSessionProvider>
+      );
   }
 
   return (

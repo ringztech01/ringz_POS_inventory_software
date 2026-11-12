@@ -19,14 +19,18 @@ const restaurantGroup = (permissions: Iterable<Permission>) =>
   visibleNav(new Set(permissions), ON).find((item) => item.key === "restaurant");
 
 describe("permissions", () => {
-  test("the 13 restaurant permissions come after the core 28, with matching keys", () => {
-    assert.equal(ALL_PERMISSIONS.length, 41);
+  test("the 17 restaurant permissions come after the core 28, with matching keys", () => {
+    assert.equal(ALL_PERMISSIONS.length, 45);
     assert.deepEqual(ALL_PERMISSIONS.slice(28), RESTAURANT);
     assert.equal(CORE[27], "Open Drawer");
     assert.equal(PERMISSIONS.KITCHEN_DISPLAY, "Kitchen Display");
     assert.equal(PERMISSIONS.MANAGE_KITCHEN, "Manage Kitchen");
     assert.equal(PERMISSIONS.MANAGE_SALE, "Manage Sale");
-    assert.equal(new Set(ALL_PERMISSIONS).size, 41, "no string is shared with the core set");
+    assert.equal(new Set(ALL_PERMISSIONS).size, 45, "no string is shared with the core set");
+    assert.equal(PERMISSIONS.APPROVE_VOID, "Approve Voids & Refunds");
+    assert.equal(PERMISSIONS.MANAGE_FLOOR_PLAN, "Manage Floor Plan");
+    assert.equal(PERMISSIONS.VIEW_AUDIT_LOG, "View Audit Log");
+    assert.equal(PERMISSIONS.VIEW_COST, "View Cost");
     assert.ok(CORE.every((p) => !RESTAURANT.includes(p as (typeof RESTAURANT)[number])));
   });
 
@@ -47,12 +51,12 @@ describe("sidebar", () => {
     assert.deepEqual(keys(ALL_PERMISSIONS, ON).filter((key) => key !== "restaurant"), off);
   });
 
-  test("on: shown after Sales, with all 10 links for the admin", () => {
+  test("on: shown after Sales, with all 15 links for the admin", () => {
     const on = keys(ALL_PERMISSIONS, ON);
     assert.equal(on[on.indexOf("sales") + 1], "restaurant");
     assert.deepEqual(
       restaurantGroup(ALL_PERMISSIONS)?.children?.map((child) => child.label),
-      ["Dashboard", "Floor", "Orders", "Kitchen", "Food", "Tables", "Digital menu", "Prep times", "Stations", "Approval PIN"],
+      ["Dashboard", "Floor", "Orders", "Kitchen", "Food", "Tables", "Digital menu", "Reports", "Prep times", "Stations", "Touch POS", "Floor plan", "My PIN", "Cash-up", "Audit log"],
     );
   });
 
@@ -67,16 +71,26 @@ describe("sidebar", () => {
     assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_RESERVATIONS])?.children?.map((c) => c.href), ["/restaurant/floor", "/restaurant/tables"]);
     assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_DASHBOARD])?.children?.map((c) => c.href), ["/restaurant", "/restaurant/floor"]);
     // Part 4: Prep times (Restaurant Reports) and Stations (Restaurant Settings), sidebar only.
-    assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_REPORTS])?.children?.map((c) => [c.label, c.href]), [["Prep times", "/restaurant/reports/prep-times"]]);
-    assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_SETTINGS])?.children?.map((c) => [c.label, c.href]), [["Stations", "/restaurant/settings/stations"]]);
-    // Part 6: Approval PIN (Approve Discount, or Approve Waste), sidebar only.
-    assert.deepEqual(restaurantGroup([PERMISSIONS.APPROVE_DISCOUNT])?.children?.map((c) => [c.label, c.href]), [["Approval PIN", "/restaurant/settings/approval-pin"]]);
+    assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_REPORTS])?.children?.map((c) => [c.label, c.href]), [["Reports", "/restaurant/reports"], ["Prep times", "/restaurant/reports/prep-times"]]);
+    assert.deepEqual(restaurantGroup([PERMISSIONS.RESTAURANT_SETTINGS])?.children?.map((c) => [c.label, c.href]), [
+      ["Stations", "/restaurant/settings/stations"],
+      ["Touch POS", "/restaurant/settings/pos"],
+    ]);
+    // Part 6 / 6e: My PIN (Manage Orders, Approve Discount or Approve Waste), sidebar only.
+    assert.deepEqual(restaurantGroup([PERMISSIONS.APPROVE_DISCOUNT])?.children?.map((c) => [c.label, c.href]), [["My PIN", "/restaurant/settings/approval-pin"]]);
+    assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_ORDERS])?.children?.map((c) => [c.label, c.href]), [
+      ["Floor", "/restaurant/floor"],
+      ["Orders", "/restaurant/orders"],
+      ["My PIN", "/restaurant/settings/approval-pin"],
+    ]);
     // Waste: Food (its Waste tab) for Log Waste or Approve Waste.
     assert.deepEqual(restaurantGroup([PERMISSIONS.APPROVE_WASTE])?.children?.map((c) => [c.label, c.href]), [
       ["Food", "/restaurant/food"],
-      ["Approval PIN", "/restaurant/settings/approval-pin"],
+      ["My PIN", "/restaurant/settings/approval-pin"],
     ]);
     assert.deepEqual(restaurantGroup([PERMISSIONS.LOG_WASTE])?.children?.map((c) => [c.label, c.href]), [["Food", "/restaurant/food"]]);
+    // The floor plan editor: Manage Floor Plan only, sidebar only.
+    assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_FLOOR_PLAN])?.children?.map((c) => [c.label, c.href]), [["Floor plan", "/restaurant/settings/floor"]]);
     assert.equal(PERMISSIONS.LOG_WASTE, "Log Waste");
     assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_KITCHEN]), undefined, "Manage Kitchen alone opens no page");
   });
@@ -93,6 +107,8 @@ describe("sidebar", () => {
     assert.deepEqual(resolveBreadcrumb("/restaurant"), { section: "Restaurant", title: "Dashboard" });
     assert.deepEqual(resolveBreadcrumb("/restaurant/digital-menu"), { section: "Restaurant", title: "Digital menu" });
     assert.deepEqual(resolveBreadcrumb("/restaurant/reports/prep-times"), { section: "Restaurant", title: "Prep times" });
+    assert.deepEqual(resolveBreadcrumb("/restaurant/reports"), { section: "Restaurant", title: "Reports" });
+    assert.deepEqual(resolveBreadcrumb("/restaurant/reports/dishes"), { section: "Restaurant", title: "Reports" });
     assert.deepEqual(NAV_PERMISSIONS["/restaurant/settings/stations"], [PERMISSIONS.RESTAURANT_SETTINGS]);
     assert.deepEqual(NAV_PERMISSIONS["/restaurant/tables"], [PERMISSIONS.MANAGE_TABLES, PERMISSIONS.MANAGE_RESERVATIONS]);
     assert.equal(NAV_PERMISSIONS["/sales"], PERMISSIONS.MANAGE_SALE);
@@ -122,6 +138,7 @@ describe("manifest", () => {
       restaurantWasteApprovalLimit: new Prisma.Decimal(0),
       restaurantWasteAmberPercent: new Prisma.Decimal(5),
       restaurantWasteRedPercent: new Prisma.Decimal(10),
+      restaurantPosReturnHome: false,
     };
     const flag = restaurantModule.toggle.setting;
     assert.equal(restaurantModule.isEnabled({ ...settings, [flag]: true }), true);

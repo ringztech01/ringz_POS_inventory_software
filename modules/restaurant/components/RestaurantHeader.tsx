@@ -3,16 +3,18 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 import { restaurantModule } from "../manifest";
 import RestaurantNav from "./RestaurantNav";
 import { HEADER_ACTIONS_ID } from "../lib/headerSlot";
+import { isServicePath } from "../lib/serviceAccess";
 
 // The top bar shared by every RingzPOS restaurant design: "RingzPOS /
 // Restaurant" and the section nav. It sits flush under the app's top bar —
 // the negative margin cancels the dashboard <main>'s 32px padding. Tabs the
 // user has no permission for are left out (UX only; each page checks). The
-// right end is filled by the page (HeaderActions).
+// right end is filled by the page (HeaderActions). A Service-level role
+// (Part 6f Step 5) gets the service screens' tabs only.
 export default async function RestaurantHeader() {
-  const { permissions } = await getCurrentUserPermissions();
+  const { permissions, serviceOnly } = await getCurrentUserPermissions();
   const tabs = restaurantModule.nav
-    .filter((tab) => tab.header !== false && tab.permissions.some((permission) => permissions.has(permission)))
+    .filter((tab) => tab.header !== false && tab.permissions.some((permission) => permissions.has(permission)) && (!serviceOnly || isServicePath(tab.href)))
     .map(({ label, href }) => ({ label, href }));
 
   return (

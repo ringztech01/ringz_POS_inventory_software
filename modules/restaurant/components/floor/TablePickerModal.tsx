@@ -77,11 +77,11 @@ export default function TablePickerModal({
             </p>
           ) : (
             options.map((option) => {
-              const on = picked?.id === option.id;
+              const on = picked?.key === option.key;
               const [pillBg, pillFg] = TABLE_STATUS_PILL[option.status];
               return (
                 <button
-                  key={option.id}
+                  key={option.key}
                   type="button"
                   role="option"
                   aria-selected={on}

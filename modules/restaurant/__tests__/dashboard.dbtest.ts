@@ -31,6 +31,7 @@ import {
   getTopDishes,
 } from "../server/queries/dashboard";
 import { loadWidget } from "../server/safely";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -53,6 +54,9 @@ async function clearRestaurant() {
   await prisma.orderItem.deleteMany({});
   await prisma.order.deleteMany({});
   await prisma.table.deleteMany({});
+  // The floor plan's fixtures and event layouts belong to the areas.
+  await prisma.floorFixture.deleteMany({});
+  await prisma.floorLayout.deleteMany({});
   await prisma.diningArea.deleteMany({});
 }
 
@@ -148,6 +152,7 @@ describe("restaurant dashboard (database copy)", { skip: enabled ? false : "set 
       { type: "DINE_IN", orders: 0, amount: "0.00" },
       { type: "TAKEAWAY", orders: 0, amount: "0.00" },
       { type: "DELIVERY", orders: 0, amount: "0.00" },
+      { type: "BAR_TAB", orders: 0, amount: "0.00" },
     ]);
     assert.deepEqual(dishes, []);
     assert.deepEqual(low, { rows: [], total: 0 });
@@ -188,7 +193,7 @@ describe("restaurant dashboard (database copy)", { skip: enabled ? false : "set 
 
       const area = await prisma.diningArea.create({ data: { name: "Dashboard hall", warehouseId }, select: { id: true } });
       const table = (name: string, deletedAt: Date | null = null) =>
-        prisma.table.create({ data: { name, seats: 4, areaId: area.id, qrToken: newQrToken(), deletedAt }, select: { id: true } }).then((t) => t.id);
+        prisma.table.create({ data: { name: testTable(name), seats: 4, areaId: area.id, qrToken: newQrToken(), deletedAt }, select: { id: true } }).then((t) => t.id);
       const [a1, a2, a3] = [await table("A1"), await table("A2"), await table("A3")];
       await table("A4", new Date());
 
@@ -281,9 +286,9 @@ describe("restaurant dashboard (database copy)", { skip: enabled ? false : "set 
       assert.deepEqual(
         open.rows.map((r) => [r.badge, r.guests, r.status, r.time, r.late]),
         [
-          ["A2", 3, "In kitchen", "50m", true],
+          [testTable("A2"), 3, "In kitchen", "50m", true],
           ["TA", 1, "Served · ready to bill", "20m", false],
-          ["A3", 2, "Ordering", "5m", false],
+          [testTable("A3"), 2, "Ordering", "5m", false],
         ],
       );
       assert.equal(open.rows[0].total, formatNaira(orderTotals(o5Lines, restaurantServiceChargePercent).total.toFixed(2)));
@@ -310,6 +315,7 @@ describe("restaurant dashboard (database copy)", { skip: enabled ? false : "set 
         { type: "DINE_IN", orders: 4, amount: "120.00" },
         { type: "TAKEAWAY", orders: 2, amount: "54.50" },
         { type: "DELIVERY", orders: 1, amount: "0.00" },
+        { type: "BAR_TAB", orders: 0, amount: "0.00" },
       ]);
     });
 

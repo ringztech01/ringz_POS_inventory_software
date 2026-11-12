@@ -20,6 +20,7 @@ import { sendToKitchen } from "../server/services/orderFlow";
 import { addLine } from "../server/services/orderLines";
 import { settleOrder } from "../server/services/settle";
 import { logWasteEntry, voidWasteEntry } from "../server/services/waste";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -77,7 +78,7 @@ describe("Dashboard waste (database copy)", { skip: enabled ? false : "set RESTA
   test("the tile: waste against the food cost of today's billed orders; voided waste left out", async () => {
     const before = await getWasteKpi(today());
     // 10 stews billed today → ₦2,300 of food.
-    const table = await prisma.table.create({ data: { name: `WD${stamp % 1000}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
+    const table = await prisma.table.create({ data: { name: testTable(`WD${stamp % 1000}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
     const opened = await openTableOrder(table.id, adminId);
     assert.ok(opened.ok);
     for (let i = 0; i < 10; i++) assert.ok((await addLine({ orderId: opened.orderId, version: await version(opened.orderId), productId: id.stew, modifierIds: [], note: null })).ok);

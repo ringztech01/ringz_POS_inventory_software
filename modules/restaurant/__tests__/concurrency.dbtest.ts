@@ -22,6 +22,7 @@ import { addLine } from "../server/services/orderLines";
 import { sendToKitchen } from "../server/services/orderFlow";
 import { STALE } from "../server/services/orders";
 import { mergeOrders, moveOrder, TAKEN } from "../server/services/tableMoves";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -38,7 +39,7 @@ const TOMORROW = addDays(todayInAppZone(), 1);
 async function newTable(seats = 4) {
   tableCount += 1;
   return prisma.table.create({
-    data: { name: `K${tableCount}`, seats, areaId, qrToken: newQrToken() },
+    data: { name: testTable(`K${tableCount}`), seats, areaId, qrToken: newQrToken() },
     select: { id: true, name: true, qrToken: true },
   });
 }

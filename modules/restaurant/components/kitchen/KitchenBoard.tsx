@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { KitchenStatus } from "@prisma/client";
 import toast from "react-hot-toast";
-import { Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { Lock, Maximize, Minimize, Trash2, Volume2, VolumeX, X } from "lucide-react";
+import { lockPos } from "../../server/actions/session";
+import { useFullscreen } from "@/components/pos/use-fullscreen";
 import { FONTS } from "@/components/layout/theme";
 import { fmtElapsed, isLate, nextStep, previousStep, type KdsView, type KitchenStep } from "../../lib/kds";
 import { KDS } from "../../lib/theme";
@@ -16,6 +18,7 @@ import FloorPolling from "../floor/FloorPolling";
 import KdsWasteModal, { type KdsWasteMode } from "./KdsWasteModal";
 import PrinterAlerts from "@/components/hardware/PrinterAlerts";
 import TicketCard from "./TicketCard";
+import { useServiceRoutes } from "../ServiceRoutes";
 
 // /restaurant/kitchen — the kitchen display (RingzPOS Kitchen Display
 // design). Live without websockets, so it works on a local network with no
@@ -86,8 +89,12 @@ const hrefFor = (station: string | null, view: KdsView) => {
 // waste pop-up).
 // `printers`: each station's printer (station code → name); a station
 // without one prints KOTs from the browser, as before.
-export default function KitchenBoard({ data, canManage, canWaste, printers }: { data: KitchenBoardData; canManage: boolean; canWaste: boolean; printers: Record<string, string> }) {
+// `terminal`: a paired device (the Kitchen screen, Part 6f Step 7c) — a Lock
+// key ends the session there (the PIN screen comes back).
+export default function KitchenBoard({ data, canManage, canWaste, printers, terminal = false }: { data: KitchenBoardData; canManage: boolean; canWaste: boolean; printers: Record<string, string>; terminal?: boolean }) {
   const router = useRouter();
+  const routes = useServiceRoutes();
+  const fullscreenState = useFullscreen();
   const [wasteMode, setWasteMode] = useState<KdsWasteMode | null>(null);
   const [lineTaps, setLineTaps] = useState<Map<string, Pending<KitchenStatus>>>(new Map());
   const [ticketTaps, setTicketTaps] = useState<Map<string, string | null>>(new Map());
@@ -220,6 +227,7 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
       textDecoration: "none",
     }) as const;
   const group = { display: "flex", gap: 4, background: KDS.card, borderRadius: 9, padding: 3 } as const;
+  const fullscreen = fullscreenState;
 
   return (
     <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column", background: KDS.bg, color: KDS.text }}>
@@ -262,6 +270,16 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
           >
             {sound ? <Volume2 size={16} strokeWidth={2} /> : <VolumeX size={16} strokeWidth={2} />}
           </button>
+          <button
+            type="button"
+            data-kds-fullscreen
+            onClick={() => void fullscreen.toggle()}
+            aria-label={fullscreen.active ? "Leave full screen" : "Full screen"}
+            title={fullscreen.active ? "Leave full screen" : "Full screen"}
+            style={{ height: 32, width: 36, border: `1px solid ${KDS.buttonBorder}`, borderRadius: 8, background: "transparent", color: KDS.qty, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+          >
+            {fullscreen.active ? <Minimize size={16} strokeWidth={2} /> : <Maximize size={16} strokeWidth={2} />}
+          </button>
           {canWaste && (
             <button
               type="button"
@@ -271,9 +289,24 @@ export default function KitchenBoard({ data, canManage, canWaste, printers }: { 
               <Trash2 size={16} strokeWidth={2} /> Log waste
             </button>
           )}
-          <Link href="/restaurant/floor" style={{ fontFamily: FONTS.body, fontWeight: 600, color: KDS.link }}>
+          <Link href={routes.tables()} style={{ fontFamily: FONTS.body, fontWeight: 600, color: KDS.link }}>
             Floor →
           </Link>
+          {terminal && (
+            <button
+              type="button"
+              data-kds-lock
+              onClick={() =>
+                void lockPos({}).then(
+                  (r) => (r.ok && r.signedOut ? window.location.replace("/") : r.ok ? undefined : alert(r.error)),
+                  () => alert("Couldn't reach the server. Check the connection and try again."),
+                )
+              }
+              style={{ height: 44, padding: "0 16px", border: `1px solid ${KDS.buttonBorder}`, borderRadius: 9, background: "transparent", color: KDS.text, fontFamily: FONTS.body, fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8, cursor: "pointer", whiteSpace: "nowrap" }}
+            >
+              <Lock size={16} strokeWidth={2} /> Lock
+            </button>
+          )}
         </div>
       </header>
       {/* Printer trouble and missing printers, just under the header (it's full). */}

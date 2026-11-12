@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import { auth } from "@/auth";
 import { requireRestaurant } from "@/modules/restaurant/server/guard";
 import DeviceBeacon from "@/components/hardware/DeviceBeacon";
+import { ServiceViewProvider } from "@/modules/restaurant/components/ServiceRoutes";
+import { getServiceView } from "@/modules/restaurant/server/serviceView";
 
 // Full-screen restaurant screens (the kitchen display): signed in, no
 // sidebar or top bar. 404 while the Restaurant module is off; each page
@@ -13,10 +15,14 @@ export default async function KdsLayout({ children }: { children: ReactNode }) {
     redirect("/");
   }
   await requireRestaurant();
+  // The restaurant's view on this device (Part 6f): where "Floor" goes.
+  const view = await getServiceView();
   return (
-    <div style={{ minHeight: "100vh", background: "#12181a" }}>
-      <DeviceBeacon />
-      {children}
-    </div>
+    <ServiceViewProvider view={view}>
+      <div style={{ minHeight: "100vh", background: "#12181a" }}>
+        <DeviceBeacon />
+        {children}
+      </div>
+    </ServiceViewProvider>
   );
 }

@@ -7,13 +7,16 @@ type Pickable = { id: string; warehouseId: string; status: TableStatus; orderId:
 
 // The tables Move table / Merge can pick, in the order's warehouse: free
 // ones (Available, or Reserved — the screen warns) to move to, the other
-// occupied ones to merge into. The server checks again.
-export function pickableTables<T extends Pickable>(tables: T[], fromTableId: string, warehouseId: string, mode: MoveMode): T[] {
+// occupied ones to merge into — a shared table lists each of its checks,
+// so with `fromOrderId` another check at the same table can be merged
+// into too (two guests deciding to share a bill). The server checks again.
+export function pickableTables<T extends Pickable>(tables: T[], fromTableId: string, warehouseId: string, mode: MoveMode, fromOrderId?: string): T[] {
   return tables.filter(
     (t) =>
-      t.id !== fromTableId &&
       t.warehouseId === warehouseId &&
-      (mode === "move" ? t.status === "Available" || t.status === "Reserved" : t.status === "Occupied" && !!t.orderId),
+      (mode === "move"
+        ? t.id !== fromTableId && (t.status === "Available" || t.status === "Reserved")
+        : t.status === "Occupied" && !!t.orderId && (fromOrderId ? t.orderId !== fromOrderId : t.id !== fromTableId)),
   );
 }
 

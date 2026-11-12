@@ -46,6 +46,8 @@ export type OrderForSale = OrderAdjustments & {
   table: string | null;
   waiter: string | null;
   type: OrderType;
+  // A bar tab's name.
+  tabName?: string | null;
   warehouseId: string;
   customerId: string | null;
   lines: (PricedLine & { productId: string; kitchenStatus: KitchenStatus; remakeOfId: string | null })[];
@@ -71,8 +73,8 @@ export type SaleFromOrder =
 const two = (value: Decimal) => value.toFixed(2);
 
 // "Restaurant ORD-0073 · Table CB1 · Dine-in · Waiter: Ada"
-export function saleNotes(order: Pick<OrderForSale, "ref" | "table" | "type" | "waiter">): string {
-  return [`Restaurant ${order.ref}`, order.table ? `Table ${order.table}` : null, ORDER_TYPE_LABEL[order.type], `Waiter: ${order.waiter ?? "—"}`]
+export function saleNotes(order: Pick<OrderForSale, "ref" | "table" | "type" | "waiter" | "tabName">): string {
+  return [`Restaurant ${order.ref}`, order.table ? `Table ${order.table}` : order.type === "BAR_TAB" && order.tabName ? `Tab ${order.tabName}` : null, ORDER_TYPE_LABEL[order.type], `Waiter: ${order.waiter ?? "—"}`]
     .filter(Boolean)
     .join(" · ");
 }

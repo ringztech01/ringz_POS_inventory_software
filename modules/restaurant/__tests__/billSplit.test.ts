@@ -2,7 +2,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Decimal } from "@prisma/client/runtime/index-browser";
-import { billPartLabel, MAX_BILL_PARTS, splitByAmounts, splitByItems, splitEqually, type SplitLine, type SplitResult } from "../lib/billSplit";
+import { addShares, billPartLabel, MAX_BILL_PARTS, reduceShare, splitByAmounts, splitByItems, splitEqually, unitsLabel, type SplitLine, type SplitResult } from "../lib/billSplit";
 import { orderTotals } from "../lib/orderTotals";
 import { splitBillSchema } from "../schemas/bill";
 
@@ -119,5 +119,47 @@ test("the split schema: ids and counts only", () => {
   assert.equal(splitBillSchema.safeParse({ ...base, split: { mode: "ITEMS", parts: [[{ lineId: "a", quantity: 0 }], [{ lineId: "b", quantity: 1 }]] } }).success, false);
   // No amount for an item part reaches the server.
   const parsed = splitBillSchema.parse({ ...base, split: { mode: "ITEMS", parts: [[{ lineId: "a", quantity: 1, amount: "1" }], [{ lineId: "b", quantity: 1 }]] } });
-  assert.deepEqual(parsed.split.mode === "ITEMS" && parsed.split.parts[0][0], { lineId: "a", quantity: 1 });
+  assert.deepEqual(parsed.split.mode === "ITEMS" && parsed.split.parts[0][0], { lineId: "a", quantity: 1, shareOf: 1 });
+});
+
+// ---- Sharing an item (the Split redesign): q shares of 1/s of a unit
+
+test("shares: in lowest terms, added up, and said as units", () => {
+  assert.deepEqual(reduceShare(2, 4), { quantity: 1, shareOf: 2 });
+  assert.deepEqual(addShares([{ quantity: 1 }, { quantity: 1, shareOf: 2 }]), { quantity: 3, shareOf: 2 });
+  assert.deepEqual(addShares([{ quantity: 1, shareOf: 2 }, { quantity: 1, shareOf: 2 }]), { quantity: 1, shareOf: 1 });
+  assert.deepEqual(addShares([{ quantity: 1, shareOf: 3 }, { quantity: 1, shareOf: 6 }]), { quantity: 1, shareOf: 2 });
+  assert.deepEqual([unitsLabel(2), unitsLabel(1, 2), unitsLabel(3, 2), unitsLabel(2, 3), unitsLabel(1, 7), unitsLabel(4, 2)], ["2", "½", "1½", "⅔", "1/7", "2"]);
+});
+
+test("by item, shared: a unit split evenly; the parts still add up exactly", () => {
+  const bill = orderTotals(lines, "10"); // 51.35
+  // Each: one Jollof 18 + ½ Chapman 5.00 + its tax 0.38 + service 2.30 = 25.68; the last takes the kobo.
+  const half = splitByItems(lines, [[{ lineId: "a", quantity: 1 }, { lineId: "b", quantity: 1, shareOf: 2 }], [{ lineId: "a", quantity: 1 }, { lineId: "b", quantity: 1, shareOf: 2 }]], bill);
+  assert.deepEqual(fixed(half), ["25.68", "25.67"]);
+  assert.equal(sum(half), "51.35");
+  // A Chapman shared three ways: ⅓ each, the last guest takes the kobo.
+  const thirds = splitByItems(lines, [[{ lineId: "a", quantity: 2 }, { lineId: "b", quantity: 1, shareOf: 3 }], [{ lineId: "b", quantity: 1, shareOf: 3 }], [{ lineId: "b", quantity: 1, shareOf: 3 }]], bill);
+  assert.ok(thirds.ok);
+  assert.equal(sum(thirds), "51.35");
+  assert.deepEqual(fixed(thirds).slice(1), ["3.91", "3.93"], "⅓ of 10 + tax + service; the last takes the kobo");
+  // 1½ of a line and ½: whole units and a share of the same line.
+  const two = [line("c", "Star", 2, "15.00")];
+  const starBill = orderTotals(two, "0");
+  assert.deepEqual(fixed(splitByItems(two, [[{ lineId: "c", quantity: 3, shareOf: 2 }], [{ lineId: "c", quantity: 1, shareOf: 2 }]], starBill)), ["22.50", "7.50"]);
+});
+
+test("by item, shared: every unit exactly once still — said in units", () => {
+  const bill = orderTotals(lines, "10");
+  assert.equal(fixed(splitByItems(lines, [[{ lineId: "a", quantity: 2 }, { lineId: "b", quantity: 1, shareOf: 2 }], [{ lineId: "a", quantity: 0 }, { lineId: "b", quantity: 0 }]], bill)), "Guest 2 has nothing assigned yet.");
+  assert.equal(fixed(splitByItems(lines, [[{ lineId: "a", quantity: 2 }], [{ lineId: "b", quantity: 1, shareOf: 2 }]], bill)), "Assign every Chapman (½ of 1 assigned).");
+  assert.equal(fixed(splitByItems(lines, [[{ lineId: "a", quantity: 2 }, { lineId: "b", quantity: 1 }], [{ lineId: "b", quantity: 1, shareOf: 2 }]], bill)), "More Chapman assigned than were ordered (1½ of 1).");
+  assert.equal(fixed(splitByItems(lines, [[{ lineId: "a", quantity: 2 }], [{ lineId: "b", quantity: 1, shareOf: 0 }]], bill)), "Assign whole items, or an item shared between guests.");
+});
+
+test("the split schema: shareOf whole, 1 to the most parts, 1 when left out", () => {
+  const base = { orderId: "o1", version: 1 };
+  const parsed = splitBillSchema.parse({ ...base, split: { mode: "ITEMS", parts: [[{ lineId: "a", quantity: 1, shareOf: 2 }], [{ lineId: "a", quantity: 1 }]] } });
+  assert.ok(parsed.split.mode === "ITEMS" && parsed.split.parts[0][0].shareOf === 2 && parsed.split.parts[1][0].shareOf === 1);
+  for (const shareOf of [0, MAX_BILL_PARTS + 1, 1.5]) assert.equal(splitBillSchema.safeParse({ ...base, split: { mode: "ITEMS", parts: [[{ lineId: "a", quantity: 1, shareOf }], [{ lineId: "a", quantity: 1 }]] } }).success, false, String(shareOf));
 });

@@ -8,6 +8,7 @@ import { Menu, Search, Plus, Maximize, Minimize, ScanLine, ChevronDown, User as 
 import { useSidebar } from "./sidebar-context";
 import { useToggleState } from "./hooks";
 import { resolveBreadcrumb } from "./nav-data";
+import { useServiceRoutes } from "@/modules/restaurant/components/ServiceRoutes";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { COLORS, FONTS } from "./theme";
 import ReportTabs from "@/components/reports/ReportTabs";
@@ -103,8 +104,25 @@ function UserMenuItem({
 }
 
 // `permissions`: the current user's set (UX only). POS shows with Manage Pos Screen.
-export default function Topbar({ permissions }: { permissions: Permission[] }) {
-  const canPos = permissions.includes(PERMISSIONS.MANAGE_POS_SCREEN);
+// Part 6f Step 5, with the Restaurant module on: `serviceHref` (a back-office
+// role) is the Service button — back to their home screen; `serviceOnly` (a
+// Service-level role on a Classic screen): no search or New — the back
+// office's parts aren't rendered. `roleName` goes under the name.
+export default function Topbar({
+  permissions,
+  serviceOnly = false,
+  serviceHref = null,
+  roleName = null,
+}: {
+  permissions: Permission[];
+  serviceOnly?: boolean;
+  serviceHref?: string | null;
+  roleName?: string | null;
+}) {
+  const routes = useServiceRoutes();
+  // In the Service view /pos is the touch POS, which Service reaches anyway;
+  // in Classic it's the counter POS, kept beside it.
+  const canPos = permissions.includes(PERMISSIONS.MANAGE_POS_SCREEN) && (!serviceHref || routes.view === "CLASSIC");
   const pathname = usePathname() || "/dashboard";
   const { toggleCollapsed } = useSidebar();
   const { data: session } = useSession();
@@ -119,6 +137,7 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
   // Reports (RingzPOS Reports design): the report tabs take the place of the
   // breadcrumb and global search, and there's no New button.
   const onReports = pathname === "/reports" || pathname.startsWith("/reports/");
+  const quiet = onReports || serviceOnly;
 
   const displayName = session?.user?.name?.trim() || session?.user?.email || "User";
   const avatarInitial = displayName.charAt(0).toUpperCase();
@@ -177,6 +196,11 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
 
       {onReports ? (
         <ReportTabs />
+      ) : serviceOnly ? (
+        <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0, flex: 1 }}>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.slateLight }}>{section} /</span>
+          <span style={{ fontSize: 14.5, fontWeight: 600, whiteSpace: "nowrap" }}>{title}</span>
+        </div>
       ) : (
         <>
           <div style={{ display: "flex", alignItems: "center", gap: 12, minWidth: 0 }}>
@@ -207,7 +231,7 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
       )}
 
       <div style={headerActionsStyle}>
-        {!onReports && (
+        {!quiet && (
           <button
             type="button"
             onMouseEnter={newHover.on}
@@ -230,6 +254,32 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
             <Plus size={14} strokeWidth={1.9} />
             New
           </button>
+        )}
+
+        {serviceHref && (
+          <Link
+            href={serviceHref}
+            data-service-link
+            onMouseEnter={posHover.on}
+            onMouseLeave={posHover.off}
+            style={{
+              height: 38,
+              padding: "0 14px",
+              display: "flex",
+              alignItems: "center",
+              background: posHover.value ? COLORS.tealTint : "#fff",
+              border: `1px solid ${posHover.value ? COLORS.tealBorder : COLORS.borderStrong}`,
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 700,
+              letterSpacing: ".04em",
+              color: COLORS.tealDark,
+              textDecoration: "none",
+              cursor: "pointer",
+            }}
+          >
+            Service
+          </Link>
         )}
 
         {canPos && (
@@ -258,13 +308,15 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
         )}
 
         {/* Tablets: scan a product's barcode with the camera (opens it). */}
-        <CameraScanButton
-          render={(open) => (
-            <IconButton title="Scan with the camera" onClick={open}>
-              <ScanLine size={16} strokeWidth={1.6} />
-            </IconButton>
-          )}
-        />
+        {!serviceOnly && (
+          <CameraScanButton
+            render={(open) => (
+              <IconButton title="Scan with the camera" onClick={open}>
+                <ScanLine size={16} strokeWidth={1.6} />
+              </IconButton>
+            )}
+          />
+        )}
 
         <IconButton title={fullscreen.active ? "Exit fullscreen" : "Fullscreen"} onClick={() => void fullscreen.toggle()}>
           {fullscreen.active ? <Minimize size={16} strokeWidth={1.6} /> : <Maximize size={16} strokeWidth={1.6} />}
@@ -307,7 +359,7 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
             </span>
             <span style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", lineHeight: 1.2 }}>
               <span style={{ fontSize: 13, fontWeight: 600 }}>{displayName}</span>
-              <span style={{ fontSize: 11, color: COLORS.slateMid }}>Administrator</span>
+              {roleName && <span data-user-role style={{ fontSize: 11, color: COLORS.slateMid }}>{roleName}</span>}
             </span>
             <ChevronDown size={13} strokeWidth={1.8} color={COLORS.slateMid} />
           </button>
@@ -328,8 +380,8 @@ export default function Topbar({ permissions }: { permissions: Permission[] }) {
                 animation: "elv-pop .12s ease-out",
               }}
             >
-              <UserMenuItem icon={UserIcon} label="Profile" href="/profile" onClick={closeUserMenu} />
-              <UserMenuItem icon={KeyRound} label="Change Password" href="/change-password" onClick={closeUserMenu} />
+              {!serviceOnly && <UserMenuItem icon={UserIcon} label="Profile" href="/profile" onClick={closeUserMenu} />}
+              {!serviceOnly && <UserMenuItem icon={KeyRound} label="Change Password" href="/change-password" onClick={closeUserMenu} />}
               <div style={{ height: 1, background: COLORS.border, margin: "5px 6px" }} />
               <UserMenuItem
                 icon={LogOut}

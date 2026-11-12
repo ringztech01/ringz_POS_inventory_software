@@ -4,16 +4,18 @@ import { prisma } from "@/lib/db";
 import { reservationHoldRange, tableStatus, type TableStatus, type TableStatusRules } from "../../lib/tableStatus";
 import { getTableStatusRules } from "../rules";
 
-// What tableStatus needs from a table: its order holding the table (the DB's
-// activeTableId marks it) and the Booked reservations that could be due now.
+// What tableStatus needs from a table: the orders holding it — its open
+// checks (the DB's activeTableId marks them) and the Booked reservations that could be due now.
 export function tableStateSelect(now: Date, rules: TableStatusRules) {
   const { from, to } = reservationHoldRange(now, rules);
   return {
     deletedAt: true,
     needsCleaning: true,
+    // Its open checks, first opened first.
     orders: {
       where: { activeTableId: { not: null } },
-      select: { id: true, status: true, deletedAt: true },
+      select: { id: true, status: true, deletedAt: true, checkNumber: true },
+      orderBy: [{ openedAt: "asc" }, { number: "asc" }],
     },
     reservations: {
       where: { status: "BOOKED", deletedAt: null, startsAt: { gte: from, lte: to } },

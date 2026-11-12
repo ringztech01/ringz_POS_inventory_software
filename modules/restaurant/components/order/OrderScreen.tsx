@@ -1,39 +1,24 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import { MAX_LINE_QUANTITY } from "../../lib/modifiers";
-import toast from "react-hot-toast";
-import { formatNaira } from "@/lib/format";
 import { cancelReasonsFor, type CancelReason } from "../../lib/cancelReasons";
-import {
-  addOrderLine,
-  cancelOrderLine,
-  cancelRestaurantOrder,
-  editOrderLine,
-  markOrderLineServed,
-  markOrderLinesServed,
-  sendOrderToKitchen,
-  setOrderLineQuantity,
-} from "../../server/actions/orders";
-import type { BillSplit } from "../../schemas/bill";
-import { applyDiscount, refundBill, removeBillSplit, setServiceCharge, settleBill, splitBill } from "../../server/actions/bill";
+import { addOrderLine, editOrderLine, setOrderLineQuantity } from "../../server/actions/orders";
 import type { Approver } from "../../server/queries/approvers";
 import type { BillView } from "../../server/queries/bill";
 import type { RefundView } from "../../server/queries/refund";
 import type { MenuCard, OrderScreenData, TicketLine } from "../../server/queries/orderScreen";
 import BillPanel from "./BillPanel";
-import type { DiscountOutcome, DiscountRequest } from "./DiscountModal";
-import type { SettleOutcome, SettleRequest } from "./PaymentModal";
-import SettledModal, { type Settled } from "./SettledModal";
-import RefundModal, { type RefundOutcome, type RefundRequest } from "./RefundModal";
+import SettledModal from "./SettledModal";
+import RefundModal from "./RefundModal";
 import CancelModal, { type CancelExtras, type CancelOutcome } from "./CancelModal";
 import MenuPanel from "./MenuPanel";
 import ModifierModal from "./ModifierModal";
 import Ticket from "./Ticket";
-import { useOrderChanges } from "./useOrderChanges";
-import { sentMessage } from "../../lib/kds";
+import { useOrderActions } from "./useOrderActions";
 import FloorPolling from "../floor/FloorPolling";
+import { useManagerApproval, withManager, type ManagerApproval } from "../pos/useManagerApproval";
+import type { RefundOutcome, RefundRequest } from "./RefundModal";
 
 type ModalState =
   | { mode: "add"; productId: string; title: string }
@@ -60,6 +45,7 @@ export default function OrderScreen({
   printers,
   canSettle,
   refundView,
+  voidApprovers,
   floorHref,
 }: {
   data: OrderScreenData;
@@ -75,17 +61,21 @@ export default function OrderScreen({
   canSettle: boolean;
   // A settled bill's sale, for the Refund pop-up (null otherwise).
   refundView: RefundView | null;
+  // Who can approve a void of a sent line or a refund (Approve Voids &
+  // Refunds, with a PIN) — for someone who can't do it themselves.
+  voidApprovers: Approver[];
   floorHref: string;
 }) {
+  const manager = useManagerApproval();
+  const voidApproval = useRef<{ lineId: string; approval: ManagerApproval } | null>(null);
   const orderId = data.order.id;
-  const { run, saving } = useOrderChanges(data.order.version);
+  const actions = useOrderActions(data, bill);
+  const { run, saving, settled } = actions;
   const [modal, setModal] = useState<ModalState | null>(null);
   const [cancelling, setCancelling] = useState<CancelState | null>(null);
   const [billing, setBilling] = useState(false);
-  const [settled, setSettled] = useState<Settled | null>(null);
   const [refunding, setRefunding] = useState(false);
   const closeRefund = useCallback(() => setRefunding(false), []);
-  const router = useRouter();
   const closeBill = useCallback(() => setBilling(false), []);
   const [quantities, setQuantities] = useState<Record<string, Pending<number>>>({});
   // Stepper saves waiting for their 300 ms, by line.
@@ -155,131 +145,36 @@ export default function OrderScreen({
     timers.current.set(line.id, { handle: setTimeout(send, STEPPER_DELAY), send });
   }
 
-  function send() {
-    void run(async (version) => {
-      const result = await sendOrderToKitchen({ orderId, version });
-      const message = result.ok ? sentMessage(result.sent) : null;
-      if (message) toast.success(message);
-      return result;
+  // A line's refusals over the waste limit come back to its pop-up; a sent
+  // line's void without Approve Voids & Refunds asks for a manager's PIN.
+  function submitCancel(reason: CancelReason, details: string, extras: CancelExtras): Promise<CancelOutcome> {
+    if (!cancelling) return Promise.resolve({ ok: false });
+    if (cancelling.mode === "order") return actions.cancelOrder(reason, details);
+    const line = cancelling.line;
+    return withManager((managerApproval) => actions.cancelLine(line, reason, details, { ...extras, managerApproval }), {
+      needs: (o) => !o.ok && !!o.needsManager,
+      settled: (o) => o.ok || !!(!o.ok && o.needsApproval),
+      ask: manager.ask,
+      title: `Void ${line.name} — a manager's PIN`,
+      approvers: voidApprovers,
+      known: voidApproval.current?.lineId === line.id ? voidApproval.current.approval : undefined,
+      remember: (approval) => (voidApproval.current = { lineId: line.id, approval }),
     });
   }
 
-  function serve(line: TicketLine) {
-    void run((version) => markOrderLineServed({ orderId, version, lineId: line.id }));
-  }
-
-  // The Ready bar: everything the kitchen has finished, at once.
-  function serveReady(ready: TicketLine[]) {
-    void run(async (version) => {
-      const result = await markOrderLinesServed({ orderId, version, lineIds: ready.map((line) => line.id) });
-      if (result.ok) toast.success(ready.length === 1 ? `${ready[0].name} served.` : `${ready.length} lines served.`);
-      return result;
+  // A refund without Approve Voids & Refunds: a manager's PIN.
+  function refund(request: RefundRequest): Promise<RefundOutcome> {
+    return withManager((managerApproval) => actions.refund({ ...request, managerApproval }), {
+      needs: (o) => !o.ok && !!o.needsManager,
+      ask: manager.ask,
+      title: "Refund — a manager's PIN",
+      approvers: voidApprovers,
     });
-  }
-
-  // A line's refusals over the waste limit (a PIN needed, a wrong one) come
-  // back to its pop-up instead of a toast.
-  async function submitCancel(reason: CancelReason, details: string, extras: CancelExtras): Promise<CancelOutcome> {
-    if (!cancelling) return { ok: false };
-    if (cancelling.mode === "line") {
-      const { line } = cancelling;
-      const refused: { result?: CancelOutcome } = {};
-      const accepted = await run(
-        async (version) => {
-          const result = await cancelOrderLine({ orderId, version, lineId: line.id, reason, details, wasted: extras.wasted, approval: extras.approval });
-          if (!result.ok) refused.result = { ok: false, error: result.error, needsApproval: "needsApproval" in result && !!result.needsApproval };
-          else toast.success(extras.wasted ? `${line.name} cancelled and logged as waste.` : `${line.name} cancelled.`);
-          return result;
-        },
-        { quiet: extras.wasted },
-      );
-      return accepted ? { ok: true } : (refused.result ?? { ok: false });
-    }
-    const ok = await run((version) => cancelRestaurantOrder({ orderId, version, reason, details }));
-    if (ok) toast.success(data.order.tableName ? `Order cancelled. Table ${data.order.tableName} is free.` : "Order cancelled.");
-    return ok ? { ok: true } : { ok: false };
-  }
-
-  // The Bill panel's discount: refusals (over the limit, a wrong PIN) come
-  // back to its pop-up instead of a toast.
-  async function discount(request: DiscountRequest): Promise<DiscountOutcome> {
-    const refused: { result?: DiscountOutcome } = {};
-    const accepted = await run(
-      async (version) => {
-        const result = await applyDiscount({ orderId, version, ...request });
-        if (!result.ok) refused.result = { ok: false, error: result.error, needsApproval: "needsApproval" in result };
-        else toast.success(Number(request.value) === 0 ? "Discount removed." : "Discount applied.");
-        return result;
-      },
-      { quiet: true },
-    );
-    return accepted ? { ok: true } : (refused.result ?? { ok: false, error: "Couldn't reach the server. Check the connection and try again." });
-  }
-
-  function serviceCharge(on: boolean) {
-    void run((version) => setServiceCharge({ orderId, version, on }));
-  }
-
-  function split(request: BillSplit): Promise<boolean> {
-    return run(async (version) => {
-      const result = await splitBill({ orderId, version, split: request });
-      if (result.ok) toast.success("Bill split.");
-      return result;
-    });
-  }
-
-  // Settle (Payment pop-up): refusals come back to the pop-up, not a toast;
-  // done, the Settled dialog shows the change and the receipt.
-  async function settle(request: SettleRequest): Promise<SettleOutcome> {
-    const refused: { result?: SettleOutcome } = {};
-    const part = bill.split?.parts.find((p) => p.id === request.partId);
-    const accepted = await run(
-      async (version) => {
-        const result = await settleBill({ orderId, version, ...request });
-        if (!result.ok) refused.result = { ok: false, error: result.error };
-        else
-          setSettled({
-            saleId: result.saleId,
-            reference: result.reference,
-            closed: result.closed,
-            paid: result.paid,
-            change: result.change,
-            title: part?.label ?? "Bill",
-            printedOn: result.receiptPrinter ?? null,
-            partsLeft: (bill.split?.parts.filter((p) => p.status === "OPEN" && p.id !== request.partId).length ?? 0),
-          });
-        return result;
-      },
-      { quiet: true },
-    );
-    return accepted ? { ok: true } : (refused.result ?? { ok: false, error: "Couldn't reach the server. Check the connection and try again." });
   }
 
   function closeSettled() {
     if (settled?.closed) setBilling(false);
-    setSettled(null);
-  }
-
-  // Refund (a settled bill): not an order change — the order stays Billed —
-  // so straight to the server; refusals come back to the pop-up.
-  async function refund(request: RefundRequest): Promise<RefundOutcome> {
-    try {
-      const result = await refundBill({ orderId, ...request });
-      if (!result.ok) return { ok: false, error: result.error };
-      toast.success(`Refunded ${formatNaira(result.amount)} (${result.reference}).${result.returnedToStock ? " Back in stock." : ""}`);
-      router.refresh();
-      return { ok: true };
-    } catch {
-      return { ok: false, error: "Couldn't reach the server. Check the connection and try again." };
-    }
-  }
-
-  function removeSplit() {
-    void run(async (version) => {
-      const result = await removeBillSplit({ orderId, version });
-      if (result.ok) toast.success("Split removed — the bill is paid as one.");
-      return result;
-    });
+    actions.clearSettled();
   }
 
   const typing = data.lines.some((line) => {
@@ -299,9 +194,9 @@ export default function OrderScreen({
         shownQuantity={shownQuantity}
         onStep={step}
         onEdit={edit}
-        onSend={send}
-        onServe={serve}
-        onServeReady={serveReady}
+        onSend={actions.send}
+        onServe={actions.serve}
+        onServeReady={actions.serveReady}
         onCancelLine={(line) => setCancelling({ mode: "line", line })}
         onCancelOrder={() => setCancelling({ mode: "order" })}
         onBill={() => setBilling(true)}
@@ -316,16 +211,17 @@ export default function OrderScreen({
           bill={bill}
           approvers={approvers}
           busy={saving}
-          onDiscount={discount}
-          onServiceCharge={serviceCharge}
-          onSplit={split}
-          onRemoveSplit={removeSplit}
+          onDiscount={actions.discount}
+          onServiceCharge={actions.serviceCharge}
+          onSplit={actions.split}
+          onRemoveSplit={actions.removeSplit}
           canSettle={canSettle}
-          onSettle={settle}
+          onSettle={actions.settle}
           onClose={closeBill}
           prebillPrinter={printers.prebill}
         />
       )}
+      {manager.element}
       {settled && <SettledModal settled={settled} receiptPrinter={printers.receipt} onClose={closeSettled} />}
       {modal && (
         <ModifierModal

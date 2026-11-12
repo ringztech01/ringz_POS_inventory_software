@@ -4,7 +4,7 @@ export const TABLE_NAME_MAX = 20;
 export const MAX_SEATS = 30;
 const SEATS = `Seats must be a whole number from 1 to ${MAX_SEATS}.`;
 
-// A dining table. Uniqueness (per area, among active tables) and the area
+// A dining table. Uniqueness (across the business, among live tables) and the area
 // being active are checked server-side, in the transaction.
 export const tableSchema = z.object({
   name: z

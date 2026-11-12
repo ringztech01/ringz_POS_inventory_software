@@ -57,7 +57,10 @@ export async function kotTicket(kotId: string): Promise<{ ticket: KotTicket; sta
 
 // New tickets, each once ("KOT:<id>").
 export async function printNewKots(kotIds: readonly string[], who: Who): Promise<void> {
+  // A training order's tickets don't go to the kitchen (Step 7f).
+  const training = new Set((await prisma.kot.findMany({ where: { id: { in: [...kotIds] }, order: { training: true } }, select: { id: true } })).map((k) => k.id));
   for (const kotId of kotIds) {
+    if (training.has(kotId)) continue;
     try {
       const kot = await kotTicket(kotId);
       if (!kot) continue;

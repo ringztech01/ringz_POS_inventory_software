@@ -24,6 +24,20 @@ export const RESTAURANT_PERMISSIONS = {
   LOG_WASTE: "Log Waste",
   // Approve waste above the limit with a PIN (and set that PIN); void waste.
   APPROVE_WASTE: "Approve Waste",
+  // Void a sent line and refund a settled bill without a manager's PIN — and
+  // approve them with a PIN for someone who can't (Part 6e).
+  APPROVE_VOID: "Approve Voids & Refunds",
+  // Lay out each dining area to match the room: the floor plan editor. For
+  // Managers and the Administrator (the system admin role has every
+  // permission).
+  MANAGE_FLOOR_PLAN: "Manage Floor Plan",
+  // The audit view (Part 6f Step 7e): sign-ins, failed PINs, overrides,
+  // voids, drawer opens, PIN and staff changes. Managers and the
+  // Administrator.
+  VIEW_AUDIT_LOG: "View Audit Log",
+  // Cost and margin in Restaurant Reports (on screen and in exports).
+  // Managers and the Administrator.
+  VIEW_COST: "View Cost",
 } as const;
 
 export type RestaurantPermission = (typeof RESTAURANT_PERMISSIONS)[keyof typeof RESTAURANT_PERMISSIONS];
@@ -54,9 +68,19 @@ export const restaurantModule = defineModule({
     { label: "Tables", href: "/restaurant/tables", permissions: [P.MANAGE_TABLES, P.MANAGE_RESERVATIONS] },
     { label: "Digital menu", href: "/restaurant/digital-menu", permissions: [P.MANAGE_FOOD] },
     // Sidebar only (the designs' header has the seven tabs above).
+    // Back office (Managers and the Administrator): sales, dishes, staff,
+    // tables, payments, waste, voids and cash-up.
+    { label: "Reports", href: "/restaurant/reports", permissions: [P.RESTAURANT_REPORTS], header: false },
     { label: "Prep times", href: "/restaurant/reports/prep-times", permissions: [P.RESTAURANT_REPORTS], header: false },
     { label: "Stations", href: "/restaurant/settings/stations", permissions: [P.RESTAURANT_SETTINGS], header: false },
-    { label: "Approval PIN", href: "/restaurant/settings/approval-pin", permissions: [P.APPROVE_DISCOUNT, P.APPROVE_WASTE], header: false },
+    { label: "Touch POS", href: "/restaurant/settings/pos", permissions: [P.RESTAURANT_SETTINGS], header: false },
+    { label: "Floor plan", href: "/restaurant/settings/floor", permissions: [P.MANAGE_FLOOR_PLAN], header: false },
+    // One PIN per person: the touch POS sign-in, and approvals for those who approve.
+    { label: "My PIN", href: "/restaurant/settings/approval-pin", permissions: [P.MANAGE_ORDERS, P.APPROVE_DISCOUNT, P.APPROVE_WASTE], header: false },
+    // This till's float, cash-up and Z-report (Part 6f Step 7b).
+    { label: "Cash-up", href: "/pos/cash-up", permissions: [P.SETTLE_BILL], header: false },
+    // Who did what, when (Part 6f Step 7e).
+    { label: "Audit log", href: "/settings/restaurant/audit", permissions: [P.VIEW_AUDIT_LOG], header: false },
   ],
   toggle: { setting: "restaurantEnabled", permission: P.RESTAURANT_SETTINGS },
   isEnabled: (settings) => settings.restaurantEnabled,

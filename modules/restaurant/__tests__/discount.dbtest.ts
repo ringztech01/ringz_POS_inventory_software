@@ -22,6 +22,7 @@ import { getDiscountApprovers } from "../server/queries/approvers";
 import { getOrderScreen } from "../server/queries/orderScreen";
 import { applyOrderDiscount, registerBillPrint, setOrderServiceCharge } from "../server/services/bill";
 import { checkApproverPin, PIN_TRIES, setApprovalPin, WRONG_PIN } from "../server/services/approvalPins";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -36,7 +37,7 @@ const versionOf = async (orderId: string) => (await prisma.order.findUniqueOrThr
 const printState = (orderId: string) => prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { billPrintedAt: true, billChangedAt: true } });
 async function newTable() {
   tableCount += 1;
-  return (await prisma.table.create({ data: { name: `D${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
+  return (await prisma.table.create({ data: { name: testTable(`D${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
 }
 async function newOrder() {
   const opened = await openTableOrder(await newTable(), adminId);
@@ -135,10 +136,15 @@ describe("Discounts and service charge (database copy)", { skip: enabled ? false
     assert.deepEqual(asked, { ok: false, error: "A discount over 10% needs an approver's PIN.", needsApproval: true, limit: "10%" });
     assert.deepEqual(await discountRow(orderId), before);
 
-    // The waiter can't approve; the admin has no PIN yet.
+    // The waiter can't approve — even with a PIN of their own (one PIN per
+    // person since Part 6e: it signs them in on the touch POS); the admin
+    // has no PIN yet.
     assert.equal((await discount(orderId, { value: "15", approval: { approverId: waiterId, pin: "1234" } })).ok, false);
-    assert.deepEqual(await setApprovalPin(waiterId, "1234"), { ok: false, error: "Only someone who can approve discounts or waste sets an approval PIN." });
-    assert.equal(await prisma.approvalPin.count({ where: { userId: waiterId } }), 0);
+    assert.deepEqual(await setApprovalPin(waiterId, "1234"), { ok: true });
+    const waiterTry = await discount(orderId, { value: "15", approval: { approverId: waiterId, pin: "1234" } });
+    assert.equal(!waiterTry.ok && waiterTry.error, "That person can't approve discounts. Pick someone else.");
+    assert.ok(!(await getDiscountApprovers()).some((a) => a.id === waiterId), "a waiter's PIN doesn't make them an approver");
+    await prisma.approvalPin.deleteMany({ where: { userId: waiterId } });
     await prisma.approvalPin.deleteMany({ where: { userId: adminId } });
     const noPin = await discount(orderId, { value: "15", approval: { approverId: adminId, pin: "4821" } });
     assert.ok(!noPin.ok && noPin.error.includes("hasn't set an approval PIN"));

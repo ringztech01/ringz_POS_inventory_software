@@ -37,9 +37,11 @@ function NavTab({ tab, active }: { tab: Tab; active: boolean }) {
 
 // The restaurant section tabs. Active: the most specific tab matching the
 // path, so /restaurant/floor lights Floor, not Dashboard (/restaurant).
+// Dashboard only on its own page: the sidebar-only pages (Reports, Prep
+// times, Stations, Touch POS…) light no tab.
 export default function RestaurantNav({ tabs }: { tabs: Tab[] }) {
   const pathname = usePathname() || "";
-  const active = findActiveChild(pathname, tabs)?.href;
+  const active = findActiveChild(pathname, tabs.filter((tab) => tab.href !== "/restaurant" || pathname === "/restaurant"))?.href;
 
   return (
     <nav aria-label="Restaurant" style={{ display: "flex", gap: 4 }}>

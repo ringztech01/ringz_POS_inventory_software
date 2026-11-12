@@ -1,4 +1,5 @@
 import "server-only";
+import { withCheck } from "../../lib/orderLines";
 import { Decimal } from "@prisma/client/runtime/index-browser";
 import { prisma } from "@/lib/db";
 import { getBusinessSettings } from "@/lib/business-settings";
@@ -6,11 +7,11 @@ import { formatNaira } from "@/lib/format";
 import type { BillPartStatus, BillSplitMode, OrderDiscountType } from "@prisma/client";
 import { sumSubtotals } from "@/lib/pricing";
 import { discountLabel, isBilled, summariseBill } from "../../lib/bill";
-import { billPartLabel, SPLIT_MODE_LABEL } from "../../lib/billSplit";
+import { billPartLabel, SPLIT_MODE_LABEL, unitsLabel } from "../../lib/billSplit";
 import { orderRef } from "../../lib/format";
 import { priceChangeLabel } from "../../lib/modifiers";
 import { lineAmount } from "../../lib/orderTotals";
-import { EDITABLE_ORDER_STATUSES, LINE_STATUS_LABEL, ORDER_TYPE_LABEL, readModifiers } from "../../lib/orderLines";
+import { EDITABLE_ORDER_STATUSES, LINE_STATUS_LABEL, noTableLabel, ORDER_TYPE_LABEL, readModifiers } from "../../lib/orderLines";
 
 // The bill for an order (Bill panel, pre-bill print): the billed lines with
 // their options, the totals and the warnings — all from the lines'
@@ -23,6 +24,8 @@ export type BillLine = {
   // Per unit, options included (the snapshot), and the line before tax.
   unitPrice: string;
   amount: string;
+  // The same as a plain number ("13000.00") — the Split pop-up's preview.
+  amountValue: string;
   modifiers: { name: string; price: string }[];
   note: string | null;
   status: string;
@@ -37,8 +40,9 @@ export type BillPartView = {
   // The amount as a plain number ("17.11"), for the Payment pop-up's figures.
   amountValue: string;
   status: BillPartStatus;
-  // By item: what this guest pays for.
-  items: { name: string; quantity: number }[];
+  // By item: what this guest pays for of each line — `quantity` shares of
+  // 1/`shareOf` of a unit; `units` says it ("2", "½", "1½").
+  items: { lineId: string; name: string; quantity: number; shareOf: number; units: string }[];
 };
 
 export type BillView = {
@@ -86,6 +90,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
         id: true,
         number: true,
         type: true,
+        tabName: true,
         status: true,
         guests: true,
         version: true,
@@ -98,6 +103,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
         discountReason: true,
         discountBy: { select: { firstName: true } },
         discountApprovedBy: { select: { firstName: true } },
+        checkNumber: true, checkName: true, 
         table: { select: { name: true } },
         waiter: { select: { firstName: true } },
         billParts: {
@@ -109,7 +115,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
             mode: true,
             amount: true,
             status: true,
-            lines: { select: { quantity: true, orderItem: { select: { createdAt: true, product: { select: { name: true } } } } } },
+            lines: { select: { orderItemId: true, quantity: true, shareOf: true, orderItem: { select: { createdAt: true, product: { select: { name: true } } } } } },
           },
         },
         items: {
@@ -143,7 +149,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
     order: {
       id: order.id,
       ref: orderRef(order.number),
-      table: order.table?.name ?? ORDER_TYPE_LABEL[order.type],
+      table: order.table ? withCheck(order.table.name, order) : noTableLabel(order.type, order.tabName),
       type: ORDER_TYPE_LABEL[order.type],
       waiter: order.waiter?.firstName ?? "No waiter",
       guests: order.guests,
@@ -172,6 +178,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
       quantity: line.quantity,
       unitPrice: money(new Decimal(line.unitPrice.toString())),
       amount: money(lineAmount(line)),
+      amountValue: lineAmount(line).toFixed(2),
       modifiers: readModifiers(line.modifiers).map((m) => ({ name: m.name, price: Number(m.price) === 0 ? "" : priceChangeLabel(m.price) })),
       note: line.note,
       status: LINE_STATUS_LABEL[line.kitchenStatus],
@@ -200,7 +207,7 @@ export async function getBill(orderId: string): Promise<BillView | null> {
             status: part.status,
             items: [...part.lines]
               .sort((a, b) => a.orderItem.createdAt.getTime() - b.orderItem.createdAt.getTime())
-              .map((l) => ({ name: l.orderItem.product.name, quantity: l.quantity })),
+              .map((l) => ({ lineId: l.orderItemId, name: l.orderItem.product.name, quantity: l.quantity, shareOf: l.shareOf, units: unitsLabel(l.quantity, l.shareOf) })),
           })),
           stale: !sumSubtotals(parts.map((part) => part.amount.toString())).equals(summary.total),
         }

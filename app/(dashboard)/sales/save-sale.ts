@@ -120,7 +120,7 @@ export async function writeSaleInTx(
   tx: Prisma.TransactionClient,
   prepared: PreparedSale,
   userId: string,
-  { moveStock }: { moveStock: boolean },
+  { moveStock, tillSessionId = null }: { moveStock: boolean; tillSessionId?: string | null },
 ): Promise<{ id: string; reference: string }> {
   const { data, lines, order, payments } = prepared;
   const paymentState = computePaymentState(order.grandTotal, payments);
@@ -137,7 +137,8 @@ export async function writeSaleInTx(
       createdById: userId,
       items: { create: saleItemsData(lines) },
       payments: {
-        create: payments.map((payment) => ({ ...payment, createdById: userId })),
+        // Taken on a till that's open (restaurant cash-up, Part 6f Step 7b).
+        create: payments.map((payment) => ({ ...payment, createdById: userId, ...(tillSessionId ? { tillSessionId } : {}) })),
       },
     },
     select: { id: true, reference: true },
@@ -158,11 +159,11 @@ export async function saveSaleInTx(
   tx: Prisma.TransactionClient,
   input: unknown,
   userId: string,
-  { moveStock, morePayments = [] }: { moveStock: boolean; morePayments?: readonly unknown[] },
+  { moveStock, morePayments = [], tillSessionId = null }: { moveStock: boolean; morePayments?: readonly unknown[]; tillSessionId?: string | null },
 ): Promise<{ ok: true; id: string; reference: string } | { ok: false; state: PurchaseActionState }> {
   const prepared = await prepareSale(input, morePayments);
   if (!prepared.ok) return prepared;
-  return { ok: true, ...(await writeSaleInTx(tx, prepared.sale, userId, { moveStock })) };
+  return { ok: true, ...(await writeSaleInTx(tx, prepared.sale, userId, { moveStock, tillSessionId })) };
 }
 
 // Saving a new sale — the ONE path every sale takes: the Sales form (via
@@ -174,14 +175,15 @@ export async function saveSaleInTx(
 //
 // References are random (shared prefix generator); the unique index on
 // Sale.reference makes this race-safe — a collision rolls back and retries.
-export async function saveNewSale(input: unknown, userId: string): Promise<PurchaseActionState> {
+// `tillSessionId`: the counter POS's open till (restaurant cash-up).
+export async function saveNewSale(input: unknown, userId: string, { tillSessionId = null }: { tillSessionId?: string | null } = {}): Promise<PurchaseActionState> {
   const prepared = await prepareSale(input);
   if (!prepared.ok) return prepared.state;
   const { data } = prepared.sale;
 
   for (let attempt = 1; ; attempt++) {
     try {
-      const created = await prisma.$transaction((tx) => writeSaleInTx(tx, prepared.sale, userId, { moveStock: true }));
+      const created = await prisma.$transaction((tx) => writeSaleInTx(tx, prepared.sale, userId, { moveStock: true, tillSessionId }));
 
       revalidateDocumentPaths(LIST_PATH, data.items.map((item) => item.productId));
       return { ok: true, id: created.id, reference: created.reference };
@@ -210,6 +212,7 @@ export async function addSalePaymentsInTx(
   saleId: string,
   payments: readonly unknown[],
   userId: string,
+  { tillSessionId = null }: { tillSessionId?: string | null } = {},
 ): Promise<void> {
   const adding: SalePaymentInput[] = [];
   for (const payment of payments) {
@@ -247,6 +250,7 @@ export async function addSalePaymentsInTx(
           date: payment.date,
           notes: payment.notes ?? null,
           createdById: userId,
+          ...(tillSessionId ? { tillSessionId } : {}),
         },
         select: { amount: true, paymentType: true, date: true, createdAt: true },
       }),

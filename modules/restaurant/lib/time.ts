@@ -39,6 +39,14 @@ export function formatAppTime(at: Date): string {
   return timeFormat.format(at);
 }
 
+const longDayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: APP_TIME_ZONE, weekday: "long", day: "numeric", month: "long" });
+
+// "Friday, 6 November" on the app's calendar (the PIN screen).
+export function formatAppLongDay(at: Date): string {
+  const parts = Object.fromEntries(longDayFormat.formatToParts(at).map((p) => [p.type, p.value]));
+  return `${parts.weekday}, ${parts.day} ${parts.month}`;
+}
+
 const dayFormat = new Intl.DateTimeFormat("en-GB", { timeZone: "UTC", weekday: "short", day: "numeric", month: "short" });
 
 // "Today", "Tomorrow", "Yesterday", or "Thu 30 Oct".

@@ -144,7 +144,7 @@ export function hourChart(rows: readonly { hour: number; total: string }[]): Hou
 
 // ---- Lists -----------------------------------------------------------------
 
-export const ORDER_TYPES: readonly OrderType[] = ["DINE_IN", "TAKEAWAY", "DELIVERY"];
+export const ORDER_TYPES: readonly OrderType[] = ["DINE_IN", "TAKEAWAY", "DELIVERY", "BAR_TAB"];
 
 // Live open orders: what the order is waiting on.
 export const OPEN_ORDER_STATUS_LABEL: Partial<Record<OrderStatus, string>> = {
@@ -157,7 +157,7 @@ export const OPEN_ORDER_STATUS_LABEL: Partial<Record<OrderStatus, string>> = {
 export const LATE_ORDER_MINUTES = 45;
 
 // The badge for an order with no table.
-export const NO_TABLE_BADGE: Record<OrderType, string> = { DINE_IN: "—", TAKEAWAY: "TA", DELIVERY: "DL" };
+export const NO_TABLE_BADGE: Record<OrderType, string> = { DINE_IN: "—", TAKEAWAY: "TA", DELIVERY: "DL", BAR_TAB: "TAB" };
 
 // Low-stock ingredients (at or below the alert level, as the retail
 // dashboard's stock alerts): Critical at half the alert level or less.

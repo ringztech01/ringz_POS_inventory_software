@@ -41,6 +41,7 @@ import KpiTile from "../components/dashboard/KpiTile";
 import RangeSelect from "../components/dashboard/RangeSelect";
 import SalesByHour from "../components/dashboard/SalesByHour";
 import OrderTypeMix from "../components/dashboard/OrderTypeMix";
+import { getServiceRoutes } from "../server/serviceView";
 import { LiveOpenOrders, LowStockIngredients, TopDishes, TopWastedItems } from "../components/dashboard/DashboardLists";
 
 // The Waste tile's colour by level (amber / red above the settings' %).
@@ -52,6 +53,7 @@ const WASTE_TONE: Record<WasteLevel, KpiTone> = { ok: "green", amber: "amber", r
 // food cost) and Top wasted items (the last 7 days). Each widget loads on its own (all at
 // once), so one that fails shows its error and the rest still render.
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const routes = await getServiceRoutes();
   const denied = await guardPage(RESTAURANT_PERMISSIONS.RESTAURANT_DASHBOARD);
   if (denied) return denied;
 
@@ -87,7 +89,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <RangeSelect value={period.key} />
           <Link
-            href="/restaurant/floor"
+            href={routes.tables()}
             style={{ height: 36, padding: "0 14px", display: "flex", alignItems: "center", background: COLORS.teal, borderRadius: 8, color: "#fff", fontSize: 13.5, fontWeight: 600 }}
           >
             Open floor
@@ -154,7 +156,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: 14 }}>
-        <LiveOpenOrders data={open.ok ? open.data : null} />
+        <LiveOpenOrders data={open.ok ? open.data : null} routes={routes} />
         <TopDishes rows={dishes.ok ? dishes.data : null} />
         <LowStockIngredients data={lowStock.ok ? lowStock.data : null} showWarehouse={warehouses.ok && warehouses.data.length > 1} />
       </div>

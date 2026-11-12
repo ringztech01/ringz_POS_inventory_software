@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { isPinOnlyEmail } from "@/modules/restaurant/lib/staffPins";
 import { Users, Pencil } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import StatusChip from "@/components/ui/StatusChip";
@@ -95,7 +96,7 @@ export default function UserTable({ users, currentUserId }: { users: PublicUser[
                   <Link href={`/peoples/users/${user.id}/edit`} style={{ fontSize: 14, fontWeight: 600 }}>
                     {name}
                   </Link>
-                  <span style={{ fontSize: 13, color: COLORS.slateMid }}>{user.email}</span>
+                  <span style={{ fontSize: 13, color: COLORS.slateMid }}>{isPinOnlyEmail(user.email) ? "PIN only" : user.email}</span>
                 </span>
               </span>
               <span style={{ fontSize: 13.5, color: COLORS.text }}>{user.userRole && !user.userRole.deletedAt ? user.userRole.name : "—"}</span>

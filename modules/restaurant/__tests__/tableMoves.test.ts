@@ -38,3 +38,14 @@ test("Move and Merge carry the moving order's version", () => {
   assert.equal(mergeOrdersSchema.safeParse({ orderId: "o1", version: 3, targetOrderId: "o5" }).success, true);
   assert.equal(mergeOrdersSchema.safeParse({ orderId: "o1", version: -1, targetOrderId: "o5" }).success, false);
 });
+
+test("Merge at a shared table: each check is a target, the other checks at the same table too", () => {
+  const shared = [
+    { id: "t9", name: "T9", warehouseId: "w1", status: "Occupied", orderId: "c1" },
+    { id: "t9", name: "T9 · Ada", warehouseId: "w1", status: "Occupied", orderId: "c2" },
+    { id: "t5", name: "T5", warehouseId: "w1", status: "Occupied", orderId: "o5" },
+  ] as const;
+  assert.deepEqual(names(pickableTables([...shared], "t9", "w1", "merge", "c1")), ["T9 · Ada", "T5"]);
+  assert.deepEqual(names(pickableTables([...shared], "t9", "w1", "merge")), ["T5"], "without the check: other tables only (as before)");
+  assert.deepEqual(names(pickableTables([...shared, { id: "t2", name: "T2", warehouseId: "w1", status: "Available", orderId: null }], "t9", "w1", "move", "c2")), ["T2"]);
+});

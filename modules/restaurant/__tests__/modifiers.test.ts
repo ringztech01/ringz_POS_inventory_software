@@ -58,9 +58,13 @@ describe("line price and merging", () => {
 });
 
 describe("what the browser may send", () => {
-  test("a tampered price is dropped: only dish, options and note get through", () => {
+  test("a tampered price is dropped: only dish, options, note (and the touch POS's quantity, seat, course) get through", () => {
     const parsed = addLineSchema.parse({ orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: "", unitPrice: "0.01", price: 0, taxRate: "0" });
-    assert.deepEqual(parsed, { orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: null });
+    assert.deepEqual(parsed, { orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: null, quantity: 1, seat: null, course: null });
+    const pos = addLineSchema.parse({ orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: "", quantity: 3, seat: 2, course: "MAIN" });
+    assert.deepEqual([pos.quantity, pos.seat, pos.course], [3, 2, "MAIN"]);
+    assert.equal(addLineSchema.safeParse({ orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: "", quantity: 100 }).success, false);
+    assert.equal(addLineSchema.safeParse({ orderId: "o1", version: 0, productId: "p1", modifierIds: [], note: "", course: "SOUP" }).success, false);
   });
 
   test("the note is trimmed, empty becomes none, at most 140 characters", () => {

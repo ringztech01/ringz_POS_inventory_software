@@ -4,7 +4,7 @@ import { prisma } from "@/lib/db";
 import { readModifiers, type ChosenModifier } from "../../lib/orderLines";
 import { checkSelection, MAX_LINE_QUANTITY, mergeKey } from "../../lib/modifiers";
 import { linePrice } from "../../lib/orderTotals";
-import type { AddLineInput, EditLineInput, LineQuantityInput } from "../../schemas/orderLine";
+import type { AddLineInput, EditLineInput, HoldLinesInput, LineQuantityInput, PlaceLinesInput } from "../../schemas/orderLine";
 import { dishesInStock, recipeSelect } from "../menuStock";
 import { lockOrderAt, markBillChanged, type OrderChangeResult } from "./orders";
 
@@ -98,10 +98,11 @@ async function bump(tx: Prisma.TransactionClient, orderId: string) {
 const keyOf = (modifiers: readonly ChosenModifier[], note: string | null) =>
   mergeKey(modifiers.map((m) => m.id ?? `${m.group}:${m.name}`), note);
 
-// Tap a dish (or Add to order): one New line at today's price, or +1 on a
-// New line with the same dish, options, note and snapshot price. Sent lines
-// are never merged into.
-export async function addLine({ orderId, version, productId, modifierIds, note }: AddLineInput): Promise<OrderChangeResult> {
+// Tap a dish (or Add to order): one New line at today's price, or more on a
+// New line with the same dish, options, note, snapshot price, seat, course
+// and held state. Sent lines are never merged into. A dish for a course
+// that's being held is held too.
+export async function addLine({ orderId, version, productId, modifierIds, note, quantity = 1, seat = null, course = null }: AddLineInput): Promise<OrderChangeResult> {
   return prisma.$transaction(async (tx): Promise<OrderChangeResult> => {
     const locked = await lockOrderAt(tx, orderId, version);
     if (!locked.ok) return locked;
@@ -119,22 +120,26 @@ export async function addLine({ orderId, version, productId, modifierIds, note }
     const unitPrice = linePrice(dish.price.toString(), options.chosen.map((m) => m.price));
     const key = keyOf(options.chosen, note);
 
+    const held = course ? !!(await tx.orderItem.findFirst({ where: { orderId, course, kitchenStatus: "NEW", heldAt: { not: null }, deletedAt: null, cancelledAt: null }, select: { id: true } })) : false;
     const candidates = await tx.orderItem.findMany({
-      where: { orderId, productId, kitchenStatus: "NEW", deletedAt: null, cancelledAt: null },
+      where: { orderId, productId, kitchenStatus: "NEW", deletedAt: null, cancelledAt: null, seat, course, heldAt: held ? { not: null } : null },
       select: { id: true, quantity: true, unitPrice: true, modifiers: true, note: true },
       orderBy: { createdAt: "asc" },
     });
     const twin = candidates.find((c) => unitPrice.equals(c.unitPrice.toString()) && keyOf(readModifiers(c.modifiers), c.note) === key);
 
     if (twin) {
-      if (twin.quantity >= MAX_LINE_QUANTITY) return { ok: false, error: `${dish.name} is already at ${MAX_LINE_QUANTITY} on this line.` };
-      await tx.orderItem.update({ where: { id: twin.id }, data: { quantity: twin.quantity + 1 } });
+      if (twin.quantity + quantity > MAX_LINE_QUANTITY) return { ok: false, error: `${dish.name} would go past ${MAX_LINE_QUANTITY} on this line.` };
+      await tx.orderItem.update({ where: { id: twin.id }, data: { quantity: twin.quantity + quantity } });
     } else {
       await tx.orderItem.create({
         data: {
           orderId,
           productId,
-          quantity: 1,
+          quantity,
+          seat,
+          course,
+          heldAt: held ? new Date() : null,
           unitPrice: unitPrice.toFixed(2),
           taxType: dish.taxType,
           taxRate: dish.orderTax ?? 0,
@@ -203,6 +208,43 @@ export async function setLineQuantity({ orderId, version, lineId, quantity }: Li
       where: { id: lineId },
       data: quantity === 0 ? { deletedAt: new Date() } : { quantity },
     });
+    return { ok: true, version: (await bump(tx, orderId)).version };
+  });
+}
+
+// Lines on the order, locked, for a change to several at once.
+async function lockLines(tx: Prisma.TransactionClient, orderId: string, lineIds: readonly string[]) {
+  const ids = [...new Set(lineIds)];
+  const rows = await tx.$queryRaw<{ id: string; kitchenStatus: string; cancelledAt: Date | null; deletedAt: Date | null }[]>`
+    SELECT id, kitchenStatus, cancelledAt, deletedAt FROM \`OrderItem\`
+    WHERE orderId = ${orderId} AND id IN (${Prisma.join(ids)}) FOR UPDATE`;
+  const live = rows.filter((r) => !r.cancelledAt && !r.deletedAt);
+  return { ids, live, allThere: live.length === ids.length };
+}
+
+// Seat and / or course for lines (the touch POS's Seat & course). A seat can
+// go on any line still counted; a course only on lines not sent yet.
+export async function placeLines({ orderId, version, lineIds, seat, course }: PlaceLinesInput): Promise<OrderChangeResult> {
+  return prisma.$transaction(async (tx): Promise<OrderChangeResult> => {
+    const locked = await lockOrderAt(tx, orderId, version);
+    if (!locked.ok) return locked;
+    const { ids, live, allThere } = await lockLines(tx, orderId, lineIds);
+    if (!allThere) return { ok: false, error: LINE_GONE, stale: true };
+    if (course !== undefined && live.some((r) => r.kitchenStatus !== "NEW")) return { ok: false, error: "A line that's been sent keeps its course." };
+    await tx.orderItem.updateMany({ where: { id: { in: ids } }, data: { ...(seat !== undefined ? { seat } : {}), ...(course !== undefined ? { course } : {}) } });
+    return { ok: true, version: (await bump(tx, orderId)).version };
+  });
+}
+
+// Hold lines not sent yet (Send leaves them) or release them.
+export async function holdLines({ orderId, version, lineIds, held }: HoldLinesInput): Promise<OrderChangeResult> {
+  return prisma.$transaction(async (tx): Promise<OrderChangeResult> => {
+    const locked = await lockOrderAt(tx, orderId, version);
+    if (!locked.ok) return locked;
+    const { ids, live, allThere } = await lockLines(tx, orderId, lineIds);
+    if (!allThere) return { ok: false, error: LINE_GONE, stale: true };
+    if (live.some((r) => r.kitchenStatus !== "NEW")) return { ok: false, error: "Only lines that haven't been sent can be held." };
+    await tx.orderItem.updateMany({ where: { id: { in: ids } }, data: { heldAt: held ? new Date() : null } });
     return { ok: true, version: (await bump(tx, orderId)).version };
   });
 }

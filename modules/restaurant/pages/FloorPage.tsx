@@ -9,6 +9,7 @@ import { TABLE_STATUSES } from "../lib/tableStatus";
 import { FLOOR_LEGEND } from "../lib/theme";
 import { RESTAURANT_PERMISSIONS as P } from "../manifest";
 import { guardPageAny } from "../server/guard";
+import { noteFloorViewer } from "../server/floorPresence";
 import { getFloor } from "../server/queries/floor";
 import FloorBoard from "../components/floor/FloorBoard";
 import FloorPolling from "../components/floor/FloorPolling";
@@ -19,17 +20,22 @@ import HeaderActions from "../components/HeaderActions";
 // Manage Orders; seating a booking needs Manage Reservations.
 const VIEWERS = [P.MANAGE_ORDERS, P.MANAGE_TABLES, P.MANAGE_RESERVATIONS, P.RESTAURANT_DASHBOARD];
 
-// /restaurant/floor[?area=] — RingzPOS Floor Plan design: area tabs, the
-// status legend (all areas), the area's table cards and the side panel.
-// Statuses and money come from the server; the board polls every 5s.
-export default async function FloorPage({ searchParams }: { searchParams: Promise<{ area?: string }> }) {
+// /restaurant/floor[?area=][&to=pos] — RingzPOS Floor Plan design: area
+// tabs, the status legend (all areas), the area's table cards and the side
+// panel. Statuses and money come from the server; the board polls every 5s.
+// Opened from the touch POS (to=pos), a table's order opens back there.
+export default async function FloorPage({ searchParams }: { searchParams: Promise<{ area?: string; to?: string }> }) {
   const denied = await guardPageAny(VIEWERS);
   if (denied) return denied;
 
   const { permissions } = await getCurrentUserPermissions();
   const canOrders = permissions.has(P.MANAGE_ORDERS);
   const canBook = permissions.has(P.MANAGE_RESERVATIONS);
-  const { area } = await searchParams;
+  const { area, to } = await searchParams;
+  // This screen is showing the floor (each 5 s refresh): counted in the
+  // editor's "N tablets updated".
+  await noteFloorViewer();
+  const toPos = to === "pos";
   const floor = await getFloor(area);
   // Open drawer: Open Drawer holders at a till with a cash drawer.
   const drawer = permissions.has(PERMISSIONS.OPEN_DRAWER) ? await drawerPrinterFor(await currentDeviceId()) : null;
@@ -43,7 +49,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
             return (
               <Link
                 key={a.id}
-                href={`/restaurant/floor?area=${a.id}`}
+                href={`/restaurant/floor?area=${a.id}${toPos ? "&to=pos" : ""}`}
                 replace
                 scroll={false}
                 aria-current={on ? "page" : undefined}
@@ -57,11 +63,17 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
                   fontWeight: 600,
                   display: "flex",
                   alignItems: "center",
+                  gap: 6,
                   textDecoration: "none",
                   whiteSpace: "nowrap",
                 }}
               >
                 {a.name}
+                {a.layout && (
+                  <span data-area-layout title="Event layout on this floor" style={{ fontSize: 11, fontWeight: 700, color: "#171B1C", background: "#F2B233", padding: "2px 6px", borderRadius: 4 }}>
+                    {a.layout}
+                  </span>
+                )}
               </Link>
             );
           })}
@@ -86,13 +98,31 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
     // (cancels the dashboard <main>'s padding and gap).
     <div style={{ margin: "-24px -32px 0", display: "grid", gridTemplateColumns: "minmax(0,1fr) 360px", minHeight: "calc(100vh - 120px)" }}>
       <HeaderActions>
+        {toPos && (
+          <Link
+            href="/pos"
+            data-back-to-pos
+            style={{ height: 36, padding: "0 14px", display: "flex", alignItems: "center", border: `1px solid ${COLORS.borderStrong}`, borderRadius: 8, background: "#fff", color: COLORS.slate, fontSize: 13, fontWeight: 600, textDecoration: "none" }}
+          >
+            ← Back to POS
+          </Link>
+        )}
         {drawer && <OpenDrawerButton printer={drawer.name} />}
         <NewTakeawayButton
           areaId={floor.areaId}
           disabledReason={!canOrders ? "Needs the Manage Orders permission." : !floor.areaId ? "Add a dining area first." : null}
+          toPos={toPos}
         />
       </HeaderActions>
-      <FloorBoard header={header} tables={floor.tables} targets={floor.targets} emptyMessage={emptyMessage} canOrders={canOrders} canBook={canBook} />
+      <FloorBoard
+        header={header}
+        tables={floor.tables}
+        targets={floor.targets}
+        emptyMessage={emptyMessage}
+        canOrders={canOrders}
+        canBook={canBook}
+        toPos={toPos}
+      />
       <FloorPolling />
     </div>
   );

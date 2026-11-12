@@ -19,6 +19,7 @@ import { settleOrder } from "../server/services/settle";
 import { setApprovalPin, WRONG_PIN } from "../server/services/approvalPins";
 import { getWasteApprovers } from "../server/queries/approvers";
 import { logWasteEntry, previewWaste, voidWasteEntry, WASTE_ITEM_GONE, type LogWasteResult } from "../server/services/waste";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -166,7 +167,7 @@ describe("Waste (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_T
   });
 
   test("from an order line: linked to it, out of its order's warehouse; another dish's line refused", async () => {
-    const table = await prisma.table.create({ data: { name: `W${Date.now() % 1000}`, seats: 2, areaId, qrToken: newQrToken() }, select: { id: true } });
+    const table = await prisma.table.create({ data: { name: testTable(`W${Date.now() % 1000}`), seats: 2, areaId, qrToken: newQrToken() }, select: { id: true } });
     const opened = await openTableOrder(table.id, adminId);
     assert.ok(opened.ok);
     const v = async () => (await prisma.order.findUniqueOrThrow({ where: { id: opened.orderId } })).version;
@@ -219,7 +220,7 @@ describe("Waste (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_T
 
   test("waste logged while a settle takes the same ingredient: both land, no lost update", async () => {
     for (let round = 0; round < 5; round++) {
-      const table = await prisma.table.create({ data: { name: `WS${round}-${Date.now() % 1000}`, seats: 2, areaId, qrToken: newQrToken() }, select: { id: true } });
+      const table = await prisma.table.create({ data: { name: testTable(`WS${round}-${Date.now() % 1000}`), seats: 2, areaId, qrToken: newQrToken() }, select: { id: true } });
       const opened = await openTableOrder(table.id, adminId);
       assert.ok(opened.ok);
       const v = async () => (await prisma.order.findUniqueOrThrow({ where: { id: opened.orderId } })).version;

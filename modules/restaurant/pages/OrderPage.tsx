@@ -5,7 +5,8 @@ import { currentDeviceId } from "@/lib/hardware/device";
 import { printerFor } from "@/lib/hardware/printQueue";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
-import { getDiscountApprovers, getWasteApprovers } from "../server/queries/approvers";
+import { getServiceRoutes } from "../server/serviceView";
+import { getDiscountApprovers, getVoidApprovers, getWasteApprovers } from "../server/queries/approvers";
 import { getBill } from "../server/queries/bill";
 import { getRefundView } from "../server/queries/refund";
 import { getOrderScreen } from "../server/queries/orderScreen";
@@ -15,12 +16,13 @@ import OrderScreen from "../components/order/OrderScreen";
 // Everything shown is worked out on the server (getOrderScreen). A missing
 // or deleted order gets the friendly not-found screen; a Billed or Cancelled
 // one opens read-only. Needs Manage Orders.
+
 export default async function OrderPage({ params }: { params: Promise<{ id: string }> }) {
   const denied = await guardPage(RESTAURANT_PERMISSIONS.MANAGE_ORDERS);
   if (denied) return denied;
 
   const { id } = await params;
-  const [data, bill, approvers, current] = await Promise.all([getOrderScreen(id), getBill(id), getDiscountApprovers(), getCurrentUserPermissions()]);
+  const [data, bill, approvers, voidApprovers, current] = await Promise.all([getOrderScreen(id), getBill(id), getDiscountApprovers(), getVoidApprovers(), getCurrentUserPermissions()]);
   if (!data || !bill) notFound();
   const canWaste = current.permissions.has(RESTAURANT_PERMISSIONS.LOG_WASTE);
   const wasteApprovers = canWaste ? await getWasteApprovers() : [];
@@ -29,7 +31,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
   const deviceId = await currentDeviceId();
   const [prebillPrinter, receiptPrinter] = await Promise.all([printerFor(PREBILL, deviceId), printerFor(RECEIPT, deviceId)]);
 
-  const floorHref = data.order.areaId ? `/restaurant/floor?area=${data.order.areaId}` : "/restaurant/floor";
+  const floorHref = (await getServiceRoutes()).tables({ areaId: data.order.areaId });
   return (
     // Flush under the restaurant header and to the edges, filling the
     // window (cancels the dashboard <main>'s padding and gap).
@@ -42,6 +44,7 @@ export default async function OrderPage({ params }: { params: Promise<{ id: stri
         printers={{ prebill: prebillPrinter, receipt: receiptPrinter }}
         canSettle={current.permissions.has(RESTAURANT_PERMISSIONS.SETTLE_BILL)}
         refundView={refundView}
+        voidApprovers={voidApprovers}
         floorHref={floorHref}
       />
     </div>

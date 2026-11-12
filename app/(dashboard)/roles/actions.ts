@@ -152,12 +152,16 @@ export async function deleteRole(id: string): Promise<RoleActionState> {
   }
 
   // Re-read the role server-side; only its id came from the client.
-  const role = await prisma.role.findFirst({ where: { id, deletedAt: null }, select: { isSystem: true } });
+  const role = await prisma.role.findFirst({ where: { id, deletedAt: null }, select: { isSystem: true, systemRole: true } });
   if (!role) {
     return { ok: false, error: "Role not found. It may have already been deleted." };
   }
   if (role.isSystem) {
     return { ok: false, error: "Can't delete — the Administrator role is built in." };
+  }
+  // The six staff roles (Part 6f) are built in too; copy one to make your own.
+  if (role.systemRole) {
+    return { ok: false, error: "Can't delete — it's one of the built-in staff roles." };
   }
 
   const assigned = await prisma.user.count({ where: { roleId: id, deletedAt: null } });

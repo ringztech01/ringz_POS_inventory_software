@@ -67,7 +67,7 @@ function cooked(range: DateRange, stationId: string | null, join: Prisma.Sql = P
     LEFT JOIN KitchenStation s ON s.id = i.stationId
     ${join}
     WHERE i.readyAt >= ${start} AND i.readyAt < ${end} AND i.sentAt IS NOT NULL
-      AND i.deletedAt IS NULL AND i.cancelledAt IS NULL AND o.deletedAt IS NULL
+      AND i.deletedAt IS NULL AND i.cancelledAt IS NULL AND o.deletedAt IS NULL AND o.training = 0
       ${stationId ? Prisma.sql`AND i.stationId = ${stationId}` : Prisma.empty}`;
 }
 

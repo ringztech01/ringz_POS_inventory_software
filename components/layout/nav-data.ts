@@ -17,6 +17,7 @@ import {
   Settings,
   type LucideIcon,
 } from "lucide-react";
+import { isServicePath } from "@/modules/restaurant/lib/serviceAccess";
 import { PERMISSIONS, type Permission } from "@/lib/permissions";
 import { MODULES } from "@/lib/modules/registry";
 
@@ -174,15 +175,19 @@ const allowed = (href: string, permissions: ReadonlySet<Permission>) => {
 
 // The nav the user may see: items and children they have the permission for;
 // a group shows if any of its children does. A module's group needs the
-// module switched on (enabledModules) as well.
-export function visibleNav(permissions: ReadonlySet<Permission>, enabledModules: readonly string[]): NavItem[] {
+// module switched on (enabledModules) as well. `serviceOnly` (Part 6f Step
+// 5, a Service-level role with the Restaurant module on): only the service
+// screens' items — the back office's aren't rendered at all.
+export function visibleNav(permissions: ReadonlySet<Permission>, enabledModules: readonly string[], serviceOnly = false): NavItem[] {
+  const shows = (href: string) => allowed(href, permissions) && (!serviceOnly || isServicePath(href));
   return NAV.flatMap((item) => {
     if (item.module && !enabledModules.includes(item.module)) return [];
     if (item.children?.length) {
-      const children = item.children.filter((child) => allowed(child.href, permissions));
+      const children = item.children.filter((child) => shows(child.href));
       return children.length > 0 ? [{ ...item, children }] : [];
     }
-    return !item.href || allowed(item.href, permissions) ? [item] : [];
+    if (serviceOnly && !item.href) return [];
+    return !item.href || shows(item.href) ? [item] : [];
   });
 }
 

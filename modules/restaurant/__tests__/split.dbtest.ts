@@ -19,6 +19,7 @@ import { advanceLine } from "../server/services/kitchen";
 import { mergeOrders, moveOrder } from "../server/services/tableMoves";
 import { getBill } from "../server/queries/bill";
 import { applyOrderDiscount, clearOrderSplit, setOrderServiceCharge, splitOrderBill } from "../server/services/bill";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -31,7 +32,7 @@ const dish: Record<"jollof" | "chapman", string> = { jollof: "", chapman: "" };
 const versionOf = async (orderId: string) => (await prisma.order.findUniqueOrThrow({ where: { id: orderId }, select: { version: true } })).version;
 async function newTable() {
   tableCount += 1;
-  return (await prisma.table.create({ data: { name: `S${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
+  return (await prisma.table.create({ data: { name: testTable(`S${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
 }
 async function newOrder() {
   const opened = await openTableOrder(await newTable(), userId);
@@ -144,8 +145,8 @@ describe("Split bill (database copy)", { skip: enabled ? false : "set RESTAURANT
     assert.ok(removed.every((p) => p.deletedAt), "the old split's parts are soft-deleted");
     const bill = await getBill(orderId);
     assert.deepEqual(bill?.split?.parts.map((p) => [p.label, p.items]), [
-      ["Guest 1", [{ name: "SC Jollof", quantity: 1 }]],
-      ["Guest 2", [{ name: "SC Jollof", quantity: 1 }, { name: "SC Chapman", quantity: 1 }]],
+      ["Guest 1", [{ lineId: jollof.id, name: "SC Jollof", quantity: 1, shareOf: 1, units: "1" }]],
+      ["Guest 2", [{ lineId: jollof.id, name: "SC Jollof", quantity: 1, shareOf: 1, units: "1" }, { lineId: chapman.id, name: "SC Chapman", quantity: 1, shareOf: 1, units: "1" }]],
     ]);
 
     assert.ok((await split(orderId, { mode: "AMOUNT", amounts: ["30", "10.5"] })).ok);
@@ -155,6 +156,30 @@ describe("Split bill (database copy)", { skip: enabled ? false : "set RESTAURANT
       ["AMOUNT", "10.85"],
     ]);
     assert.equal(await prisma.orderBillPart.count({ where: { orderId, deletedAt: null } }), 3);
+  });
+
+  test("by item, shared: a Chapman shared ½–½ is saved as shares; the parts add up; the bill says ½", async () => {
+    const orderId = await billedOrder();
+    const jollof = await lineOf(orderId, dish.jollof);
+    const chapman = await lineOf(orderId, dish.chapman);
+    const result = await split(orderId, {
+      mode: "ITEMS",
+      parts: [
+        [{ lineId: jollof.id, quantity: 1 }, { lineId: chapman.id, quantity: 1, shareOf: 2 }],
+        [{ lineId: jollof.id, quantity: 1 }, { lineId: chapman.id, quantity: 1, shareOf: 2 }],
+      ],
+    });
+    assert.ok(result.ok, JSON.stringify(result));
+    const parts = await prisma.orderBillPart.findMany({ where: { orderId, deletedAt: null }, orderBy: { number: "asc" }, select: { amount: true, lines: { select: { orderItemId: true, quantity: true, shareOf: true } } } });
+    assert.deepEqual(parts.map((p) => p.amount.toFixed(2)), ["25.68", "25.67"]);
+    assert.equal(parts.reduce((s, p) => s.plus(p.amount.toString()), new Decimal(0)).toFixed(2), "51.35");
+    for (const p of parts) assert.deepEqual(p.lines.find((l) => l.orderItemId === chapman.id), { orderItemId: chapman.id, quantity: 1, shareOf: 2 });
+    const bill = await getBill(orderId);
+    assert.deepEqual(bill?.split?.parts[0].items.map((i) => [i.name, i.units]), [["SC Jollof", "1"], ["SC Chapman", "½"]]);
+    // Not every unit: refused, nothing saved.
+    const half = await split(orderId, { mode: "ITEMS", parts: [[{ lineId: jollof.id, quantity: 2 }], [{ lineId: chapman.id, quantity: 1, shareOf: 2 }]] });
+    assert.deepEqual(half, { ok: false, error: "Assign every SC Chapman (½ of 1 assigned)." });
+    assert.equal(await prisma.orderBillPart.count({ where: { orderId, deletedAt: null } }), 2, "the old split stays");
   });
 
   test("refused: unsent or nothing billed, a bad item split, another order's line, a stale version", async () => {

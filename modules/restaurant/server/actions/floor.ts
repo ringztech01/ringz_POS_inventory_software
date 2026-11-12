@@ -1,13 +1,15 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { z } from "zod";
+import { MAX_GUESTS } from "../../lib/orderLines";
 import type { ActionResult } from "../../lib/actionResult";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { idSchema } from "../../schemas/common";
 import { mergeOrdersSchema, moveOrderSchema } from "../../schemas/orderFlow";
 import { requirePermission } from "../guard";
 import { safely } from "../safely";
-import { createTakeawayOrder, markTableCleaned, openTableOrder, TABLE_GONE, type OpenOrderResult } from "../services/floor";
+import { createTakeawayOrder, markTableCleaned, openTableCheck, openTableOrder, TABLE_GONE, type OpenOrderResult } from "../services/floor";
 import type { OrderChangeResult } from "../services/orders";
 import { mergeOrders, moveOrder, type MergeResult } from "../services/tableMoves";
 
@@ -16,14 +18,35 @@ const refresh = () => revalidatePath("/restaurant", "layout");
 
 // Open table: a new Open, Dine-in order on the table, the current user as
 // waiter (rules: services/floor.ts). A busy table returns its order's id.
-export async function openTable(rawTableId: unknown): Promise<OpenOrderResult> {
+export async function openTable(rawTableId: unknown, rawGuests?: unknown): Promise<OpenOrderResult> {
   return safely("open table", async (): Promise<OpenOrderResult> => {
     const authCheck = await requireManageOrders();
     if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
     const parsedId = idSchema.safeParse(rawTableId);
     if (!parsedId.success) return { ok: false, error: TABLE_GONE };
 
-    const result = await openTableOrder(parsedId.data, authCheck.userId);
+    const guests = rawGuests === undefined ? undefined : z.number().int().min(1).max(MAX_GUESTS).safeParse(rawGuests);
+    if (guests && !guests.success) return { ok: false, error: `Guests: 1 to ${MAX_GUESTS}.` };
+    const result = await openTableOrder(parsedId.data, authCheck.userId, guests?.data);
+    if (result.ok) refresh();
+    return result;
+  });
+}
+
+// New check at a shared table (separate checks): another guest's own order
+// on the table — services/floor.ts openTableCheck. `name` is optional.
+const newCheckSchema = z.object({
+  tableId: idSchema,
+  guests: z.number().int().min(1).max(MAX_GUESTS).default(1),
+  name: z.string().trim().max(40, "A check's name is 40 characters at most.").optional(),
+});
+export async function newTableCheck(input: unknown): Promise<OpenOrderResult> {
+  return safely("new table check", async (): Promise<OpenOrderResult> => {
+    const authCheck = await requireManageOrders();
+    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
+    const parsed = newCheckSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? TABLE_GONE };
+    const result = await openTableCheck(parsed.data.tableId, authCheck.userId, parsed.data.guests, parsed.data.name || null);
     if (result.ok) refresh();
     return result;
   });

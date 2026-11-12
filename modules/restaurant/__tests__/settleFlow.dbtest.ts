@@ -22,6 +22,7 @@ import { changeOrderDetails, ORDER_CLOSED, PART_PAID, STALE } from "../server/se
 import { applyOrderDiscount, clearOrderSplit, registerBillPrint, setOrderServiceCharge, splitOrderBill } from "../server/services/bill";
 import { settleOrder, type SettleResult } from "../server/services/settle";
 import { getReceiptExtras } from "../server/queries/receipt";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -39,7 +40,7 @@ const stock = async (productId: string) => (await prisma.productStock.findFirst(
 const stocks = async () => ({ rice: await stock(id.rice), chicken: await stock(id.chicken), chapman: await stock(id.chapman), jollof: await stock(id.jollof) });
 async function newTable() {
   tableCount += 1;
-  return (await prisma.table.create({ data: { name: `T${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
+  return (await prisma.table.create({ data: { name: testTable(`T${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } })).id;
 }
 async function newOrder() {
   const opened = await openTableOrder(await newTable(), userId);
@@ -196,7 +197,7 @@ describe("Settle (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_
       paid: "51.35",
       due: "0.00",
       paymentStatus: "PAID",
-      notes: `Restaurant ${"ORD-" + String(order.number).padStart(4, "0")} · Table T${tableCount} · Dine-in · Waiter: ${waiterName}`,
+      notes: `Restaurant ${"ORD-" + String(order.number).padStart(4, "0")} · Table ${testTable(`T${tableCount}`)} · Dine-in · Waiter: ${waiterName}`,
       items: [
         ["chapman", 1, "10.00", "7.50", "10.75"],
         ["jollof", 2, "18.00", "0.00", "36.00"],
@@ -218,7 +219,7 @@ describe("Settle (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_
 
     const settlement = await prisma.orderSettlement.findFirstOrThrow({ where: { orderId } });
     assert.deepEqual([settlement.partId, settlement.amount.toFixed(2), settlement.tip.toFixed(2), settlement.change.toFixed(2), settlement.closedOrder, settlement.version], [null, "51.35", "0.00", "8.65", true, result.version]);
-    assert.deepEqual(await getReceiptExtras(result.saleId), { details: [["Order", "ORD-" + String(order.number).padStart(4, "0")], ["Table", `T${tableCount}`], ["Waiter", waiterName]], tips: [] });
+    assert.deepEqual(await getReceiptExtras(result.saleId), { details: [["Order", "ORD-" + String(order.number).padStart(4, "0")], ["Table", testTable(`T${tableCount}`)], ["Waiter", waiterName]], tips: [] });
   });
 
   test("the same payment again (its answer was lost): the first settle's result, nothing new", async () => {

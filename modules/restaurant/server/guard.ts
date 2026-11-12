@@ -1,11 +1,12 @@
 import "server-only";
 import { createElement, type ReactNode } from "react";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { pageGuard } from "@/lib/auth/page-guard";
 import ForbiddenState from "@/components/ui/ForbiddenState";
-import { getCurrentUserPermissions, requirePermission as requireAppPermission } from "@/lib/auth/permissions.server";
+import { getCurrentUserPermissions, isSystemAdmin, requirePermission as requireAppPermission } from "@/lib/auth/permissions.server";
 import { isModuleEnabled } from "@/lib/modules/enabled.server";
-import { restaurantModule, type RestaurantPermission } from "../manifest";
+import type { Permission } from "@/lib/permissions";
+import { RESTAURANT_PERMISSIONS, restaurantModule, type RestaurantPermission } from "../manifest";
 
 // Every restaurant layout, page and action goes through here. While the
 // module is switched off it doesn't exist: routes 404 and actions refuse.
@@ -23,6 +24,27 @@ export async function requirePermission(permission: RestaurantPermission): Retur
     return { error: "The Restaurant module is turned off." };
   }
   return requireAppPermission(permission);
+}
+
+// For server actions behind a core permission that only exist with the
+// module on (Part 6f: the restaurant's Interface and a device's view need
+// Manage Setting): refused while the module is off, then the app's check.
+export async function requireCorePermission(permission: Permission): ReturnType<typeof requireAppPermission> {
+  if (!(await isModuleEnabled(restaurantModule.id))) {
+    return { error: "The Restaurant module is turned off." };
+  }
+  return requireAppPermission(permission);
+}
+
+// Administrator only (Part 6f: staff roles, PINs): the module on, signed in,
+// the built-in Administrator role (isSystemAdmin — the one place that rule
+// lives). Not a permission a Manager can be given.
+export async function requireAdministrator(): Promise<{ error: string; userId?: undefined } | { error?: undefined; userId: string }> {
+  if (!(await isModuleEnabled(restaurantModule.id))) return { error: "The Restaurant module is turned off." };
+  const current = await getCurrentUserPermissions();
+  if (!current.userId) return { error: "You must be signed in to do that." };
+  if (!(await isSystemAdmin(current))) return { error: "Only an Administrator can do that." };
+  return { userId: current.userId };
 }
 
 // For route handlers (no layout runs before them): a 404 while off, 401
@@ -51,3 +73,20 @@ export async function guardPageAny(permissions: readonly RestaurantPermission[])
   if (permissions.some((permission) => current.permissions.has(permission))) return null;
   return createElement(ForbiddenState, { permission: permissions.join(" or ") });
 }
+
+// The floor plan editor: on the server, never just a hidden link — a page
+// redirects anyone without Manage Floor Plan (waiters, cashiers, bartenders,
+// the kitchen) to the app's start, and every action refuses them
+// (requireFloorPlan). Managers and the Administrator only.
+// TODO(6f): also require accessLevel BACK_OFFICE.
+export async function guardFloorPlanPage(): Promise<{ userId: string }> {
+  await requireRestaurant();
+  const current = await getCurrentUserPermissions();
+  if (!current.userId) redirect("/");
+  if (!current.permissions.has(RESTAURANT_PERMISSIONS.MANAGE_FLOOR_PLAN)) redirect("/");
+  return { userId: current.userId };
+}
+
+// For the floor plan's server actions: the module on, signed in, Manage
+// Floor Plan. TODO(6f): also require accessLevel BACK_OFFICE.
+export const requireFloorPlan = () => requirePermission(RESTAURANT_PERMISSIONS.MANAGE_FLOOR_PLAN);

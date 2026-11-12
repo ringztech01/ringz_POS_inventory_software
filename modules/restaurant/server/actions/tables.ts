@@ -6,28 +6,30 @@ import { prisma } from "@/lib/db";
 import { invalid, type ActionResult } from "../../lib/actionResult";
 import { newQrToken } from "../../lib/qrToken";
 import { RESERVATION_GRACE_MINUTES } from "../../lib/tableStatus";
+import { isUniqueViolation } from "../prismaErrors";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { idSchema } from "../../schemas/common";
 import { tableSchema, type TableField } from "../../schemas/table";
 import { requirePermission } from "../guard";
 import { lockArea, lockTable } from "../locks";
 import { safely } from "../safely";
-import { replaceQrToken } from "../services/tables";
+import { placeInArea, replaceQrToken } from "../services/tables";
 
 type TableResult = ActionResult<TableField>;
 
 const NOT_FOUND = "Table not found. It may have been deleted.";
-const duplicate = () => invalid<TableField>({ name: ["A table with this name already exists in this area."] });
+const duplicate = () => invalid<TableField>({ name: ["A table with this number already exists (table numbers are unique across all areas)."] });
 const inactiveArea = () => invalid<TableField>({ areaId: ["Choose an active dining area."] });
 
 const requireManageTables = () => requirePermission(RESTAURANT_PERMISSIONS.MANAGE_TABLES);
 const refresh = () => revalidatePath("/restaurant", "layout");
 
-// Another active table with this name in the area? Case-insensitive (the
-// collation), so "t4" clashes with "T4".
-async function nameTaken(tx: Prisma.TransactionClient, name: string, areaId: string, exceptId?: string) {
+// Another active table with this number, in any area? Case-insensitive (the
+// collation), so "t4" clashes with "T4". Table.activeName's unique index
+// backs this up (a clash that slips past is caught below).
+async function nameTaken(tx: Prisma.TransactionClient, name: string, exceptId?: string) {
   const clash = await tx.table.findFirst({
-    where: { name, areaId, deletedAt: null, ...(exceptId ? { id: { not: exceptId } } : {}) },
+    where: { name, deletedAt: null, ...(exceptId ? { id: { not: exceptId } } : {}) },
     select: { id: true },
   });
   return !!clash;
@@ -53,10 +55,13 @@ export async function createTable(input: unknown): Promise<TableResult> {
 
     const result = await prisma.$transaction(async (tx): Promise<TableResult> => {
       if (!(await lockArea(tx, areaId))) return inactiveArea();
-      if (await nameTaken(tx, name, areaId)) return duplicate();
+      if (await nameTaken(tx, name)) return duplicate();
       // The QR token is made here, never sent by the browser.
-      await tx.table.create({ data: { name, seats, areaId, qrToken: newQrToken() } });
+      await tx.table.create({ data: { name, seats, areaId, qrToken: newQrToken(), ...(await placeInArea(tx, areaId, seats)) } });
       return { ok: true };
+    }).catch((error: unknown) => {
+      if (isUniqueViolation(error, "activeName")) return duplicate();
+      throw error;
     });
 
     if (result.ok) refresh();
@@ -84,9 +89,15 @@ export async function updateTable(rawId: unknown, input: unknown): Promise<Table
         return invalid<TableField>({ areaId: ["It has an open order. Close it before moving the table to another area."] });
       }
       if (!(await lockArea(tx, areaId))) return inactiveArea();
-      if (await nameTaken(tx, name, areaId, id)) return duplicate();
-      await tx.table.update({ where: { id }, data: { name, seats, areaId } });
+      if (await nameTaken(tx, name, id)) return duplicate();
+      // Moved to another area: placed on that floor plan.
+      const moved = table.areaId !== areaId ? await placeInArea(tx, areaId, seats, id) : null;
+      await tx.table.update({ where: { id }, data: { name, seats, areaId, ...(moved ?? {}) } });
+      if (moved) await tx.diningArea.update({ where: { id: table.areaId }, data: { layoutVersion: { increment: 1 } } });
       return { ok: true };
+    }).catch((error: unknown) => {
+      if (isUniqueViolation(error, "activeName")) return duplicate();
+      throw error;
     });
 
     if (result.ok) refresh();
@@ -123,6 +134,7 @@ export async function deleteTable(rawId: unknown): Promise<TableResult> {
         return { ok: false, error: `${table.name} has upcoming bookings. Move or cancel them first.` };
       }
       await tx.table.update({ where: { id }, data: { deletedAt: new Date() } });
+      await tx.diningArea.update({ where: { id: table.areaId }, data: { layoutVersion: { increment: 1 } } });
       return { ok: true };
     });
 

@@ -4,6 +4,7 @@ import { formatNaira } from "@/lib/format";
 import { R, STOCK_LEVEL_PILL } from "../../lib/theme";
 import type { DateRange } from "@/lib/dateRanges";
 import type { LowStock, OpenOrders, TopDish, TopWastedItem } from "../../server/queries/dashboard";
+import type { ServiceRoutes } from "../../lib/serviceRoutes";
 import DashboardCard from "./DashboardCard";
 
 // The dashboard's lists: Live open orders, Top dishes, Low-stock ingredients
@@ -13,11 +14,13 @@ import DashboardCard from "./DashboardCard";
 const row = { display: "flex", alignItems: "center", gap: 12, padding: "10px 0", borderTop: `1px solid ${R.rowBorder}` } as const;
 const more = { paddingTop: 10, borderTop: `1px solid ${R.rowBorder}`, fontSize: 12.5, fontWeight: 600 } as const;
 
-export function LiveOpenOrders({ data }: { data: OpenOrders | null }) {
+// routes: this device's restaurant view (Part 6f) — where an order and the
+// floor open.
+export function LiveOpenOrders({ data, routes }: { data: OpenOrders | null; routes: ServiceRoutes }) {
   return (
     <DashboardCard title="Live open orders" failed={!data} empty={data && data.count === 0 ? "No open orders right now." : null}>
       {data?.rows.map((order) => (
-        <Link key={order.id} href={`/restaurant/orders/${order.id}`} data-open-order={order.badge} style={{ ...row, color: COLORS.ink }}>
+        <Link key={order.id} href={routes.order(order.id)} data-open-order={order.badge} style={{ ...row, color: COLORS.ink }}>
           <span
             style={{ width: 40, height: 32, borderRadius: 7, background: COLORS.tealTint, color: COLORS.tealDark, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: FONTS.display, fontWeight: 600, fontSize: 13 }}
           >
@@ -38,7 +41,7 @@ export function LiveOpenOrders({ data }: { data: OpenOrders | null }) {
         </Link>
       ))}
       {data && data.count > data.rows.length && (
-        <Link href="/restaurant/floor" style={more}>
+        <Link href={routes.tables()} style={more}>
           {data.count - data.rows.length} more on the floor plan
         </Link>
       )}

@@ -1,7 +1,8 @@
 "use server";
 
 import { PERMISSIONS } from "@/lib/permissions";
-import { requirePermission } from "@/lib/auth/permissions.server";
+import { getCurrentUserPermissions, requirePermission } from "@/lib/auth/permissions.server";
+import { TRAINING_NO_COUNTER_SALES } from "@/modules/restaurant/lib/training";
 import { todayInAppZone } from "@/lib/dateRanges";
 import { saveNewSale } from "@/app/(dashboard)/sales/save-sale";
 import type { PurchaseActionState } from "@/app/(dashboard)/purchases/types";
@@ -10,6 +11,7 @@ import { openDrawerForCash } from "@/lib/hardware/drawer";
 import { tookCash } from "@/lib/hardware/drawerKick";
 import { getPosCatalog, isActiveWarehouse } from "./queries";
 import { posCheckoutToSaleInput } from "./sale-input";
+import { tillSessionIdFor } from "@/modules/restaurant/server/services/till";
 import type { PosProduct } from "./types";
 
 const requirePos = () => requirePermission(PERMISSIONS.MANAGE_POS_SCREEN);
@@ -40,8 +42,12 @@ export async function createPosSale(checkout: unknown): Promise<PurchaseActionSt
   if (authCheck.error !== undefined) {
     return { ok: false, error: authCheck.error };
   }
+  // Training mode (Part 6f Step 7f): counter sales aren't a sandbox.
+  if ((await getCurrentUserPermissions()).training) return { ok: false, error: TRAINING_NO_COUNTER_SALES };
   const input = posCheckoutToSaleInput(checkout, todayInAppZone());
-  const result = await saveNewSale(input, authCheck.userId);
+  // A restaurant till that's open (cash-up) gets the payment.
+  const deviceId = await currentDeviceId();
+  const result = await saveNewSale(input, authCheck.userId, { tillSessionId: await tillSessionIdFor(deviceId) });
   if (result.ok && result.id && tookCash([{ paymentType: String(input.paymentType), amount: String(input.paidAmount) }])) {
     await openDrawerForCash({ reason: "CASH_SALE", userId: authCheck.userId, deviceId: await currentDeviceId(), refId: result.id, refLabel: result.reference ?? null, dedupeKey: `DRAWER:SALE:${result.id}` });
   }

@@ -169,7 +169,7 @@ export async function writeSaleReturnInTx(
   tx: Prisma.TransactionClient,
   { sale, data, lines, order, productById }: PreparedSaleReturn,
   userId: string,
-  { moveStock, refunds = [] }: { moveStock: boolean; refunds?: readonly ReturnRefund[] },
+  { moveStock, refunds = [], tillSessionId = null }: { moveStock: boolean; refunds?: readonly ReturnRefund[]; tillSessionId?: string | null },
 ): Promise<{ id: string; reference: string }> {
   // Refund figures — derived, never typed in.
   const refundState = computePaymentState(order.grandTotal, [...refunds]);
@@ -197,7 +197,8 @@ export async function writeSaleReturnInTx(
           data.items.map((item) => item.saleItemId),
         ),
       },
-      ...(refunds.length ? { payments: { create: refunds.map((refund) => ({ ...refund, createdById: userId })) } } : {}),
+      // Paid out of a till that's open (restaurant cash-up, Part 6f Step 7b).
+      ...(refunds.length ? { payments: { create: refunds.map((refund) => ({ ...refund, createdById: userId, ...(tillSessionId ? { tillSessionId } : {}) })) } } : {}),
     },
     select: { id: true, reference: true },
   });

@@ -2,14 +2,15 @@
 
 import { revalidatePath } from "next/cache";
 import { currentDeviceId } from "@/lib/hardware/device";
+import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { orderDetailsSchema } from "../../schemas/order";
-import { addLineSchema, editLineSchema, lineQuantitySchema } from "../../schemas/orderLine";
+import { addLineSchema, editLineSchema, holdLinesSchema, lineQuantitySchema, placeLinesSchema } from "../../schemas/orderLine";
 import { cancelLineSchema, cancelOrderSchema, lineActionSchema, sendToKitchenSchema, serveLinesSchema } from "../../schemas/orderFlow";
 import { requirePermission } from "../guard";
 import { safely } from "../safely";
 import { cancelLine, cancelOrder, markLineServed, markLinesServed, sendToKitchen, type CancelLineResult, type SendResult } from "../services/orderFlow";
-import { addLine, editLine, setLineQuantity } from "../services/orderLines";
+import { addLine, editLine, holdLines, placeLines, setLineQuantity } from "../services/orderLines";
 import { changeOrderDetails, type OrderChangeResult } from "../services/orders";
 import { printNewKots } from "../services/printing";
 
@@ -17,7 +18,11 @@ import { printNewKots } from "../services/printing";
 // here; the rules (locking, the version check) are in services/orders.ts.
 
 const requireManageOrders = () => requirePermission(RESTAURANT_PERMISSIONS.MANAGE_ORDERS);
-const refresh = () => revalidatePath("/restaurant", "layout");
+// The restaurant pages and the touch POS (/pos in Restaurant mode).
+const refresh = () => {
+  revalidatePath("/restaurant", "layout");
+  revalidatePath("/pos");
+};
 
 // A ticket header select: order type, waiter or guests.
 export async function updateOrderDetails(input: unknown): Promise<OrderChangeResult> {
@@ -85,7 +90,7 @@ export async function sendOrderToKitchen(input: unknown): Promise<SendResult> {
     const parsed = sendToKitchenSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "That order can't be sent." };
 
-    const result = await sendToKitchen(parsed.data.orderId, parsed.data.version, authCheck.userId);
+    const result = await sendToKitchen(parsed.data.orderId, parsed.data.version, authCheck.userId, parsed.data.lineIds);
     if (result.ok) {
       refresh();
       // Each station's KOT to its printer (Settings › Printers).
@@ -122,7 +127,8 @@ export async function cancelOrderLine(input: unknown): Promise<CancelLineResult>
       if (wasteCheck.error !== undefined) return { ok: false, error: wasteCheck.error };
     }
 
-    const result = await cancelLine(parsed.data, authCheck.userId);
+    const mayVoid = (await getCurrentUserPermissions()).permissions.has(RESTAURANT_PERMISSIONS.APPROVE_VOID);
+    const result = await cancelLine(parsed.data, authCheck.userId, { mayVoid });
     if (result.ok) {
       refresh();
       // The station's VOID ticket.
@@ -155,6 +161,32 @@ export async function markOrderLinesServed(input: unknown): Promise<OrderChangeR
     if (!parsed.success) return { ok: false, error: "Nothing to serve." };
 
     const result = await markLinesServed(parsed.data.orderId, parsed.data.version, parsed.data.lineIds);
+    if (result.ok) refresh();
+    return result;
+  });
+}
+
+// The touch POS's Seat & course: a seat and / or course for lines.
+export async function placeOrderLines(input: unknown): Promise<OrderChangeResult> {
+  return safely("place order lines", async (): Promise<OrderChangeResult> => {
+    const authCheck = await requireManageOrders();
+    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
+    const parsed = placeLinesSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That seat or course can't be set." };
+    const result = await placeLines(parsed.data);
+    if (result.ok) refresh();
+    return result;
+  });
+}
+
+// The touch POS's Hold: hold (or release) lines not sent yet.
+export async function holdOrderLines(input: unknown): Promise<OrderChangeResult> {
+  return safely("hold order lines", async (): Promise<OrderChangeResult> => {
+    const authCheck = await requireManageOrders();
+    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
+    const parsed = holdLinesSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "Those lines can't be held." };
+    const result = await holdLines(parsed.data);
     if (result.ok) refresh();
     return result;
   });

@@ -1,4 +1,5 @@
 import "server-only";
+import { withCheck } from "../../lib/orderLines";
 import { prisma } from "@/lib/db";
 import { formatNaira } from "@/lib/format";
 import { orderRef } from "../../lib/format";
@@ -13,6 +14,7 @@ export async function getReceiptExtras(saleId: string): Promise<{ details: [stri
     select: {
       number: true,
       type: true,
+      checkNumber: true, checkName: true, 
       table: { select: { name: true } },
       waiter: { select: { firstName: true } },
       tips: { where: { deletedAt: null }, select: { amount: true, waiter: { select: { firstName: true } } } },
@@ -24,7 +26,7 @@ export async function getReceiptExtras(saleId: string): Promise<{ details: [stri
   return {
     details: [
       ["Order", orderRef(order.number)],
-      order.table ? ["Table", order.table.name] : ["Type", ORDER_TYPE_LABEL[order.type]],
+      order.table ? ["Table", withCheck(order.table.name, order)] : ["Type", ORDER_TYPE_LABEL[order.type]],
       ["Waiter", order.waiter?.firstName ?? "—"],
     ],
     tips: [...tips].map(([waiter, kobo]) => [`Tip · ${waiter}`, formatNaira((kobo / 100).toFixed(2))]),

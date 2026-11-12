@@ -142,7 +142,8 @@ describe("restaurant dashboard on the seed data (database copy)", { skip: enable
     const sum = (values: string[]) => values.reduce((total, v) => total.plus(v), new Prisma.Decimal(0)).toFixed(2);
     assert.equal(sum(hours.map((h) => h.total)), revenue);
     assert.equal(sum(mix.map((m) => m.amount)), revenue);
-    assert.deepEqual(mix.map((m) => [m.type, m.orders]), [["DINE_IN", 6], ["TAKEAWAY", 1], ["DELIVERY", 1]]);
+    // Bar tab (Part 6e) is a type of its own; the sample seed has none.
+    assert.deepEqual(mix.map((m) => [m.type, m.orders]), [["DINE_IN", 6], ["TAKEAWAY", 1], ["DELIVERY", 1], ["BAR_TAB", 0]]);
   });
 
   test("Top dishes = manual SQL over the billed orders", async () => {

@@ -10,7 +10,7 @@ import type { ActionFailure } from "../../lib/actionResult";
 import { planWaste, type WasteItem, type WastePlan } from "../../lib/waste";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import type { LogWasteInput, VoidWasteInput } from "../../schemas/waste";
-import { checkApproverPin } from "./approvalPins";
+import { checkApproverPin, logOverride } from "./approvalPins";
 
 // Waste — without the permission check and input parsing (../actions/
 // waste.ts). Not a sale and not a refund: its own stock document. Logging
@@ -156,6 +156,7 @@ export async function logWasteInTx(tx: Prisma.TransactionClient, input: WasteLog
     },
     select: { id: true },
   });
+  if (approvedById) await logOverride(tx, { kind: "waste", actorId: userId, approverId: approvedById, entityType: "WasteEntry", entityId: entry.id, meta: { cost: plan.total.toFixed(2) } });
   return { ok: true, id: entry.id, costSnapshot: plan.total.toFixed(2) };
 }
 

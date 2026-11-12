@@ -81,8 +81,8 @@ export type KpiTone = keyof typeof KPI_TONES;
 // Sales by hour: the peak hour's bar and the others.
 export const HOUR_BAR = { peak: "#0f7d6a", other: "#9fd3c9" } as const;
 
-// Order type mix: Dine-in, Takeaway, Delivery.
-export const ORDER_TYPE_COLOR = { DINE_IN: "#0f7d6a", TAKEAWAY: "#5fb3a5", DELIVERY: "#c9e6e0" } as const;
+// Order type mix: Dine-in, Takeaway, Delivery, Bar tab.
+export const ORDER_TYPE_COLOR = { DINE_IN: "#0f7d6a", TAKEAWAY: "#5fb3a5", DELIVERY: "#c9e6e0", BAR_TAB: "#1f4e9c" } as const;
 
 // Low-stock pills: [background, text].
 export const STOCK_LEVEL_PILL = { Critical: ["#fdecef", "#b4233c"], Low: ["#fff4e0", "#8a5a00"] } as const;
@@ -127,4 +127,143 @@ export const KDS_STEP_PILL = {
   PENDING: ["#2f3b3e", "#c9d1d3"],
   PREPARING: ["#1d4f8a", "#cfe3fb"],
   READY: ["#0f7d6a", "#e6fbf6"],
+} as const;
+
+// The touch POS (/pos in Restaurant mode, Part 6e), drawn to the Restaurant
+// POS design: a dark frame (or the light theme, Restaurant › Touch POS), a
+// white check, flat solid keys with 4 px corners and 6 px between them,
+// Space Grotesk for the big words and numbers, IBM Plex Mono for money on
+// the keys and lines. The colours that change with the theme are CSS
+// variables, set once at the top of the POS (touchThemeVars); the rest are
+// the same in both. Coloured group and dish buttons never change.
+export const TOUCH_THEMES = {
+  dark: {
+    frame: "#1E2228",
+    // The header, the function bar's strip and the panels over the grid.
+    header: "#15181C",
+    // Plain keys, idle toggles and groups.
+    raised: "#2B3139",
+    key: "#2B3139",
+    // A plain key while pressed.
+    keyDown: "#3A424C",
+    // An empty cell of the grid.
+    empty: "#252A31",
+    line: "#2C323A",
+    text: "#FFFFFF",
+    textDim: "#AEB6BE",
+    onRaised: "#AEB6BE",
+    // Text on a key with nothing to do (Back at the top).
+    muted: "#6D777A",
+    scrim: "rgba(14,16,20,.94)",
+    dangerText: "#FF9C9C",
+    // Cancel in a panel.
+    cancel: "#3A2023",
+    // The PIN pad's digits.
+    pinKey: "#323943",
+  },
+  light: {
+    frame: "#E4E8EC",
+    header: "#FFFFFF",
+    raised: "#46515C",
+    key: "#46515C",
+    keyDown: "#5D6873",
+    empty: "#D3D9DF",
+    line: "#C9D0D7",
+    text: "#15181D",
+    textDim: "#555E69",
+    onRaised: "#EEF1F4",
+    muted: "#555E69",
+    scrim: "rgba(236,239,242,.97)",
+    dangerText: "#B3261E",
+    cancel: "#F6DADA",
+    pinKey: "#5D6873",
+  },
+} as const;
+
+type ThemeKey = keyof (typeof TOUCH_THEMES)["dark"];
+const themed = (key: ThemeKey) => `var(--t-${key}, ${TOUCH_THEMES.dark[key]})`;
+
+// The variables for one theme, on the element the POS hangs from.
+export function touchThemeVars(light: boolean): Record<`--t-${ThemeKey}`, string> {
+  const theme = light ? TOUCH_THEMES.light : TOUCH_THEMES.dark;
+  return Object.fromEntries(Object.entries(theme).map(([key, value]) => [`--t-${key}`, value])) as Record<`--t-${ThemeKey}`, string>;
+}
+
+export const TOUCH = {
+  frame: themed("frame"),
+  header: themed("header"),
+  raised: themed("raised"),
+  key: themed("key"),
+  keyDown: themed("keyDown"),
+  empty: themed("empty"),
+  line: themed("line"),
+  // Text on the frame.
+  text: themed("text"),
+  textDim: themed("textDim"),
+  // Quiet text on a raised (idle) button.
+  onRaised: themed("onRaised"),
+  muted: themed("muted"),
+  // Behind a full-screen pad or dialog.
+  scrim: themed("scrim"),
+  dangerText: themed("dangerText"),
+  cancel: themed("cancel"),
+  pinKey: themed("pinKey"),
+  // The check (white panel).
+  check: "#FFFFFF",
+  ink: "#171B1C",
+  inkDim: "#4D5659",
+  inkFaint: "#6D777A",
+  rule: "#E3E6E8",
+  ruleSoft: "#EEF0F2",
+  // The check's line keys strip (− qty + Repeat Seat) and their edge.
+  strip: "#F1F3F4",
+  stripEdge: "#D5DADD",
+  // Unsent lines; the line picked (teal bar on the left).
+  unsentBg: "#FFFBF0",
+  unsentInk: "#9A5B00",
+  selectedLine: "#E2F2EE",
+  allSent: "#13804A",
+  // The status tags on a line: [background, text].
+  tag: {
+    NEW: ["#FBE7B5", "#7A4E00"],
+    SENT: ["#E3E6E8", "#4D5659"],
+    HOLD: ["#E5DDF8", "#4B2E99"],
+    VOID: ["#FBDADA", "#A11C22"],
+    READY: ["#D8F3EC", "#0A6355"],
+  } as const,
+  // Teal: lit toggles, Done, OK; amber: a picked option or note, the step
+  // being answered, "Next item × 3".
+  teal: "#0F7D6A",
+  amber: "#F2B233",
+  amberInk: "#171B1C",
+  // A step answered (the options trail).
+  doneBg: "#123D35",
+  doneInk: "#9BE3D2",
+  // The departments: their lit key, and their name on the idle one.
+  food: "#C2611A",
+  foodIdleInk: "#F0A66E",
+  bar: "#2457A6",
+  barIdleInk: "#8FB4F0",
+  // A dish that's 86.
+  outBg: "#30353C",
+  outInk: "#8B939B",
+  // Function keys.
+  pay: "#13804A",
+  payDown: "#0E6239",
+  send: "#C2611A",
+  sendIdle: "#3A3F46",
+  void: "#8E2328",
+  voidDown: "#6E1A1E",
+  // Clear on the Qty pad.
+  clear: "#5A2A2E",
+  // Printer lights.
+  ok: "#3DD68C",
+  fault: "#FF6B6B",
+  // Kept for the parts that still point at it (lit seat / note chips).
+  selected: "#0F7D6A",
+  ready: "#0F7D6A",
+  display: "'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif",
+  mono: "'IBM Plex Mono', ui-monospace, monospace",
+  radius: 4,
+  gap: 6,
 } as const;

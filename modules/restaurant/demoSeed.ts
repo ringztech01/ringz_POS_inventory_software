@@ -21,8 +21,10 @@
 //                 areas, staff and the Cashier role soft-deleted, open demo
 //                 orders cancelled, bookings cancelled (sales stay as history)
 //
-// Safe to re-run: anything already there is left alone.
+// Safe to re-run: anything already there is left alone; anything --remove
+// took out (soft-deleted) is brought back as it was.
 import bcrypt from "bcryptjs";
+import type { FloorFixtureType, SystemRole, TableShape } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { increaseStock } from "@/lib/stock";
 import { generateReference } from "@/lib/reference";
@@ -158,17 +160,60 @@ const MENU: Item[] = [
   { code: "DM-990", name: "Staff Meal", category: "Rice & Pasta", price: "1000", recipe: [["DI-01", 150], ["DI-09", 50]], hidden: true },
 ];
 
-const AREAS: [string, [string, number][]][] = [
-  ["Garden Terrace", [["G1", 4], ["G2", 4], ["G3", 6], ["G4", 2], ["G5", 8], ["G6", 4]]],
-  ["VIP Lounge", [["V1", 6], ["V2", 8], ["V3", 10]]],
-  ["Bar Counter", [["BC1", 2], ["BC2", 2], ["BC3", 2], ["BC4", 2]]],
+// The demo floor, laid out as in the Floor Plan Editor design (metres from
+// the room's top-left corner): [number, seats, x, y, shape, w, h].
+type DemoTable = [string, number, number, number, TableShape, number, number];
+type DemoArea = { name: string; prefix: string; tables: DemoTable[]; fixtures: { type: FloorFixtureType; label: string; x: number; y: number; w: number; h: number }[] };
+const AREAS: DemoArea[] = [
+  {
+    name: "Garden Terrace",
+    prefix: "G",
+    tables: [
+      ["G1", 4, 1, 1, "ROUND", 1.4, 1.4],
+      ["G2", 4, 3.5, 1, "ROUND", 1.4, 1.4],
+      ["G3", 6, 6, 1, "RECT", 2.6, 1.4],
+      ["G4", 2, 1, 4, "ROUND", 1.2, 1.2],
+      ["G5", 8, 3.5, 4, "RECT", 3.2, 1.6],
+      ["G6", 4, 8, 4, "SQUARE", 1.4, 1.4],
+    ],
+    fixtures: [
+      { type: "LABEL", label: "Garden", x: 9.5, y: 1, w: 2, h: 2 },
+      { type: "ENTRANCE", label: "Entrance", x: 4.5, y: 7.5, w: 2.4, h: 0.5 },
+    ],
+  },
+  {
+    name: "VIP Lounge",
+    prefix: "V",
+    tables: [
+      ["V1", 6, 1, 1, "RECT", 2.6, 1.4],
+      ["V2", 8, 1, 3.4, "RECT", 3.2, 1.6],
+      ["V3", 10, 1, 5.9, "BOOTH", 3.2, 1.6],
+    ],
+    fixtures: [
+      { type: "WALL", label: "Wall", x: 6, y: 0, w: 0.2, h: 8 },
+      { type: "LABEL", label: "Lounge", x: 7.5, y: 1, w: 3.2, h: 2 },
+    ],
+  },
+  {
+    name: "Bar Counter",
+    prefix: "BC",
+    tables: [
+      ["BC1", 2, 1, 2.2, "ROUND", 0.7, 0.7],
+      ["BC2", 2, 2.2, 2.2, "ROUND", 0.7, 0.7],
+      ["BC3", 2, 3.4, 2.2, "ROUND", 0.7, 0.7],
+      ["BC4", 2, 4.6, 2.2, "ROUND", 0.7, 0.7],
+    ],
+    fixtures: [{ type: "BAR_COUNTER", label: "Bar counter", x: 0.5, y: 0.8, w: 6, h: 0.9 }],
+  },
 ];
 
-const STAFF: { email: string; first: string; last: string; role: string }[] = [
-  { email: "kitchen@demo.test", first: "Kemi", last: "Kitchen", role: "Kitchen" },
-  { email: "bar@demo.test", first: "Bayo", last: "Bar", role: "Bar" },
-  { email: "waiter2@demo.test", first: "Tunde", last: "Waiter", role: "Waiter" },
-  { email: "cashier@demo.test", first: "Ada", last: "Cashier", role: "Cashier" },
+// role: the built-in staff role (Part 6f) — found by its key, so a renamed
+// role ("Bar" is "Bartender" now) still matches.
+const STAFF: { email: string; first: string; last: string; role: string; systemRole: SystemRole }[] = [
+  { email: "kitchen@demo.test", first: "Kemi", last: "Kitchen", role: "Kitchen", systemRole: "KITCHEN" },
+  { email: "bar@demo.test", first: "Bayo", last: "Bar", role: "Bartender", systemRole: "BARTENDER" },
+  { email: "waiter2@demo.test", first: "Tunde", last: "Waiter", role: "Waiter", systemRole: "WAITER" },
+  { email: "cashier@demo.test", first: "Ada", last: "Cashier", role: "Cashier", systemRole: "CASHIER" },
 ];
 const CASHIER_PERMISSIONS = [P.SETTLE_BILL, P.MANAGE_ORDERS, P.MANAGE_RESERVATIONS, P.RESTAURANT_DASHBOARD, "Open Drawer", "Manage Pos Screen"];
 
@@ -196,6 +241,11 @@ const BOOKINGS: [number, string, string, string, number, string, string?][] = [
 
 async function findOrCreate<T>(find: () => Promise<T | null>, create: () => Promise<T>): Promise<T> {
   return (await find()) ?? create();
+}
+// A row --remove soft-deleted, back again (the same id: its links still hold).
+async function revive<T extends { id: string; deletedAt: Date | null } | null>(row: T, undelete: (id: string) => Promise<unknown>): Promise<T> {
+  if (row?.deletedAt) await undelete(row.id);
+  return row;
 }
 const ok = <R extends { ok: boolean }>(label: string, result: R): R & { ok: true } => {
   if (!result.ok) throw new Error(`${label}: ${(result as { error?: string }).error ?? "refused"}`);
@@ -234,7 +284,7 @@ async function seed() {
   const opening: { productId: string; quantity: number }[] = [];
   let newProducts = 0;
   for (const [code, name, unit, cost, stock, alert] of INGREDIENTS) {
-    const existing = await prisma.product.findUnique({ where: { code } });
+    const existing = await revive(await prisma.product.findUnique({ where: { code } }), (id) => prisma.product.update({ where: { id }, data: { deletedAt: null } }));
     const product = existing ?? (await prisma.product.create({ data: { code, name, price: "0", cost, stockAlert: alert, taxType: "EXCLUSIVE", productType: "INGREDIENT", categoryId: categoryIds.get(INGREDIENT_CATEGORY)!, brandId: brand.id, unitId: unitIds.get(unit)! } }));
     if (!existing) {
       newProducts++;
@@ -247,7 +297,12 @@ async function seed() {
   const groups = new Map<string, { id: string; options: Map<string, string> }>();
   for (const [i, g] of GROUPS.entries()) {
     const row = await findOrCreate(
-      () => prisma.modifierGroup.findFirst({ where: { name: g.name, deletedAt: null }, include: { modifiers: { where: { deletedAt: null } } } }),
+      async () =>
+        revive(
+          // The demo's own group (on a demo dish) — never one of yours that happens to share its name.
+          await prisma.modifierGroup.findFirst({ where: { name: g.name, products: { some: { code: { startsWith: "DM-" } } } }, orderBy: [{ deletedAt: { sort: "asc", nulls: "first" } }, { createdAt: "asc" }], include: { modifiers: { where: { deletedAt: null } } } }),
+          (id) => prisma.modifierGroup.update({ where: { id }, data: { deletedAt: null } }),
+        ),
       () =>
         prisma.modifierGroup.create({
           data: { name: g.name, minSelect: g.min, maxSelect: g.max, sortOrder: i, modifiers: { create: g.options.map(([name, price], order) => ({ name, price, sortOrder: order })) } },
@@ -259,7 +314,7 @@ async function seed() {
 
   // Menu items (with their groups and recipes when new).
   for (const item of MENU) {
-    const existing = await prisma.product.findUnique({ where: { code: item.code } });
+    const existing = await revive(await prisma.product.findUnique({ where: { code: item.code } }), (id) => prisma.product.update({ where: { id }, data: { deletedAt: null } }));
     if (existing) {
       ids.set(item.code, existing.id);
       continue;
@@ -301,29 +356,46 @@ async function seed() {
   // Areas and tables.
   const tables = new Map<string, string>();
   const lastSort = (await prisma.diningArea.aggregate({ _max: { sortOrder: true }, where: { deletedAt: null } }))._max.sortOrder ?? 0;
-  for (const [i, [areaName, rows]] of AREAS.entries()) {
+  for (const [i, demo] of AREAS.entries()) {
     const area = await findOrCreate(
-      () => prisma.diningArea.findFirst({ where: { name: areaName, warehouseId: warehouse.id, deletedAt: null } }),
-      () => prisma.diningArea.create({ data: { name: areaName, warehouseId: warehouse.id, sortOrder: lastSort + 1 + i } }),
+      () => prisma.diningArea.findFirst({ where: { name: demo.name, warehouseId: warehouse.id, deletedAt: null } }),
+      () => prisma.diningArea.create({ data: { name: demo.name, warehouseId: warehouse.id, sortOrder: lastSort + 1 + i } }),
     );
-    for (const [name, seats] of rows) {
-      const table = await findOrCreate(() => prisma.table.findFirst({ where: { name, areaId: area.id, deletedAt: null } }), () => prisma.table.create({ data: { name, seats, areaId: area.id, qrToken: newQrToken() } }));
+    // The demo's floor plan — only on an area nobody has laid out yet (its
+    // layout version still 0), so your own changes are never undone.
+    const fresh = (await prisma.diningArea.findUniqueOrThrow({ where: { id: area.id }, select: { layoutVersion: true } })).layoutVersion === 0;
+    for (const [name, seats, x, y, shape, w, h] of demo.tables) {
+      const geometry = fresh ? { x, y, w, h, shape, rotation: 0 } : {};
+      const table = await findOrCreate(
+        // A table number is unique across the business: reuse it wherever it is.
+        () => prisma.table.findFirst({ where: { name, deletedAt: null } }),
+        () => prisma.table.create({ data: { name, seats, areaId: area.id, qrToken: newQrToken(), ...geometry } }),
+      );
+      if (fresh) await prisma.table.update({ where: { id: table.id }, data: geometry });
       tables.set(name, table.id);
+    }
+    if (fresh) {
+      await prisma.diningArea.update({ where: { id: area.id }, data: { prefix: demo.prefix, roomWidthM: 12, roomHeightM: 8 } });
+      if (!(await prisma.floorFixture.count({ where: { areaId: area.id, deletedAt: null } })))
+        await prisma.floorFixture.createMany({ data: demo.fixtures.map((f) => ({ ...f, areaId: area.id })) });
     }
   }
 
-  // Staff, and the Cashier role.
+  // Staff, and the Cashier role (built in since Part 6f; made here only on a
+  // database from before it).
   const cashierRole = await findOrCreate(
-    () => prisma.role.findFirst({ where: { name: "Cashier", deletedAt: null } }),
+    async () =>
+      (await prisma.role.findFirst({ where: { systemRole: "CASHIER", deletedAt: null } })) ??
+      revive(await prisma.role.findFirst({ where: { name: "Cashier" } }), (id) => prisma.role.update({ where: { id }, data: { deletedAt: null } })),
     () => prisma.role.create({ data: { name: "Cashier", permissions: { create: CASHIER_PERMISSIONS.map((permission) => ({ permission })) } } }),
   );
   const password = await bcrypt.hash(DEMO_PASSWORD, 10);
   const staff = new Map<string, string>();
   for (const s of STAFF) {
-    const role = s.role === "Cashier" ? cashierRole : await prisma.role.findFirst({ where: { name: s.role, deletedAt: null } });
+    const role = s.role === "Cashier" ? cashierRole : await prisma.role.findFirst({ where: { OR: [{ systemRole: s.systemRole }, { name: s.role }], deletedAt: null }, orderBy: { systemRole: "desc" } });
     if (!role) throw new Error(`No "${s.role}" role.`);
     const user = await findOrCreate(
-      () => prisma.user.findFirst({ where: { email: s.email } }),
+      async () => revive(await prisma.user.findFirst({ where: { email: s.email } }), (id) => prisma.user.update({ where: { id }, data: { deletedAt: null } })),
       () => prisma.user.create({ data: { email: s.email, firstName: s.first, lastName: s.last, password, roleId: role.id } }),
     );
     staff.set(s.email, user.id);
@@ -390,7 +462,7 @@ async function seed() {
 
 async function remove() {
   const now = new Date();
-  const areaNames = AREAS.map(([name]) => name);
+  const areaNames = AREAS.map((a) => a.name);
   const tables = await prisma.table.findMany({ where: { deletedAt: null, area: { name: { in: areaNames }, deletedAt: null } }, select: { id: true } });
   const tableIds = tables.map((t) => t.id);
   let cancelled = 0;
@@ -411,11 +483,14 @@ async function remove() {
   const codes = [...INGREDIENTS.map(([code]) => code), ...MENU.map((m) => m.code)];
   await prisma.$transaction(async (tx) => {
     await tx.product.updateMany({ where: { code: { in: codes }, deletedAt: null }, data: { deletedAt: now } });
-    await tx.modifierGroup.updateMany({ where: { name: { in: GROUPS.map((g) => g.name) }, deletedAt: null }, data: { deletedAt: now } });
+    // Only the demo's groups (on demo dishes), not same-named ones of yours.
+    await tx.modifierGroup.updateMany({ where: { name: { in: GROUPS.map((g) => g.name) }, deletedAt: null, products: { some: { code: { startsWith: "DM-" } } } }, data: { deletedAt: now } });
     await tx.table.updateMany({ where: { id: { in: tableIds } }, data: { deletedAt: now } });
+    await tx.floorFixture.updateMany({ where: { area: { name: { in: areaNames }, deletedAt: null }, deletedAt: null }, data: { deletedAt: now } });
     await tx.diningArea.updateMany({ where: { name: { in: areaNames }, deletedAt: null }, data: { deletedAt: now } });
     await tx.user.updateMany({ where: { email: { in: STAFF.map((s) => s.email) }, deletedAt: null }, data: { deletedAt: now } });
-    await tx.role.updateMany({ where: { name: "Cashier", deletedAt: null, users: { none: { deletedAt: null } } }, data: { deletedAt: now } });
+    // The Cashier role goes too — unless it's the built-in one (Part 6f).
+    await tx.role.updateMany({ where: { name: "Cashier", systemRole: null, deletedAt: null, users: { none: { deletedAt: null } } }, data: { deletedAt: now } });
   });
   console.log(`Removed the demo: menu, ingredients, groups, ${tableIds.length} tables, staff (${cancelled} open orders cancelled; sales and stock history kept).`);
 }

@@ -15,6 +15,7 @@ import { openTableOrder } from "../server/services/floor";
 import { addLine } from "../server/services/orderLines";
 import { sendToKitchen } from "../server/services/orderFlow";
 import { settleOrder } from "../server/services/settle";
+import { getBill } from "../server/queries/bill";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -40,7 +41,8 @@ describe("Restaurant demo seed (database copy)", { skip: enabled ? false : "set 
     assert.deepEqual(await counts(), { products: 35 + 49, tables: 13, staff: 4, adjustments: 1, openDemoOrders: 4 });
     const setting = await prisma.businessSetting.findUniqueOrThrow({ where: { id: "default" } });
     const rice = await prisma.product.findUniqueOrThrow({ where: { code: "DI-01" } });
-    assert.equal((await prisma.productStock.findFirstOrThrow({ where: { productId: rice.id, warehouseId: setting.restaurantWarehouseId! } })).quantity, 60000);
+    // Opening stock went in (60,000 g on a fresh seed; less if the copy's own sales used some).
+    assert.ok((await prisma.productStock.findFirstOrThrow({ where: { productId: rice.id, warehouseId: setting.restaurantWarehouseId! } })).quantity > 10000);
     // Every recipe in whole units (settle refuses part units).
     const lines = await prisma.recipeLine.findMany({ where: { menuItem: { code: { startsWith: "DM-" } } } });
     assert.ok(lines.length > 50 && lines.every((l) => l.quantity.isInteger()), "whole-unit recipes");
@@ -52,6 +54,14 @@ describe("Restaurant demo seed (database copy)", { skip: enabled ? false : "set 
     assert.ok(by.BC2.items.every((i) => i.kitchenStatus === "SERVED"), "BC2 served");
     const cashier = await prisma.user.findFirstOrThrow({ where: { email: "cashier@demo.test" }, include: { userRole: { include: { permissions: true } } } });
     assert.ok(cashier.userRole!.permissions.some((p) => p.permission === "Settle Bill"));
+    // The demo floor, laid out as in the Floor Plan Editor design.
+    const terrace = await prisma.diningArea.findFirstOrThrow({ where: { name: "Garden Terrace", deletedAt: null }, include: { tables: { where: { deletedAt: null } }, fixtures: { where: { deletedAt: null } } } });
+    const g5 = terrace.tables.find((t) => t.name === "G5")!;
+    assert.deepEqual([terrace.prefix, Number(terrace.roomWidthM), Number(terrace.roomHeightM)], ["G", 12, 8]);
+    assert.deepEqual([g5.shape, Number(g5.x), Number(g5.y), Number(g5.w), Number(g5.h)], ["RECT", 3.5, 4, 3.2, 1.6]);
+    assert.deepEqual(terrace.fixtures.map((f) => f.type).sort(), ["ENTRANCE", "LABEL"]);
+    const bar = await prisma.diningArea.findFirstOrThrow({ where: { name: "Bar Counter", deletedAt: null }, include: { fixtures: true } });
+    assert.deepEqual(bar.fixtures.map((f) => f.type), ["BAR_COUNTER"]);
   });
 
   test("a bill with recipe dishes settles — whole units, enough stock; the served table pays too", async () => {
@@ -73,7 +83,9 @@ describe("Restaurant demo seed (database copy)", { skip: enabled ? false : "set 
     const egusiAfter = await prisma.productStock.findUniqueOrThrow({ where: { id: egusiBefore.id } });
     assert.equal(egusiBefore.quantity - egusiAfter.quantity, 80, "80 g of egusi used");
     const bc2 = await prisma.order.findFirstOrThrow({ where: { table: { name: "BC2" }, status: { notIn: ["CANCELLED", "BILLED"] } } });
-    const paid = await settleOrder({ orderId: bc2.id, version: bc2.version, payments: [{ paymentType: "CARD", amount: "14300" }], tip: "0", idempotencyKey: randomUUID() }, admin.id);
+    // By card, exactly what's due (₦14,300 as seeded; whatever it is now).
+    const due = (await getBill(bc2.id))!.totals.totalValue;
+    const paid = await settleOrder({ orderId: bc2.id, version: bc2.version, payments: [{ paymentType: "CARD", amount: due }], tip: "0", idempotencyKey: randomUUID() }, admin.id);
     assert.ok(paid.ok, JSON.stringify(paid));
   });
 
@@ -90,5 +102,6 @@ describe("Restaurant demo seed (database copy)", { skip: enabled ? false : "set 
     assert.equal(run.status, 0, run.stderr + run.stdout);
     assert.deepEqual(await counts(), { products: 0, tables: 0, staff: 0, adjustments: 1, openDemoOrders: 0 });
     assert.equal(await prisma.sale.count(), sales, "the sales made stay");
+    assert.equal(await prisma.floorFixture.count({ where: { deletedAt: null, area: { name: { in: ["Garden Terrace", "VIP Lounge", "Bar Counter"] } } } }), 0, "its fixtures too");
   });
 });

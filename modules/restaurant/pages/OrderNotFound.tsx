@@ -1,9 +1,11 @@
 import Link from "next/link";
+import { getServiceRoutes } from "../server/serviceView";
 import { SearchX } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 
 // /restaurant/orders/[id] for an order that doesn't exist or was deleted.
-export default function OrderNotFound() {
+export default async function OrderNotFound() {
+  const routes = await getServiceRoutes();
   return (
     <div
       style={{
@@ -25,7 +27,7 @@ export default function OrderNotFound() {
       <p style={{ margin: 0, fontSize: 13.5, color: COLORS.slateMid, maxWidth: 420 }}>
         It may have been deleted, or the link is out of date.
       </p>
-      <Link href="/restaurant/floor" style={{ marginTop: 8, fontSize: 13.5, fontWeight: 600, color: COLORS.teal, textDecoration: "none" }}>
+      <Link href={routes.tables()} style={{ marginTop: 8, fontSize: 13.5, fontWeight: 600, color: COLORS.teal, textDecoration: "none" }}>
         ← Back to the floor
       </Link>
     </div>

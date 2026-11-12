@@ -81,10 +81,26 @@ enum PrepStation {
   BAR
 }
 
+// A line's course on the touch POS (Part 6e): sent together, or held and
+// fired later.
+enum OrderCourse {
+  STARTER
+  MAIN
+  DESSERT
+}
+
+// The touch POS's two sides (Part 6e): its toggle, colours and groups.
+enum MenuDepartment {
+  FOOD
+  BAR
+}
+
 enum OrderType {
   DINE_IN
   TAKEAWAY
   DELIVERY
+  // A tab at the bar (touch POS): a name instead of a table.
+  BAR_TAB
 }
 
 // An order's discount: a % of the bill's sub total, or a Naira amount.
@@ -191,6 +207,45 @@ model BusinessSetting {
   // today's food cost.
   restaurantWasteAmberPercent     Decimal  @default(5) @db.Decimal(5, 2)
   restaurantWasteRedPercent       Decimal  @default(10) @db.Decimal(5, 2)
+  // Touch POS: after a dish is added, back to the department's home (on) or
+  // stay on the grid it came from (off).
+  restaurantPosReturnHome         Boolean  @default(false)
+  // Touch POS Note keypad: the quick notes, in order (a JSON list of
+  // strings); none: the default list (lib/quickNotes).
+  restaurantQuickNotes            Json?
+  // Touch POS: after Send, back to the floor plan (on) or stay on the order.
+  restaurantPosSendToFloor        Boolean  @default(true)
+  // Touch POS: lock the screen (PIN to carry on) after this many seconds
+  // without a tap; 0 never.
+  restaurantPosLockSeconds        Int      @default(0)
+  // The same for Managers and the Administrator (back-office roles, Part 6f
+  // Step 6); used only while auto-lock is on (restaurantPosLockSeconds > 0).
+  restaurantPosLockSecondsManager Int      @default(300)
+  // Touch POS: the light theme (on) or the dark frame (off), on every till.
+  restaurantPosLightTheme         Boolean  @default(false)
+  // Which restaurant screens the app uses (Part 6f): SERVICE — PIN login,
+  // the touch Tables screen and Restaurant POS; CLASSIC — Restaurant ›
+  // Floor, the Table order page, and the retail POS on /pos. A device can
+  // override it (Device.restaurantInterface).
+  restaurantInterface             RestaurantInterface @default(SERVICE)
+  // Staff PINs (Part 6f; Settings › Staff, Administrator only): allow weak
+  // ones (1234, 0000…); let staff change their own (with the old one).
+  restaurantAllowWeakPins         Boolean  @default(false)
+  restaurantStaffSelfPin          Boolean  @default(false)
+  // The PIN screen without the on-shift names (type your PIN only).
+  restaurantPinHideNames          Boolean  @default(false)
+  // Clock in / out (Part 6f Step 6, Settings › Staff): "Start shift?" after a
+  // PIN sign-in, "End shift?" at LOCK; the PIN screen lists who's on shift.
+  restaurantClockInOut            Boolean  @default(false)
+  // Restaurant Reports: the business day starts this many minutes after
+  // midnight (Africa/Lagos) — 240: an order closed at 01:30 counts on the
+  // day before. 0–360, in steps of 30 (Settings › Touch POS).
+  restaurantDayStartMinutes       Int      @default(0)
+  // Emergency access (Part 6f Step 4): one recovery code at a time — its
+  // bcrypt hash; used once by an Administrator on a device that isn't a
+  // terminal. Made in Settings › Staff.
+  recoveryCodeHash                String?  @db.VarChar(100)
+  recoveryCodeAt                  DateTime?
   // ---- Printed tickets (Settings › Ticket templates; lib/hardware/tickets.ts)
   // The logo on receipts and pre-bills: on/off, and the image itself, turned
   // to 1-bit once (at most 384 × 240 dots) — rows of ceil(width / 8) bytes.
@@ -216,6 +271,7 @@ model BusinessSetting {
   printerAssignments  PrinterAssignment[]
   printJobs           PrintJob[]
   drawerEvents        DrawerEvent[]
+  auditLogs           AuditLog[]
 }
 
 model User {
@@ -234,8 +290,36 @@ model User {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
   deletedAt   DateTime?
+  // ---- Staff (Part 6f). The name on tickets ("Ada O."); their colour on the
+  // POS; where their Tables screen opens / the station their kitchen display
+  // shows (else the role's).
+  displayName String?   @db.VarChar(40)
+  colour      String?   @db.VarChar(7)
+  homeAreaId  String?
+  homeStation String?   @db.VarChar(20)
+  // Disabled: can't sign in, history kept (instead of deleting).
+  disabledAt  DateTime?
+  lastLoginAt DateTime?
+  // The device (Device.id) they last signed in on.
+  lastDeviceId String?  @db.VarChar(64)
+  // +1 ends every session they have, on every device (a PIN reset, disabling).
+  sessionVersion Int    @default(0)
+  // Added in Settings › Staff: signs in by PIN only (the email and password
+  // are placeholders nobody knows).
+  pinOnly     Boolean   @default(false)
+  // A staff card or badge (Part 6f Step 7d): RFID/NFC or a barcode, read by
+  // the scanner — signs in like the PIN. Kept as a keyed hash only (one
+  // person per card); cardLabel is its last characters, to tell cards apart.
+  cardHash    String?   @unique @db.VarChar(64)
+  cardLabel   String?   @db.VarChar(12)
+  cardSetAt   DateTime?
+  // Training mode (Part 6f Step 7f; Settings › Staff): their orders are
+  // TRAINING ones — the real floor, but nothing printed to or shown in the
+  // kitchen, no stock moved, no sale when settled.
+  trainingMode Boolean  @default(false)
 
   userRole           Role?               @relation(fields: [roleId], references: [id])
+  homeArea           DiningArea?         @relation("StaffHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
   adjustments        Adjustment[]
   purchases          Purchase[]
   purchaseReturns    PurchaseReturn[]
@@ -249,6 +333,7 @@ model User {
   waitedOrders       Order[]             @relation("OrderWaiter")
   cancelledLines     OrderItem[]         @relation("OrderItemCancelledBy")
   reservations       Reservation[]
+  floorLayouts       FloorLayout[]       @relation("FloorLayoutCreatedBy")
   kots               Kot[]
   discountedOrders   Order[]             @relation("OrderDiscountBy")
   approvedDiscounts  Order[]             @relation("OrderDiscountApprovedBy")
@@ -260,6 +345,10 @@ model User {
   printJobs          PrintJob[]
   wasteApproved      WasteEntry[]        @relation("WasteApprovedBy")
   drawerEvents       DrawerEvent[]
+  auditLogs          AuditLog[]
+  shifts             StaffShift[]
+  tillsOpened        TillSession[]       @relation("TillOpenedBy")
+  tillsClosed        TillSession[]       @relation("TillClosedBy")
 
   @@index([deletedAt])
   @@index([roleId])
@@ -271,10 +360,23 @@ model Role {
   id        String    @id @default(cuid())
   name      String    @unique
   isSystem  Boolean   @default(false)
+  // ---- Staff roles (Part 6f). The six built-in ones (Administrator,
+  // Manager, Cashier, Waiter, Bartender, Kitchen) carry their key and can't
+  // be deleted; a custom role (often a copy of one) has none.
+  systemRole  SystemRole? @unique
+  // SERVICE: the service screens only. BACK_OFFICE: the back office too
+  // (dashboard, settings, inventory, reports). Only an Administrator grants it.
+  accessLevel AccessLevel @default(SERVICE)
+  // Where someone with the role lands after their PIN, and (optionally) the
+  // area the Tables screen opens on / the station the kitchen display shows.
+  homeScreen  HomeScreen  @default(TABLES)
+  homeAreaId  String?
+  homeStation String?     @db.VarChar(20)
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
+  homeArea    DiningArea?      @relation(fields: [homeAreaId], references: [id], onDelete: SetNull)
   permissions RolePermission[]
   users       User[]
 
@@ -414,6 +516,10 @@ model Product {
   stationId          String?
   menuDescription    String?      @db.Text
   menuImage          String?
+  // Touch POS: the group its button sits in, and its cell in that group's
+  // grid (0-based across pages of 30; none: the next free cell).
+  menuGroupId        String?
+  menuGridPosition   Int?
   createdAt          DateTime     @default(now())
   updatedAt          DateTime     @updatedAt
   deletedAt          DateTime?
@@ -436,10 +542,12 @@ model Product {
   wasteEntries        WasteEntry[]
   wasteLines          WasteEntryLine[]
   kitchenStation      KitchenStation?      @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  menuGroup           MenuGroup?           @relation(fields: [menuGroupId], references: [id], onDelete: SetNull)
 
   @@index([deletedAt])
   @@index([productType])
   @@index([stationId])
+  @@index([menuGroupId])
   @@index([categoryId])
   @@index([brandId])
   @@index([unitId])
@@ -710,11 +818,17 @@ model SalePayment {
   updatedAt   DateTime    @updatedAt
   deletedAt   DateTime?
 
-  sale      Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  createdBy User @relation(fields: [createdById], references: [id])
+  // The till it was taken on, while that till was open (Part 6f Step 7b,
+  // cash-up); null: anywhere else (the Sales form, a till not opened).
+  tillSessionId String?
+
+  sale      Sale         @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdBy User         @relation(fields: [createdById], references: [id])
+  till      TillSession? @relation(fields: [tillSessionId], references: [id], onDelete: SetNull)
 
   @@index([saleId])
   @@index([deletedAt])
+  @@index([tillSessionId])
 }
 
 // A customer returning goods from a sale. Always created from a sale: the
@@ -807,11 +921,16 @@ model SaleReturnPayment {
   updatedAt    DateTime    @updatedAt
   deletedAt    DateTime?
 
-  saleReturn SaleReturn @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
-  createdBy  User       @relation(fields: [createdById], references: [id])
+  // The till it was paid out of, while open (Part 6f Step 7b).
+  tillSessionId String?
+
+  saleReturn SaleReturn   @relation(fields: [saleReturnId], references: [id], onDelete: Cascade)
+  createdBy  User         @relation(fields: [createdById], references: [id])
+  till       TillSession? @relation(fields: [tillSessionId], references: [id], onDelete: SetNull)
 
   @@index([saleReturnId])
   @@index([deletedAt])
+  @@index([tillSessionId])
 }
 
 // Moves stock between two warehouses. No supplier, customer or payment.
@@ -941,43 +1060,152 @@ model Customer {
 // ---------------------------------------------------------------------------
 // Restaurant module (modules/restaurant). New tables only; nothing here is
 // read or written while the module is off. Names that must be unique (an
-// area within its warehouse, a table within its area) are checked by the
-// app among active rows: MySQL has no partial unique indexes.
+// area within its warehouse, a table across the business) are checked by
+// the app among active rows; MySQL has no partial unique indexes, so where
+// the database backs one up it's a generated column (NULL when not active)
+// with a unique index — Table.activeName, Order.activeTableId, FloorLayout.
+// activeAreaId.
 
 // A part of the floor (Main hall, Patio, Bar), stocked from one warehouse.
+// Its room (the floor plan editor): metres, the dot grid, the tracing image
+// behind it while editing (never shown in service), and the layout's
+// version — every save checks and bumps it, so two admins never overwrite
+// each other unawares.
 model DiningArea {
-  id          String    @id @default(cuid())
-  name        String
-  warehouseId String
+  id                String    @id @default(cuid())
+  name              String
+  warehouseId       String
   // Order of the floor plan's area tabs.
-  sortOrder   Int       @default(0)
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  sortOrder         Int       @default(0)
+  roomWidthM        Decimal   @default(12) @db.Decimal(6, 2)
+  roomHeightM       Decimal   @default(8) @db.Decimal(6, 2)
+  gridSizeM         Decimal   @default(0.5) @db.Decimal(4, 2)
+  // uploads/floor/<areaId>/… (WebP), Administrator only.
+  backgroundImage   String?
+  backgroundOpacity Decimal   @default(0.35) @db.Decimal(3, 2)
+  // From calibration: image pixels per metre, and where the room's corner
+  // sits on the image ({ "x": px, "y": px }).
+  backgroundScale   Decimal?  @db.Decimal(10, 4)
+  backgroundOffset  Json?
+  layoutVersion     Int       @default(0)
+  // Locked: the editor won't move or change anything until it's unlocked.
+  isLocked          Boolean   @default(false)
+  // New table numbers here start with it ("T" → T6).
+  prefix            String?   @db.VarChar(4)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  deletedAt         DateTime?
 
-  warehouse Warehouse @relation(fields: [warehouseId], references: [id])
+  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
   tables    Table[]
+  fixtures  FloorFixture[]
+  layouts   FloorLayout[]
+  // Roles whose Tables screen opens here (Part 6f: the Bartender on the Bar).
+  homeForRoles Role[]
+  // Staff whose Tables screen opens here (Part 6f).
+  homeForStaff User[] @relation("StaffHomeArea")
 
+  devices      Device[]     @relation("DeviceHomeArea")
   @@index([deletedAt])
   @@index([warehouseId])
+}
+
+// A table's outline on the floor plan.
+enum TableShape {
+  ROUND
+  SQUARE
+  RECT
+  BOOTH
+}
+
+// Things on the floor plan that aren't tables, so staff can find their way.
+enum FloorFixtureType {
+  BAR_COUNTER
+  KITCHEN_PASS
+  ENTRANCE
+  WALL
+  PILLAR
+  STAGE
+  WINDOW
+  LABEL
+}
+
+// A fixture on an area's floor plan (metres, like the tables). Fixtures may
+// overlap tables.
+model FloorFixture {
+  id        String           @id @default(cuid())
+  areaId    String
+  type      FloorFixtureType
+  label     String           @db.VarChar(40)
+  x         Decimal          @db.Decimal(6, 2)
+  y         Decimal          @db.Decimal(6, 2)
+  w         Decimal          @db.Decimal(6, 2)
+  h         Decimal          @db.Decimal(6, 2)
+  // 0, 45 … 315.
+  rotation  Int              @default(0)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+  deletedAt DateTime?
+
+  area DiningArea @relation(fields: [areaId], references: [id])
+
+  @@index([areaId])
+  @@index([deletedAt])
+}
+
+// A saved layout of an area for an event ("Wedding setup"): every table's
+// and fixture's geometry as JSON. At most one is active per area (the
+// generated activeAreaId and its unique index); none: the normal layout.
+model FloorLayout {
+  id           String   @id @default(cuid())
+  areaId       String
+  name         String   @db.VarChar(60)
+  snapshot     Json
+  isActive     Boolean  @default(false)
+  // GENERATED by MySQL (add_floor_plan migration), never written by the app:
+  // areaId while isActive, otherwise NULL — one active layout per area.
+  activeAreaId String?  @unique
+  createdById  String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // RESTRICT: MySQL allows no CASCADE / SET NULL on a column a stored
+  // generated column reads (areaId). Areas are only ever soft-deleted.
+  area      DiningArea @relation(fields: [areaId], references: [id], onDelete: Restrict, onUpdate: Restrict)
+  createdBy User       @relation("FloorLayoutCreatedBy", fields: [createdById], references: [id])
+
+  @@index([areaId])
+  @@index([createdById])
 }
 
 // A dining table. Its status (Available / Occupied / Reserved / Cleaning) is
 // never stored: modules/restaurant/lib/tableStatus.ts derives it from the
 // table's active order, its next reservation and needsCleaning.
 model Table {
-  id            String    @id @default(cuid())
+  id            String     @id @default(cuid())
   name          String
+  // GENERATED by MySQL (add_floor_plan migration), never written by the app:
+  // name while the table isn't deleted, otherwise NULL. Its unique index
+  // keeps table numbers unique across the business among live tables.
+  activeName    String?    @unique
   areaId        String
   seats         Int
+  // On the area's floor plan, in metres from the room's top-left corner;
+  // rotation 0, 45 … 315.
+  x             Decimal    @default(0) @db.Decimal(6, 2)
+  y             Decimal    @default(0) @db.Decimal(6, 2)
+  w             Decimal    @default(1.4) @db.Decimal(6, 2)
+  h             Decimal    @default(1.4) @db.Decimal(6, 2)
+  rotation      Int        @default(0)
+  shape         TableShape @default(SQUARE)
   // The digital menu link, /menu/[qrToken]: random and URL-safe, made on the
   // server. Regenerating it replaces it, so the old link stops working.
-  qrToken       String    @unique
+  qrToken       String     @unique
   // Set when its order is billed while cleaning is manual
   // (BusinessSetting.restaurantManualCleaning); cleared by "Mark clean".
-  needsCleaning Boolean   @default(false)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  needsCleaning Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
   deletedAt     DateTime?
 
   area         DiningArea    @relation(fields: [areaId], references: [id])
@@ -997,11 +1225,15 @@ model Order {
   number               Int                @unique @default(autoincrement())
   type                 OrderType          @default(DINE_IN)
   status               OrderStatus        @default(OPEN)
+  // Opened by someone in training mode (Part 6f Step 7f): a sandbox order.
+  training             Boolean            @default(false)
   tableId              String?
   warehouseId          String
   customerId           String?
   waiterId             String?
   guests               Int                @default(1)
+  // A bar tab's name ("Ada — blue shirt"); none for other orders.
+  tabName              String?            @db.VarChar(40)
   saleId               String?            @unique
   notes                String?            @db.Text
   openedAt             DateTime           @default(now())
@@ -1029,9 +1261,14 @@ model Order {
   version              Int                @default(0)
   // GENERATED by MySQL (see the add_restaurant migration), never written by
   // the app: tableId while the order is OPEN, SENT or SERVED and not deleted,
-  // otherwise NULL. Its unique index is the "one active order per table"
-  // rule; NULLs don't collide.
-  activeTableId        String?            @unique
+  // otherwise NULL. Indexed, no longer unique: a shared table can carry
+  // several open orders — separate checks (add_table_checks). Who may open
+  // one is decided with the table row locked (services/floor.ts).
+  activeTableId        String?
+  // A separate check at a shared table: its number there (1, 2, 3…) and
+  // the guest's name ("Ada"), if given. Dine-in orders only.
+  checkNumber          Int?
+  checkName            String?            @db.VarChar(40)
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   deletedAt            DateTime?
@@ -1056,6 +1293,7 @@ model Order {
   @@index([deletedAt])
   @@index([status])
   @@index([tableId])
+  @@index([activeTableId])
   @@index([warehouseId])
   @@index([customerId])
   @@index([waiterId])
@@ -1104,6 +1342,11 @@ model OrderItem {
   // charge and never billed, settled, split or refunded — the waste entry
   // for the spoilt one takes its stock, the original line is billed once.
   remakeOfId    String?
+  // Touch POS (Part 6e): the guest's seat (1–N), the course, and — while
+  // New — held back from Send until it's fired.
+  seat          Int?
+  course        OrderCourse?
+  heldAt        DateTime?
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
   deletedAt     DateTime?
@@ -1262,11 +1505,17 @@ model OrderTip {
   createdAt    DateTime    @default(now())
   deletedAt    DateTime?
 
+  // The till it was taken on, while open (Part 6f Step 7b): a cash tip is in
+  // that drawer until it's paid out.
+  tillSessionId String?
+
   settlement OrderSettlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
   order      Order           @relation(fields: [orderId], references: [id], onDelete: Cascade)
   waiter     User            @relation("OrderTipWaiter", fields: [waiterId], references: [id])
+  till       TillSession?    @relation(fields: [tillSessionId], references: [id], onDelete: SetNull)
 
   @@index([settlementId])
+  @@index([tillSessionId])
   @@index([orderId])
   @@index([waiterId])
   @@index([deletedAt])
@@ -1401,7 +1650,11 @@ model OrderBillPartLine {
   id          String @id @default(cuid())
   partId      String
   orderItemId String
+  // How much of the line this guest pays for: `quantity` shares of
+  // 1/`shareOf` of a unit — 2 of 1: two whole units; 1 of 2: half a unit (an
+  // item shared between two guests); 3 of 2: one and a half.
   quantity    Int
+  shareOf     Int    @default(1)
 
   part      OrderBillPart @relation(fields: [partId], references: [id], onDelete: Cascade)
   orderItem OrderItem     @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
@@ -1416,6 +1669,9 @@ model OrderBillPartLine {
 model ApprovalPin {
   userId         String    @id
   pinHash        String
+  // Set under the Part 6f rules (4 digits, unique, not weak). False: an
+  // older PIN (4–6 digits, maybe shared) — it works until it's reset.
+  meetsRules     Boolean   @default(true)
   failedAttempts Int       @default(0)
   lockedUntil    DateTime?
   createdAt      DateTime  @default(now())
@@ -1591,8 +1847,26 @@ model Device {
   userAgent  String?  @db.VarChar(255)
   lastSeenAt DateTime @default(now())
   createdAt  DateTime @default(now())
+  // This device's own restaurant view (Settings › Devices), e.g. a bar PC
+  // kept on Classic; null: the business's (BusinessSetting.restaurantInterface).
+  restaurantInterface RestaurantInterface?
+  // ---- PIN sign-in (Part 6f Step 4). Paired by an Administrator as a
+  // restaurant terminal: it always opens on the PIN screen, never the email
+  // sign-in. Wrong PINs typed here lock it: 5 in a row → 30 s, then longer
+  // each time (pinLockLevel), up to 5 minutes; a right one starts over.
+  pinLogin       Boolean   @default(false)
+  pairedAt       DateTime?
+  pinFailures    Int       @default(0)
+  pinLockedUntil DateTime?
+  pinLockLevel   Int       @default(0)
+  // What a paired device is (Part 6f Step 7c): a PIN terminal (POS), the
+  // Kitchen screen (opens the kitchen display; Kitchen staff and managers
+  // only) or a Bar terminal (opens Tables on its area, homeAreaId).
+  terminalRole   TerminalRole @default(POS)
+  homeAreaId     String?
 
   overrides DeviceOverride[]
+  homeArea  DiningArea?    @relation("DeviceHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
 
   @@index([lastSeenAt])
 }
@@ -1727,4 +2001,147 @@ model DrawerEvent {
   @@index([reason, createdAt])
   @@index([printerId])
   @@index([userId])
+}
+
+// A button group on the touch POS (Part 6e): a tree under each department —
+// Food › Rice › Jollof. Tapping a group shows its sub-groups and dishes.
+// A sub-group is always in its parent's department.
+model MenuGroup {
+  id           String         @id @default(cuid())
+  name         String
+  parentId     String?
+  department   MenuDepartment @default(FOOD)
+  // "#B4501A"; none: the parent's colour, or the department's shade.
+  colour       String?
+  // Order in the groups row and the lists.
+  rank         Int            @default(0)
+  // Its cell in the parent's grid (or the department's home), 0-based
+  // across pages of 30; none: the next free cell.
+  gridPosition Int?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  deletedAt    DateTime?
+
+  parent   MenuGroup?  @relation("MenuGroupTree", fields: [parentId], references: [id])
+  children MenuGroup[] @relation("MenuGroupTree")
+  items    Product[]
+
+  @@index([parentId])
+  @@index([deletedAt])
+}
+
+// Who did what, when (a generic log; Part 7 adds it). The first actions
+// logged are the floor plan image's: upload, replace, remove, calibrate.
+// action: "floor.background.upload"; entityType/entityId: what it was done
+// to ("DiningArea", its id); meta: the details (file size, scale…).
+model AuditLog {
+  id         String   @id @default(cuid())
+  // The single business (BusinessSetting "default").
+  businessId String   @default("default")
+  // Who did it (none: done by the system).
+  userId     String?
+  action     String   @db.VarChar(80)
+  entityType String   @db.VarChar(40)
+  entityId   String?  @db.VarChar(191)
+  meta       Json?
+  createdAt  DateTime @default(now())
+
+  business BusinessSetting @relation(fields: [businessId], references: [id])
+  user     User?           @relation(fields: [userId], references: [id])
+
+  @@index([businessId, createdAt])
+  @@index([entityType, entityId])
+}
+
+// The restaurant's screens (Part 6f; BusinessSetting / Device
+// .restaurantInterface).
+enum RestaurantInterface {
+  SERVICE
+  CLASSIC
+}
+
+// The six built-in staff roles (Part 6f; Role.systemRole).
+enum SystemRole {
+  ADMINISTRATOR
+  MANAGER
+  CASHIER
+  WAITER
+  BARTENDER
+  KITCHEN
+}
+
+// Role.accessLevel (Part 6f).
+enum AccessLevel {
+  SERVICE
+  BACK_OFFICE
+}
+
+// Role.homeScreen (Part 6f): TABLES — the Tables screen; BAR — Tables on the
+// bar's area with the bar tabs; CASHIER — Tables with Pay and Split first;
+// KITCHEN — the kitchen display for the role's station.
+enum HomeScreen {
+  TABLES
+  BAR
+  CASHIER
+  KITCHEN
+}
+
+// A shift (Part 6f Step 6, clock in / out — Settings › Staff): started after
+// a PIN sign-in ("Start shift?"), ended at LOCK ("End shift?"). A shift
+// still open when the person starts another (a later day) is closed then
+// (endReason AUTO). Feeds the By-waiter report.
+model StaffShift {
+  id            String    @id @default(cuid())
+  userId        String
+  startedAt     DateTime  @default(now())
+  endedAt       DateTime?
+  // ENDED (they ended it) or AUTO (closed when the next one started).
+  endReason     String?   @db.VarChar(10)
+  startDeviceId String?   @db.VarChar(36)
+  endDeviceId   String?   @db.VarChar(36)
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId, endedAt])
+  @@index([startedAt])
+}
+
+// A till's session (Part 6f Step 7b, cash-up): a device opened with a float
+// by someone with Settle Bill, until it's closed with the cash counted. What
+// it took (SalePayment, OrderTip) and paid out (SaleReturnPayment) while open
+// points here. At the close the figures are kept as they were: expected
+// cash = float + cash taken + cash tips − cash refunds; variance = counted −
+// expected. One open session per device.
+model TillSession {
+  id          String    @id @default(cuid())
+  deviceId    String    @db.VarChar(36)
+  openedById  String
+  openedAt    DateTime  @default(now())
+  float       Decimal   @db.Decimal(12, 2)
+  closedById  String?
+  closedAt    DateTime?
+  cashSales   Decimal?  @db.Decimal(12, 2)
+  cashTips    Decimal?  @db.Decimal(12, 2)
+  cashRefunds Decimal?  @db.Decimal(12, 2)
+  expected    Decimal?  @db.Decimal(12, 2)
+  counted     Decimal?  @db.Decimal(12, 2)
+  variance    Decimal?  @db.Decimal(12, 2)
+  note        String?   @db.VarChar(200)
+  zPrintedAt  DateTime?
+
+  openedBy User                @relation("TillOpenedBy", fields: [openedById], references: [id])
+  closedBy User?               @relation("TillClosedBy", fields: [closedById], references: [id])
+  payments SalePayment[]
+  refunds  SaleReturnPayment[]
+  tips     OrderTip[]
+
+  @@index([deviceId, closedAt])
+  @@index([openedAt])
+}
+
+// What a paired device is (Part 6f Step 7c).
+enum TerminalRole {
+  POS
+  KITCHEN
+  BAR
 }

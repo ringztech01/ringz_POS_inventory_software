@@ -41,15 +41,29 @@ const PRESETS: { label: string; range: () => DateRange }[] = [
 // The Reports design's "Select Date" box: shows the applied ?from&to and opens
 // a panel of quick ranges plus a custom From / To. Writes the same params as
 // the Filters panel, so the two always agree.
-export default function ReportDatePicker({ width = 220 }: { width?: number }) {
+// Optional (Restaurant Reports): `presets` replaces the quick ranges (worked
+// out by the page, on the business day), and `current` is the range shown
+// while the URL has none (the page's default).
+export default function ReportDatePicker({
+  width = 220,
+  presets: givenPresets,
+  current,
+}: {
+  width?: number;
+  presets?: { label: string; range: DateRange }[];
+  current?: DateRange;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { value: isOpen, on: open, off: close } = useToggleState();
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const appliedFrom = searchParams.get("from") ?? "";
-  const appliedTo = searchParams.get("to") ?? "";
+  const urlFrom = searchParams.get("from") ?? "";
+  const urlTo = searchParams.get("to") ?? "";
+  const fallback = !urlFrom && !urlTo && current ? current : null;
+  const appliedFrom = fallback ? fallback.from : urlFrom;
+  const appliedTo = fallback ? fallback.to : urlTo;
 
   const [from, setFrom] = useState(appliedFrom);
   const [to, setTo] = useState(appliedTo);
@@ -59,7 +73,7 @@ export default function ReportDatePicker({ width = 220 }: { width?: number }) {
   function openPanel() {
     setFrom(appliedFrom);
     setTo(appliedTo);
-    setPresets(PRESETS.map((preset) => ({ label: preset.label, range: preset.range() })));
+    setPresets(givenPresets ?? PRESETS.map((preset) => ({ label: preset.label, range: preset.range() })));
     open();
   }
 

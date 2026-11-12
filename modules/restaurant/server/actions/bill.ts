@@ -1,17 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { currentDeviceId } from "@/lib/hardware/device";
 import { openDrawerForCash } from "@/lib/hardware/drawer";
 import { tookCash } from "@/lib/hardware/drawerKick";
 import { revalidateDocumentPaths } from "@/app/(dashboard)/purchases/document-actions";
-import { invalid, type ActionResult } from "../../lib/actionResult";
+import type { ActionResult } from "../../lib/actionResult";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
-import { approvalPinSchema, clearSplitSchema, orderDiscountSchema, refundSchema, serviceChargeSchema, settleSchema, splitBillSchema } from "../../schemas/bill";
+import { clearSplitSchema, orderDiscountSchema, refundSchema, serviceChargeSchema, settleSchema, splitBillSchema } from "../../schemas/bill";
 import { idSchema } from "../../schemas/common";
 import { requirePermission } from "../guard";
 import { safely } from "../safely";
-import { setApprovalPin } from "../services/approvalPins";
 import {
   applyOrderDiscount,
   BILL_ORDER_GONE,
@@ -29,7 +29,11 @@ import { printRestaurantReceipt } from "../services/printing";
 // Thin wrappers for the bill: permission, input parsing and refresh here;
 // the rules are in services/bill.ts.
 
-const refresh = () => revalidatePath("/restaurant", "layout");
+// The restaurant pages and the touch POS (/pos in Restaurant mode).
+const refresh = () => {
+  revalidatePath("/restaurant", "layout");
+  revalidatePath("/pos");
+};
 
 // Print bill (pre-bill): waiters print it, so Manage Orders is enough.
 export async function printOrderBill(rawOrderId: unknown): Promise<ActionResult> {
@@ -74,21 +78,8 @@ export async function setServiceCharge(input: unknown): Promise<OrderChangeResul
   });
 }
 
-// My approval PIN: the signed-in user's own, so Approve Discount or Approve
-// Waste is needed.
-export async function saveApprovalPin(input: unknown): Promise<ActionResult<"pin" | "confirm">> {
-  return safely("save approval PIN", async (): Promise<ActionResult<"pin" | "confirm">> => {
-    const discount = await requirePermission(RESTAURANT_PERMISSIONS.APPROVE_DISCOUNT);
-    const authCheck = discount.error === undefined ? discount : await requirePermission(RESTAURANT_PERMISSIONS.APPROVE_WASTE);
-    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
-    const parsed = approvalPinSchema.safeParse(input);
-    if (!parsed.success) return invalid(parsed.error.flatten().fieldErrors);
-
-    const result = await setApprovalPin(authCheck.userId, parsed.data.pin);
-    if (result.ok) refresh();
-    return result;
-  });
-}
+// My PIN (Part 6f): PINs are set by an Administrator in Settings › Staff;
+// changing your own (when allowed) is changeOwnPin in actions/staff.ts.
 
 // Split bill: equal, by item or by amount. The server works out the parts.
 export async function splitBill(input: unknown): Promise<OrderChangeResult> {
@@ -133,7 +124,12 @@ export async function settleBill(input: unknown): Promise<SettleResult & { recei
     const parsed = settleSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That payment isn't valid." };
 
-    const result = await settleOrder(parsed.data, authCheck.userId);
+    const result = await settleOrder(parsed.data, authCheck.userId, { deviceId: await currentDeviceId() });
+    // A training order (Step 7f): no drawer, no receipt.
+    if (result.ok && result.training) {
+      refresh();
+      return { ...result, receiptPrinter: null };
+    }
     if (result.ok) {
       refresh();
       revalidateDocumentPaths("/sales", [], result.saleId);
@@ -163,7 +159,8 @@ export async function refundBill(input: unknown): Promise<RefundResult> {
     const parsed = refundSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That refund isn't valid." };
 
-    const result = await refundOrder(parsed.data, authCheck.userId);
+    const mayRefund = (await getCurrentUserPermissions()).permissions.has(RESTAURANT_PERMISSIONS.APPROVE_VOID);
+    const result = await refundOrder(parsed.data, authCheck.userId, { mayRefund, deviceId: await currentDeviceId() });
     if (result.ok) {
       refresh();
       revalidatePath("/sales/returns");

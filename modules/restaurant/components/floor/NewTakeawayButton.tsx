@@ -6,11 +6,14 @@ import toast from "react-hot-toast";
 import { useToggleState } from "@/components/layout/hooks";
 import { COLORS } from "@/components/layout/theme";
 import { newTakeaway } from "../../server/actions/floor";
+import { routesFor } from "../../lib/serviceRoutes";
+import { useServiceRoutes } from "../ServiceRoutes";
 
 // The floor plan's header button: a takeaway order (no table) from the shown
 // area's warehouse, then straight to it.
-export default function NewTakeawayButton({ areaId, disabledReason }: { areaId: string | null; disabledReason: string | null }) {
+export default function NewTakeawayButton({ areaId, disabledReason, toPos = false }: { areaId: string | null; disabledReason: string | null; toPos?: boolean }) {
   const router = useRouter();
+  const routes = useServiceRoutes();
   const hover = useToggleState();
   const [isPending, startTransition] = useTransition();
   const disabled = !!disabledReason || isPending;
@@ -19,7 +22,7 @@ export default function NewTakeawayButton({ areaId, disabledReason }: { areaId: 
     if (disabled || !areaId) return;
     startTransition(async () => {
       const result = await newTakeaway(areaId);
-      if (result.ok) router.push(`/restaurant/orders/${result.orderId}`);
+      if (result.ok) router.push(toPos ? routesFor("SERVICE").order(result.orderId) : routes.order(result.orderId));
       else toast.error(result.error);
     });
   }

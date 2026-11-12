@@ -17,6 +17,8 @@ export type RoleRow = {
   id: string;
   name: string;
   isSystem: boolean;
+  // One of the six built-in staff roles (Part 6f): can't be deleted.
+  builtIn: boolean;
   // Pre-formatted on the server.
   createdDate: string;
 };
@@ -67,10 +69,10 @@ function RoleTableRow({ row, onDelete, canDelete }: { row: RoleRow; onDelete: ()
         <IconActionButton icon={<Pencil size={15} strokeWidth={1.8} />} title="Edit role" href={`/roles/${row.id}/edit`} />
         <IconActionButton
           icon={<Trash2 size={15} strokeWidth={1.8} />}
-          title={row.isSystem ? "The Administrator role can't be deleted" : "Delete role"}
+          title={row.isSystem ? "The Administrator role can't be deleted" : row.builtIn ? "A built-in staff role can't be deleted" : "Delete role"}
           tone="danger"
           onClick={onDelete}
-          disabled={!canDelete || row.isSystem}
+          disabled={!canDelete || row.isSystem || row.builtIn}
         />
       </span>
     </div>

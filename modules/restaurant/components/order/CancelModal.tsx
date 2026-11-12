@@ -8,7 +8,8 @@ import type { Approver } from "../../server/queries/approvers";
 
 export type CancelExtras = { wasted: boolean; approval?: { approverId: string; pin: string } };
 // What the server said: refusals with a PIN request are shown here.
-export type CancelOutcome = { ok: true } | { ok: false; error?: string; needsApproval?: boolean };
+// needsManager: a sent line's void needs a manager's PIN (the PIN pad asks).
+export type CancelOutcome = { ok: true } | { ok: false; error?: string; needsApproval?: boolean; needsManager?: boolean };
 
 // Cancel a sent line, or the whole order: a reason from the list, plus free
 // text (required for Other). The server records it with who and when.

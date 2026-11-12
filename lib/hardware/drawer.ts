@@ -3,6 +3,7 @@ import { Prisma, type DrawerReason } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { RECEIPT, resolvePrinter } from "./assignments";
 import { DRAWER_REASON_LABEL } from "./drawerKick";
+import { waitForJob } from "./printQueue";
 import { wakePrintWorker } from "./printWorker";
 
 // The cash drawer service: the one way the drawer opens. Each open is a
@@ -102,4 +103,21 @@ export async function openDrawerForCash(input: OpenDrawerInput): Promise<string 
     console.error("[drawer] couldn't open the cash drawer:", error);
     return null;
   }
+}
+
+// Open drawer by hand (the POS toolbar, the restaurant floor and touch POS):
+// this till's drawer, with its reason, and a few seconds' wait to say
+// whether it opened. The caller has checked who may (and any manager PIN).
+export type DrawerAnswer = { ok: true; opened: boolean; message: string } | { ok: false; error: string };
+
+const WAIT_MS = 8000;
+const plain = (error: string | null) => (error ?? "").replace(/^Try \d of \d failed: /, "").replace(/\.\s*$/, "");
+
+export async function openDrawerByHand(input: { note: string; userId: string; deviceId: string | null }): Promise<DrawerAnswer> {
+  const opened = await openDrawer({ reason: "MANUAL", note: input.note, userId: input.userId, deviceId: input.deviceId });
+  if (!opened.sent) return { ok: false, error: "This till has no cash drawer — an admin sets one up in Settings › Printers." };
+  const done = await waitForJob(opened.jobId, WAIT_MS);
+  if (done.status === "DONE") return { ok: true, opened: true, message: "Drawer opened." };
+  if (done.status === "FAILED" || done.status === "CANCELLED") return { ok: false, error: `The drawer didn't open: ${plain(done.error) || "the printer didn't answer"}.` };
+  return { ok: true, opened: false, message: `Waiting for ${opened.printer} — the drawer opens if it answers within 30 seconds.` };
 }

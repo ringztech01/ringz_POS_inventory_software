@@ -64,6 +64,11 @@ export default function SettledModal({ settled, receiptPrinter, onClose }: { set
             Receipt sent to {settled.printedOn}.
           </p>
         )}
+        {!settled.saleId ? (
+          <p data-training-settled style={{ margin: "6px 0 0", fontSize: 13.5, color: POS.green, fontWeight: 600, textAlign: "center" }}>
+            Training: no receipt, no sale, nothing taken from stock.
+          </p>
+        ) : (
         <PrintButton
           printer={receiptPrinter}
           href={`/restaurant/receipt/${settled.saleId}`}
@@ -73,6 +78,7 @@ export default function SettledModal({ settled, receiptPrinter, onClose }: { set
           <Printer size={18} strokeWidth={1.6} />
           {settled.printedOn ? "Print again" : "Print receipt"}
         </PrintButton>
+        )}
         <PosButton onClick={onClose} autoFocus style={{ width: "100%", height: 52, borderRadius: 12, background: POS.green, color: "#fff", fontSize: 16, fontWeight: 600 }} hoverStyle={{ background: POS.greenHover }}>
           Done
         </PosButton>

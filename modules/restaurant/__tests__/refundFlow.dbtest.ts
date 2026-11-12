@@ -21,6 +21,7 @@ import { applyOrderDiscount } from "../server/services/bill";
 import { settleOrder } from "../server/services/settle";
 import { refundOrder, type RefundResult } from "../server/services/refund";
 import { getRefundView } from "../server/queries/refund";
+import { testTable } from "./dbNames";
 
 const database = new URL(process.env.DATABASE_URL ?? "mysql://x/none").pathname.slice(1);
 const enabled = process.env.RESTAURANT_DB_TEST === "1" && database.endsWith("_restaurant_check");
@@ -40,7 +41,7 @@ async function tap(orderId: string, productId: string) {
 // 2× Jollof (250 g rice + 1 chicken each) + 1× Chapman, sent and settled.
 async function settledOrder({ discount = false } = {}) {
   tableCount += 1;
-  const table = await prisma.table.create({ data: { name: `R${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
+  const table = await prisma.table.create({ data: { name: testTable(`R${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
   const opened = await openTableOrder(table.id, userId);
   assert.ok(opened.ok);
   const orderId = opened.orderId;
@@ -164,7 +165,7 @@ describe("Refunds (database copy)", { skip: enabled ? false : "set RESTAURANT_DB
 
   test("refused: an order not settled; nothing written", async () => {
     tableCount += 1;
-    const table = await prisma.table.create({ data: { name: `R${tableCount}`, seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
+    const table = await prisma.table.create({ data: { name: testTable(`R${tableCount}`), seats: 4, areaId, qrToken: newQrToken() }, select: { id: true } });
     const opened = await openTableOrder(table.id, userId);
     assert.ok(opened.ok);
     const returns = await prisma.saleReturn.count();

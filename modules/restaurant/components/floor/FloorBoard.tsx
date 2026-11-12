@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, type ReactNode } from "react";
+import { createContext, useContext, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { useToggleState } from "@/components/layout/hooks";
@@ -12,16 +12,25 @@ import { seatReservation } from "../../server/actions/reservations";
 import type { FloorTable, FloorTarget } from "../../server/queries/floor";
 import { pickableTables, type MoveMode } from "../../lib/tableMoves";
 import TablePickerModal from "./TablePickerModal";
+import { routesFor } from "../../lib/serviceRoutes";
+import { useServiceRoutes } from "../ServiceRoutes";
 
+
+// On the touch POS (FloorBoard `fill`): flat — 4 px corners, no shadows,
+// touch-size panel keys.
+const Flat = createContext(false);
 
 function TableCard({ table, selected, onSelect }: { table: FloorTable; selected: boolean; onSelect: () => void }) {
+  const flat = useContext(Flat);
   const look = FLOOR_CARD[table.status];
   const detail =
-    table.order ? `${table.order.waiter ?? "—"} · ${table.order.guests} ${table.order.guests === 1 ? "guest" : "guests"}`
+    table.checks.length > 1 ? `${table.checks.length} separate checks · ${table.checks.reduce((n, c) => n + c.guests, 0)} guests`
+    : table.order ? `${table.order.waiter ?? "—"} · ${table.order.guests} ${table.order.guests === 1 ? "guest" : "guests"}`
     : table.status === "Reserved" && table.reservation ? `${table.reservation.guestName} · ${table.reservation.partySize}`
     : "";
   const meta =
-    table.order ? `${table.order.total} · ${table.order.open}`
+    table.checks.length > 1 ? table.checksTotal
+    : table.order ? `${table.order.total} · ${table.order.open}`
     : table.status === "Reserved" && table.reservation ? table.reservation.time
     : "";
 
@@ -35,7 +44,7 @@ function TableCard({ table, selected, onSelect }: { table: FloorTable; selected:
       style={{
         height: 132,
         border: selected ? FLOOR_SELECTED.border : look.border,
-        borderRadius: 14,
+        borderRadius: flat ? 4 : 14,
         background: look.background,
         padding: 14,
         display: "flex",
@@ -44,7 +53,9 @@ function TableCard({ table, selected, onSelect }: { table: FloorTable; selected:
         gap: 4,
         cursor: "pointer",
         textAlign: "left",
-        boxShadow: selected ? FLOOR_SELECTED.boxShadow : "none",
+        boxShadow: selected && !flat ? FLOOR_SELECTED.boxShadow : "none",
+        outline: selected && flat ? "3px solid #171b1c" : "none",
+        outlineOffset: 1,
         color: look.color,
       }}
     >
@@ -81,6 +92,7 @@ function PanelButton({
   disabledReason?: string | null;
   primary?: boolean;
 }) {
+  const flat = useContext(Flat);
   const hover = useToggleState();
   const disabled = !!disabledReason;
   return (
@@ -94,20 +106,20 @@ function PanelButton({
       style={
         primary
           ? {
-              height: 42,
+              height: flat ? 56 : 42,
               background: disabled ? COLORS.slateLight : hover.value ? COLORS.tealDark : COLORS.teal,
               border: "none",
-              borderRadius: 9,
+              borderRadius: flat ? 4 : 9,
               color: "#fff",
               fontWeight: 600,
               fontSize: 14,
               cursor: disabled ? "not-allowed" : "pointer",
             }
           : {
-              height: 38,
+              height: flat ? 52 : 38,
               background: hover.value && !disabled ? COLORS.bgApp : "#fff",
               border: `1px solid ${COLORS.borderStrong}`,
-              borderRadius: 8,
+              borderRadius: flat ? 4 : 8,
               fontSize: 13,
               fontWeight: 600,
               color: COLORS.slate,
@@ -134,6 +146,9 @@ export default function FloorBoard({
   emptyMessage,
   canOrders,
   canBook,
+  toPos = false,
+  quickOpen = false,
+  fill = false,
 }: {
   header: ReactNode;
   tables: FloorTable[];
@@ -141,8 +156,18 @@ export default function FloorBoard({
   emptyMessage: string;
   canOrders: boolean;
   canBook: boolean;
+  // A table's order opens on the touch POS instead of the order screen (the
+  // floor was opened from it: FloorPage ?to=pos).
+  toPos?: boolean;
+  // One tap on a table (the touch POS): an occupied one opens its order, a
+  // free one opens a new order; others are picked to see their actions.
+  quickOpen?: boolean;
+  // Inside a fixed full-screen frame: the tables and the panel scroll on
+  // their own.
+  fill?: boolean;
 }) {
   const router = useRouter();
+  const routes = useServiceRoutes();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [confirmSeat, setConfirmSeat] = useState(false);
   const [picking, setPicking] = useState<MoveMode | null>(null);
@@ -154,25 +179,25 @@ export default function FloorBoard({
   const needsBookings = canBook ? null : "Needs the Manage Reservations permission.";
 
   function goToOrder(orderId: string) {
-    router.push(`/restaurant/orders/${orderId}`);
+    router.push(toPos ? routesFor("SERVICE").order(orderId) : routes.order(orderId));
   }
 
-  function primary() {
-    if (!selected || isWorking) return;
-    if (selected.status === "Occupied" && selected.order) return goToOrder(selected.order.id);
-    if (selected.status === "Reserved") return setConfirmSeat(true);
+  function primary(target: FloorTable | null = selected) {
+    if (!target || isWorking) return;
+    if (target.status === "Occupied" && target.order) return goToOrder(target.order.id);
+    if (target.status === "Reserved") return setConfirmSeat(true);
     startWork(async () => {
-      if (selected.status === "Cleaning") {
-        const result = await markTableClean(selected.id);
+      if (target.status === "Cleaning") {
+        const result = await markTableClean(target.id);
         if (result.ok) {
-          toast.success(`${selected.name} is clean and free.`);
+          toast.success(`${target.name} is clean and free.`);
         } else {
           toast.error(result.error);
           router.refresh();
         }
         return;
       }
-      const result = await openTable(selected.id);
+      const result = await openTable(target.id);
       if (result.ok) return goToOrder(result.orderId);
       toast.error(result.error);
       if (result.orderId) goToOrder(result.orderId);
@@ -227,15 +252,23 @@ export default function FloorBoard({
   const [pillBg, pillFg] = selected ? TABLE_STATUS_PILL[selected.status] : ["", ""];
 
   return (
-    <>
-      <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, minWidth: 0 }}>
+    <Flat.Provider value={fill}>
+      <div style={{ padding: 24, display: "flex", flexDirection: "column", gap: 18, minWidth: 0, ...(fill ? { overflowY: "auto", minHeight: 0 } : {}) }}>
         {header}
         {tables.length === 0 ? (
           <p style={{ margin: 0, fontSize: 13.5, color: COLORS.slateMid }}>{emptyMessage}</p>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 14 }}>
             {tables.map((table) => (
-              <TableCard key={table.id} table={table} selected={table.id === selected?.id} onSelect={() => setSelectedId(table.id)} />
+              <TableCard
+                key={table.id}
+                table={table}
+                selected={table.id === selected?.id}
+                onSelect={() => {
+                  setSelectedId(table.id);
+                  if (quickOpen && canOrders && (table.status === "Occupied" || table.status === "Available")) primary(table);
+                }}
+              />
             ))}
           </div>
         )}
@@ -243,7 +276,7 @@ export default function FloorBoard({
 
       <aside
         aria-label="Table details"
-        style={{ background: "#fff", borderLeft: `1px solid ${COLORS.border}`, padding: 22, display: "flex", flexDirection: "column", gap: 16 }}
+        style={{ background: "#fff", borderLeft: `1px solid ${COLORS.border}`, padding: 22, display: "flex", flexDirection: "column", gap: 16, ...(fill ? { overflowY: "auto", minHeight: 0 } : {}) }}
       >
         {!selected ? (
           <p style={{ margin: 0, fontSize: 13.5, color: COLORS.slateMid }}>Pick a table to see its details.</p>
@@ -295,7 +328,7 @@ export default function FloorBoard({
             )}
 
             <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
-              <PanelButton primary onClick={primary} disabledReason={action.blocked ?? (isWorking ? "Working…" : null)}>
+              <PanelButton primary onClick={() => primary()} disabledReason={action.blocked ?? (isWorking ? "Working…" : null)}>
                 {isWorking && !confirmSeat ? "Working…" : action.label}
               </PanelButton>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -333,6 +366,6 @@ export default function FloorBoard({
           tone="primary"
         />
       )}
-    </>
+    </Flat.Provider>
   );
 }

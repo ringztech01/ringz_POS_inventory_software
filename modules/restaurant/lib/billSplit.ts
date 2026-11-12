@@ -9,7 +9,9 @@ import { orderTotals, type PricedLine } from "./orderTotals";
 //   EQUAL   the total N ways
 //   AMOUNT  the amounts the first guests chose; the last pays the rest
 //   ITEMS   what each guest had — their lines' share of the bill, with the
-//           order's discount and service charge shared out by sub total
+//           order's discount and service charge shared out by sub total. A
+//           unit can be shared: a guest pays `quantity` shares of
+//           1/`shareOf` of it (½ a Pepper Soup: 1 of 2)
 //
 // The parts always add up exactly to the bill total: each is worked out to
 // the kobo and the last part takes whatever is left (the rounding). Called
@@ -49,7 +51,35 @@ export function splitByAmounts(total: Decimal.Value, amounts: readonly Decimal.V
 }
 
 export type SplitLine = PricedLine & { id: string; name: string };
-export type ItemAssignment = { lineId: string; quantity: number };
+// `quantity` shares of 1/`shareOf` of a unit (shareOf 1, or left out: whole units).
+export type ItemAssignment = { lineId: string; quantity: number; shareOf?: number };
+
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+const lcm = (a: number, b: number) => (a / gcd(a, b)) * b;
+const VULGAR: Record<string, string> = { "1/2": "½", "1/3": "⅓", "2/3": "⅔", "1/4": "¼", "3/4": "¾", "1/5": "⅕", "1/6": "⅙", "1/8": "⅛" };
+
+// q/s of a unit in its lowest terms.
+export function reduceShare(quantity: number, shareOf = 1): { quantity: number; shareOf: number } {
+  const d = gcd(quantity, shareOf) || 1;
+  return { quantity: quantity / d, shareOf: shareOf / d };
+}
+
+// "2", "½", "1½", "⅔", "3/7" — how many units q/s is.
+export function unitsLabel(quantity: number, shareOf = 1): string {
+  const r = reduceShare(quantity, shareOf);
+  const whole = Math.floor(r.quantity / r.shareOf);
+  const rest = r.quantity % r.shareOf;
+  if (rest === 0) return String(whole);
+  const fraction = VULGAR[`${rest}/${r.shareOf}`] ?? `${rest}/${r.shareOf}`;
+  return whole ? `${whole}${fraction.length > 1 ? " " : ""}${fraction}` : fraction;
+}
+
+// Several picks of one line added up: one q/s in lowest terms.
+export function addShares(picks: readonly { quantity: number; shareOf?: number }[]): { quantity: number; shareOf: number } {
+  const den = picks.reduce((d, p) => lcm(d, p.shareOf ?? 1), 1);
+  const num = picks.reduce((n, p) => n + p.quantity * (den / (p.shareOf ?? 1)), 0);
+  return reduceShare(num, den);
+}
 
 // `lines`: the billed lines. `parts`: per guest, how many of each line's
 // units they pay for — every unit of every billed line exactly once.
@@ -62,30 +92,46 @@ export function splitByItems(
 ): SplitResult {
   if (parts.length < 2 || parts.length > MAX_BILL_PARTS) return { ok: false, error: `Split between 2 and ${MAX_BILL_PARTS} guests.` };
   const byId = new Map(lines.map((line) => [line.id, line]));
-  const assigned = new Map<string, number>();
+  const assigned = new Map<string, { quantity: number; shareOf?: number }[]>();
   for (const [i, part] of parts.entries()) {
     if (part.every((a) => a.quantity <= 0)) return { ok: false, error: `Guest ${i + 1} has nothing assigned yet.` };
     for (const a of part) {
       if (!byId.has(a.lineId)) return { ok: false, error: "An item isn't on the bill any more. Close the split and try again." };
-      if (!Number.isInteger(a.quantity) || a.quantity < 0) return { ok: false, error: "Assign whole items." };
-      assigned.set(a.lineId, (assigned.get(a.lineId) ?? 0) + a.quantity);
+      const per = a.shareOf ?? 1;
+      if (!Number.isInteger(a.quantity) || a.quantity < 0 || !Number.isInteger(per) || per < 1 || per > MAX_BILL_PARTS) return { ok: false, error: "Assign whole items, or an item shared between guests." };
+      assigned.set(a.lineId, [...(assigned.get(a.lineId) ?? []), { quantity: a.quantity, shareOf: per }]);
     }
   }
+  // Every unit exactly once — compared as whole numbers of 1/L shares.
   for (const line of lines) {
-    const count = assigned.get(line.id) ?? 0;
-    if (count < line.quantity) return { ok: false, error: `Assign every ${line.name} (${count} of ${line.quantity} assigned).` };
-    if (count > line.quantity) return { ok: false, error: `More ${line.name} assigned than were ordered (${count} of ${line.quantity}).` };
+    const got = addShares(assigned.get(line.id) ?? [{ quantity: 0 }]);
+    const have = got.quantity, want = line.quantity * got.shareOf;
+    const count = unitsLabel(got.quantity, got.shareOf);
+    if (have < want) return { ok: false, error: `Assign every ${line.name} (${count} of ${line.quantity} assigned).` };
+    if (have > want) return { ok: false, error: `More ${line.name} assigned than were ordered (${count} of ${line.quantity}).` };
   }
 
   // Each guest: their lines with their tax, less their share of the
-  // discount, plus their share of the service charge.
+  // discount, plus their share of the service charge. Whole units are
+  // priced as on the bill; a part of a unit is that share of one unit's
+  // price and tax (the last guest takes any rounding, as always).
   const shareOf = (subTotal: Decimal, amount: Decimal) => (bill.subTotal.isZero() ? new Decimal(0) : kobo(amount.times(subTotal).div(bill.subTotal)));
   const first = parts.slice(0, -1).map((part) => {
-    const own = orderTotals(
-      part.filter((a) => a.quantity > 0).map((a) => ({ ...byId.get(a.lineId)!, quantity: a.quantity })),
+    const picks = [...Map.groupBy(part.filter((a) => a.quantity > 0), (a) => a.lineId)].map(([lineId, ps]) => ({ line: byId.get(lineId)!, ...addShares(ps) }));
+    const whole = orderTotals(
+      picks.filter((p) => p.quantity >= p.shareOf).map((p) => ({ ...p.line, quantity: Math.floor(p.quantity / p.shareOf) })),
       0,
     );
-    return own.subTotal.plus(own.tax).minus(shareOf(own.subTotal, bill.discount)).plus(shareOf(own.subTotal, bill.serviceCharge));
+    let subTotal = whole.subTotal;
+    let tax = whole.tax;
+    for (const p of picks) {
+      const rest = p.quantity % p.shareOf;
+      if (!rest) continue;
+      const one = orderTotals([{ ...p.line, quantity: 1 }], 0);
+      subTotal = subTotal.plus(kobo(one.subTotal.times(rest).div(p.shareOf)));
+      tax = tax.plus(kobo(one.tax.times(rest).div(p.shareOf)));
+    }
+    return subTotal.plus(tax).minus(shareOf(subTotal, bill.discount)).plus(shareOf(subTotal, bill.serviceCharge));
   });
   const amounts = lastTakesTheRest(bill.total, first);
   if (amounts[amounts.length - 1].lt(0)) return { ok: false, error: `Guest ${parts.length}'s part comes out below ₦0.00. Give them one of the priced items.` };

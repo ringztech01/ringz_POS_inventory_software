@@ -9,6 +9,7 @@ import type { CancelLineInput, CancelOrderInput } from "../../schemas/orderFlow"
 import { createVoidKot, sendNewLines, syncKotBump, type SentToStation } from "./kots";
 import { clearSplit, lockOrderAt, markBillChanged, type OrderChangeResult, type OrderFailure } from "./orders";
 import { logWasteInTx, wasteStockRefusal } from "./waste";
+import { logOverride, type NeedsManager, requireManager } from "./approvalPins";
 
 // Send to kitchen, Mark served and the cancellations — without the
 // permission check and input parsing (the server actions in
@@ -43,12 +44,14 @@ async function servedIfDone(tx: Prisma.TransactionClient, orderId: string): Prom
 // active one). Only New lines are touched and the order's version is
 // checked, so a second click or another device can't send a line twice.
 // An Open order becomes Sent — and so does a Served one that has new lines.
-export async function sendToKitchen(orderId: string, version: number, userId: string): Promise<SendResult> {
+// `lineIds` (the touch POS): just those — a course, or a held course fired.
+// Without them, held lines stay behind.
+export async function sendToKitchen(orderId: string, version: number, userId: string, lineIds?: readonly string[]): Promise<SendResult> {
   return prisma.$transaction(async (tx): Promise<SendResult> => {
     const locked = await lockOrderAt(tx, orderId, version);
     if (!locked.ok) return locked;
 
-    const result = await sendNewLines(tx, orderId, userId);
+    const result = await sendNewLines(tx, orderId, userId, lineIds);
     if (!result.ok) return result;
     if (result.sent.length === 0) return { ok: true, version, sent: [], kotIds: [] };
 
@@ -103,9 +106,11 @@ export async function markLinesServed(orderId: string, version: number, lineIds:
 // logged as waste first (RETURNED_BY_GUEST, linked to the line, the note as
 // its note), in the same transaction — refused (an approver's PIN over the
 // limit, not enough stock), nothing is cancelled either.
-export type CancelLineResult = (OrderChangeResult & { voidKotId?: string | null }) | (OrderFailure & { needsApproval?: true; limit?: string });
+export type CancelLineResult = (OrderChangeResult & { voidKotId?: string | null }) | (OrderFailure & { needsApproval?: true; limit?: string }) | NeedsManager;
 
-export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wasted?: boolean }, cancelledById: string): Promise<CancelLineResult> {
+// `mayVoid`: the canceller has Approve Voids & Refunds; without it, a
+// manager's PIN (managerApproval) — the reason then says who approved.
+export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wasted?: boolean }, cancelledById: string, { mayVoid = true }: { mayVoid?: boolean } = {}): Promise<CancelLineResult> {
   const { orderId, version, lineId, reason, details } = input;
   const settings = input.wasted ? await getBusinessSettings() : null;
   try {
@@ -117,8 +122,11 @@ export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wast
         if (!line) return { ok: false, error: LINE_GONE, stale: true };
         if (line.kitchenStatus === "NEW") return { ok: false, error: "That line hasn't been sent — remove it with the − button instead." };
         if (reason === "RETURNED_BY_GUEST" && line.kitchenStatus !== "SERVED") return { ok: false, error: "Returned by guest is for a line that's been served." };
+        const manager = await requireManager(tx, { for: "VOID", may: mayVoid, approval: input.managerApproval });
+        if (!manager.ok) return manager;
 
-        if (settings) {
+        // A training order (Step 7f): no waste, no stock.
+        if (settings && !Number(locked.order.training)) {
           const waste = await logWasteInTx(
             tx,
             { productId: line.productId, qty: String(line.quantity), reason: "RETURNED_BY_GUEST", note: details ?? "", orderItemId: lineId, approval: input.approval },
@@ -129,8 +137,9 @@ export async function cancelLine(input: Omit<CancelLineInput, "wasted"> & { wast
           if (!waste.ok) return waste;
         }
 
-        const why = cancelReasonText(reason, details);
+        const why = [cancelReasonText(reason, details), manager.approvedBy ? `approved by ${manager.approvedBy}` : ""].filter(Boolean).join(" · ");
         await tx.orderItem.update({ where: { id: lineId }, data: { cancelledAt: new Date(), cancelReason: why, cancelledById } });
+        if (manager.approverId) await logOverride(tx, { kind: "void", actorId: cancelledById, approverId: manager.approverId, entityType: "OrderItem", entityId: lineId, meta: { orderId } });
         const voidKotId = await createVoidKot(tx, lineId, cancelledById, why);
         await syncKotBump(tx, [lineId]);
         await markBillChanged(tx, orderId);

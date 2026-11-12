@@ -2,6 +2,7 @@ import "server-only";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { isTicketDone, modifiersText, stationFor } from "../../lib/kds";
+import { kitchenNote } from "../../lib/posSpeed";
 
 // Kitchen order tickets (KOTs) — always inside the caller's transaction, on
 // an order it has already locked. A KOT is never edited after it's made,
@@ -26,6 +27,8 @@ const kotLineSelect = {
   quantity: true,
   modifiers: true,
   note: true,
+  seat: true,
+  course: true,
   product: { select: { name: true, stationId: true } },
 } satisfies Prisma.OrderItemSelect;
 
@@ -36,19 +39,22 @@ const snapshot = (line: KotSource) => ({
   name: line.product.name,
   quantity: line.quantity,
   modifiers: modifiersText(line.modifiers),
-  note: line.note,
+  // "Seat 2 · Main — no pepper" (the touch POS's seat and course first).
+  note: kitchenNote(line.seat, line.course, line.note),
 });
 
-// Send to kitchen's part: the order's New lines, grouped by station, become
-// one NEW KOT per station (with snapshot lines) and are set to Sent with
-// their station and sent time. Nothing to send → nothing sent.
+// Send to kitchen's part: the order's New lines (not held — or just `only`,
+// held or not: a course sent, a held course fired), grouped by station,
+// become one NEW KOT per station (with snapshot lines) and are set to Sent
+// with their station and sent time. Nothing to send → nothing sent.
 export async function sendNewLines(
   tx: Prisma.TransactionClient,
   orderId: string,
   userId: string,
+  only?: readonly string[],
 ): Promise<{ ok: true; sent: SentToStation[]; kotIds: string[] } | { ok: false; error: string }> {
   const lines = await tx.orderItem.findMany({
-    where: { orderId, kitchenStatus: "NEW", deletedAt: null, cancelledAt: null },
+    where: { orderId, kitchenStatus: "NEW", deletedAt: null, cancelledAt: null, ...(only ? { id: { in: [...only] } } : { heldAt: null }) },
     select: kotLineSelect,
     orderBy: { createdAt: "asc" },
   });
@@ -75,7 +81,7 @@ export async function sendNewLines(
     kotIds.push(kot.id);
     await tx.orderItem.updateMany({
       where: { id: { in: group.map((line) => line.id) }, kitchenStatus: "NEW" },
-      data: { kitchenStatus: "PENDING", stationId: station.id, sentAt: now },
+      data: { kitchenStatus: "PENDING", stationId: station.id, sentAt: now, heldAt: null },
     });
     sent.push({ station: station.name, count: group.length });
   }

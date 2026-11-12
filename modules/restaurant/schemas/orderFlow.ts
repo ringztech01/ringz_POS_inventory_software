@@ -7,7 +7,9 @@ import { orderVersionSchema } from "./order";
 // Send to kitchen, Mark served and the cancellations. Each carries the
 // version its screen showed.
 
-export const sendToKitchenSchema = z.object({ orderId: idSchema, version: orderVersionSchema });
+// lineIds: just these (a course, or a held course fired); none: every New
+// line not held.
+export const sendToKitchenSchema = z.object({ orderId: idSchema, version: orderVersionSchema, lineIds: z.array(idSchema).min(1).max(200).optional() });
 
 export const lineActionSchema = z.object({ orderId: idSchema, version: orderVersionSchema, lineId: idSchema });
 
@@ -37,6 +39,8 @@ export const cancelLineSchema = z
     ...reason,
     wasted: z.boolean().default(false),
     approval: z.object({ approverId: idSchema, pin: pinSchema }).optional(),
+    // A manager's PIN, for someone without Approve Voids & Refunds (Part 6e).
+    managerApproval: z.object({ approverId: idSchema, pin: pinSchema }).optional(),
   })
   .refine(otherNeedsDetails, OTHER_MESSAGE)
   .refine((value) => !value.wasted || value.reason === "RETURNED_BY_GUEST", { message: "Only food returned by the guest is logged as waste here.", path: ["wasted"] });

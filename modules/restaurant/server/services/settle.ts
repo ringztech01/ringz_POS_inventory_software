@@ -1,4 +1,5 @@
 import "server-only";
+import { withCheck } from "../../lib/orderLines";
 import { Prisma } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/index-browser";
 import { prisma } from "@/lib/db";
@@ -8,6 +9,7 @@ import { sumSubtotals } from "@/lib/pricing";
 import { decreaseStock, InsufficientStockError } from "@/lib/stock";
 import { isReferenceCollision, MAX_REFERENCE_ATTEMPTS } from "@/app/(dashboard)/purchases/document-actions";
 import type { PurchaseActionState } from "@/app/(dashboard)/purchases/types";
+import { tillSessionIdFor } from "./till";
 import { addSalePaymentsInTx, notEnoughStock, SalePaymentError, saveSaleInTx } from "@/app/(dashboard)/sales/save-sale";
 import { isBilled, summariseBill } from "../../lib/bill";
 import { billPartLabel } from "../../lib/billSplit";
@@ -99,6 +101,8 @@ export type SettleResult =
       // What this settle paid (the bill or the part), and the change given.
       paid: string;
       change: string;
+      // A training order (Step 7f): closed, nothing real — no sale (saleId "").
+      training?: boolean;
     }
   | OrderFailure;
 
@@ -142,7 +146,9 @@ async function priorSettlement(client: Prisma.TransactionClient, idempotencyKey:
 // the first's result). A line added meanwhile either comes first (the
 // settle is refused: another version) or after (refused: the order is
 // closed) — never lost.
-export async function settleOrder(input: SettleInput, userId: string): Promise<SettleResult> {
+// `deviceId`: the till it's paid at — an open till (cash-up, Part 6f Step
+// 7b) gets the payments and tips.
+export async function settleOrder(input: SettleInput, userId: string, { deviceId = null }: { deviceId?: string | null } = {}): Promise<SettleResult> {
   const { restaurantServiceChargePercent: servicePercent } = await getBusinessSettings();
   const walkIn = await prisma.customer.findFirst({ where: { isDefault: true, deletedAt: null }, select: { id: true } });
   const today = todayInAppZone();
@@ -160,13 +166,16 @@ export async function settleOrder(input: SettleInput, userId: string): Promise<S
             where: { id: input.orderId },
             select: {
               number: true,
+              training: true,
               type: true,
+              tabName: true,
               warehouseId: true,
               customerId: true,
               saleId: true,
               discountType: true,
               discountValue: true,
               serviceCharge: true,
+              checkNumber: true, checkName: true, 
               table: { select: { name: true } },
               waiter: { select: { firstName: true } },
               warehouse: { select: { name: true } },
@@ -196,21 +205,38 @@ export async function settleOrder(input: SettleInput, userId: string): Promise<S
             },
           });
           const ref = orderRef(order.number);
+          const tillSessionId = await tillSessionIdFor(deviceId, tx);
           const parts = order.billParts;
           const part = plan.partId ? parts.find((p) => p.id === plan.partId)! : null;
           const partLabel = part ? billPartLabel(part.mode, part.number, parts.length) : undefined;
           const now = new Date();
+
+          // Training mode (Step 7f): the part is paid and the order closes as
+          // usual — but no sale, payment, stock movement, tip or settlement.
+          if (order.training) {
+            if (part) {
+              const paid = await tx.orderBillPart.updateMany({ where: { id: part.id, status: "OPEN", deletedAt: null }, data: { status: "PAID", paidAt: now } });
+              if (paid.count !== 1) throw new SettleAbort("That part has already been paid — refreshed.");
+            }
+            const done = part ? (await tx.orderBillPart.count({ where: { orderId: input.orderId, deletedAt: null, status: "OPEN" } })) === 0 : true;
+            const { version } = await tx.order.update({
+              where: { id: input.orderId },
+              data: done ? { status: "BILLED", closedAt: now, version: { increment: 1 } } : { version: { increment: 1 } },
+              select: { version: true },
+            });
+            return { ok: true, version, saleId: "", reference: "TRAINING", closed: done, paid: plan.due.toFixed(2), change: plan.tender.change.toFixed(2), training: true };
+          }
 
           let saleId = order.saleId;
           let reference: string;
           if (!saleId) {
             if (!order.customerId && !walkIn) throw new SettleAbort("The walk-in customer is missing, so there's no one to make the sale for. Check Peoples › Customers.");
             const sale = orderToSale(
-              { ...order, ref, table: order.table?.name ?? null, waiter: order.waiter?.firstName ?? null, lines: order.items },
+              { ...order, ref, table: order.table ? withCheck(order.table.name, order) : null, waiter: order.waiter?.firstName ?? null, lines: order.items },
               { servicePercent, payments: plan.tender.payments, date: today, walkInCustomerId: walkIn?.id ?? "", paymentNote: partLabel },
             );
             if (!sale.ok) throw new SettleAbort(sale.error);
-            const saved = await saveSaleInTx(tx, sale.input, userId, { moveStock: false, morePayments: sale.morePayments });
+            const saved = await saveSaleInTx(tx, sale.input, userId, { moveStock: false, morePayments: sale.morePayments, tillSessionId });
             if (!saved.ok) throw new SettleAbort(refusal(saved.state));
             saleId = saved.id;
             reference = saved.reference;
@@ -237,7 +263,7 @@ export async function settleOrder(input: SettleInput, userId: string): Promise<S
             await tx.order.update({ where: { id: input.orderId }, data: { saleId } });
           } else {
             const note = [`Restaurant ${ref}`, partLabel].filter(Boolean).join(" · ");
-            await addSalePaymentsInTx(tx, saleId, toSalePayments(plan.tender.payments, today, note), userId);
+            await addSalePaymentsInTx(tx, saleId, toSalePayments(plan.tender.payments, today, note), userId, { tillSessionId });
             reference = (await tx.sale.findUniqueOrThrow({ where: { id: saleId }, select: { reference: true } })).reference;
           }
 
@@ -270,7 +296,7 @@ export async function settleOrder(input: SettleInput, userId: string): Promise<S
           });
           if (plan.tender.tips.length && plan.waiterId) {
             await tx.orderTip.createMany({
-              data: plan.tender.tips.map((t) => ({ settlementId: settlement.id, orderId: input.orderId, waiterId: plan.waiterId!, paymentType: t.paymentType, amount: t.amount.toFixed(2) })),
+              data: plan.tender.tips.map((t) => ({ settlementId: settlement.id, orderId: input.orderId, waiterId: plan.waiterId!, paymentType: t.paymentType, amount: t.amount.toFixed(2), ...(tillSessionId ? { tillSessionId } : {}) })),
             });
           }
           return { ok: true, version, saleId, reference, closed, paid: plan.due.toFixed(2), change: plan.tender.change.toFixed(2) };

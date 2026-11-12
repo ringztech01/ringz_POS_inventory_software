@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Percent, Printer, Split, X } from "lucide-react";
+import { AlertTriangle, Ban, Banknote, Check, Lock, Pencil, Percent, Printer, Split, X } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { formatAppTime } from "../../lib/time";
 import { R } from "../../lib/theme";
@@ -10,7 +10,7 @@ import type { Approver } from "../../server/queries/approvers";
 import type { BillView } from "../../server/queries/bill";
 import DiscountModal, { type DiscountOutcome, type DiscountRequest } from "./DiscountModal";
 import PaymentModal, { type SettleOutcome, type SettleRequest } from "./PaymentModal";
-import SplitModal from "./SplitModal";
+import SplitModal, { colorOf, type SplitOutcome } from "./SplitModal";
 import PrintButton from "@/components/hardware/PrintButton";
 import { printBillAction } from "../../server/actions/printing";
 
@@ -68,7 +68,7 @@ export default function BillPanel({
   busy: boolean;
   onDiscount: (request: DiscountRequest) => Promise<DiscountOutcome>;
   onServiceCharge: (on: boolean) => void;
-  onSplit: (split: BillSplit) => Promise<boolean>;
+  onSplit: (split: BillSplit) => Promise<SplitOutcome>;
   onRemoveSplit: () => void;
   // The signed-in user has Settle Bill.
   canSettle: boolean;
@@ -85,6 +85,10 @@ export default function BillPanel({
   // Taking payment: the whole bill here, or each part from the split's list.
   const payBlocker = !canSettle ? "Needs the Settle Bill permission." : (splitBlocker ?? (split?.stale ? "The split no longer adds up. Split it again." : null));
   const settleBlocker = payBlocker ?? (split ? "This bill is split — take payment for each part above." : null);
+  // "Zobo", "2× Star Lager", "½ Pepper Soup", "1½ Star Lager".
+  const itemText = (units: string, name: string) => (units === "1" ? name : /^\d+$/.test(units) ? `${units}× ${name}` : `${units} ${name}`);
+  // Once a part is paid the split is fixed (the server refuses changes too).
+  const splitLocked = !!split?.parts.some((part) => part.status === "PAID");
 
   // Escape closes a pop-up first (each has its own handler).
   useEffect(() => {
@@ -163,10 +167,12 @@ export default function BillPanel({
               <Percent size={14} strokeWidth={1.8} />
               {discount ? "Change discount" : "Discount"}
             </button>
-            <button type="button" onClick={() => setPopup("split")} disabled={!!splitBlocker} title={splitBlocker ?? undefined} style={smallButton(!!splitBlocker)}>
-              <Split size={14} strokeWidth={1.8} />
-              {split ? "Change split" : "Split bill"}
-            </button>
+            {!split && (
+              <button type="button" onClick={() => setPopup("split")} disabled={!!splitBlocker} title={splitBlocker ?? undefined} style={smallButton(!!splitBlocker)}>
+                <Split size={14} strokeWidth={1.8} />
+                Split bill
+              </button>
+            )}
             <span style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: COLORS.slate }}>
               Service charge
               <button
@@ -184,7 +190,7 @@ export default function BillPanel({
           </div>
         )}
 
-        <div aria-label="Bill totals" aria-busy={busy} style={{ display: "flex", flexDirection: "column", gap: 6, opacity: busy ? 0.4 : 1, transition: "opacity .15s" }}>
+        <div aria-label="Bill totals" aria-busy={busy} style={{ display: "flex", flexDirection: "column", gap: 6, opacity: busy ? 0.4 : 1, transition: "opacity .12s" }}>
           <TotalRow label="Sub total" value={totals.subTotal} />
           {discount && (
             <>
@@ -202,50 +208,80 @@ export default function BillPanel({
         </div>
 
         {split && (
-          <section aria-label="Split" style={{ border: `1px solid ${COLORS.border}`, borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 4 }}>
+          <section aria-label="Split" style={{ display: "flex", flexDirection: "column", gap: 8, minHeight: 0 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 600 }}>
+              <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase", color: COLORS.slateMid }}>
                 {split.modeLabel} · {split.parts.length} parts
               </span>
-              {order.editable && (
-                <button
-                  type="button"
-                  onClick={onRemoveSplit}
-                  disabled={busy}
-                  style={{ marginLeft: "auto", border: "none", background: "none", padding: 0, fontSize: 12.5, fontWeight: 600, color: busy ? COLORS.slateLight : COLORS.tealDark, cursor: busy ? "not-allowed" : "pointer" }}
-                >
-                  Pay as one bill
-                </button>
+              {order.editable && !splitLocked && (
+                <>
+                  <button
+                    type="button"
+                    onClick={onRemoveSplit}
+                    disabled={busy}
+                    style={{ marginLeft: "auto", height: 36, border: "none", background: "none", padding: "0 4px", fontSize: 12.5, fontWeight: 600, color: busy ? COLORS.slateLight : COLORS.slate, cursor: busy ? "not-allowed" : "pointer" }}
+                  >
+                    Pay as one bill
+                  </button>
+                  <button type="button" onClick={() => setPopup("split")} disabled={!!splitBlocker} title={splitBlocker ?? undefined} style={{ ...smallButton(!!splitBlocker), height: 36 }}>
+                    <Pencil size={13} strokeWidth={1.8} />
+                    Edit split
+                  </button>
+                </>
               )}
             </div>
+            {splitLocked && (
+              <span data-split-locked style={{ fontSize: 12.5, color: COLORS.slate, background: COLORS.bgInput, borderRadius: 8, padding: "8px 10px", display: "flex", gap: 8, alignItems: "center" }}>
+                <Lock size={13} strokeWidth={1.8} />
+                Split locked — a part is paid. Each remaining guest pays on their own.
+              </span>
+            )}
             {split.stale && (
-              <span role="alert" style={{ fontSize: 12, ...AMBER, padding: "4px 8px", borderRadius: 6 }}>
+              <span role="alert" style={{ fontSize: 12, ...AMBER, padding: "6px 10px", borderRadius: 6 }}>
                 The parts no longer add up to the total. Split it again.
               </span>
             )}
-            <div style={{ maxHeight: 150, overflowY: "auto" }}>
-              {split.parts.map((part) => (
-                <div key={part.id} data-bill-part={part.label} style={{ display: "flex", gap: 10, padding: "5px 0", borderTop: `1px solid ${R.rowBorder}`, fontSize: 13 }}>
-                  <span style={{ minWidth: 64, fontWeight: 600 }}>{part.label}</span>
-                  <span style={{ flex: 1, minWidth: 0, color: COLORS.slateMid, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {part.items.map((item) => `${item.quantity}× ${item.name}`).join(", ")}
-                  </span>
-                  <span style={{ fontSize: 11, fontWeight: 600, color: part.status === "PAID" ? COLORS.tealDark : COLORS.slateMid }}>{part.status === "PAID" ? "Paid" : "Open"}</span>
-                  <span style={{ minWidth: 80, textAlign: "right", fontWeight: 600 }}>{part.amount}</span>
-                  {order.editable && part.status === "OPEN" && (
-                    <button
-                      type="button"
-                      aria-label={`Pay ${part.label}`}
-                      disabled={!!payBlocker}
-                      title={payBlocker ?? `Take payment for ${part.label}`}
-                      onClick={() => setPopup({ pay: { partId: part.id, title: `${order.table} · ${part.label}`, due: part.amountValue } })}
-                      style={{ height: 24, padding: "0 10px", border: "none", borderRadius: 6, background: payBlocker ? COLORS.borderStrong : COLORS.teal, color: "#fff", fontSize: 11.5, fontWeight: 600, cursor: payBlocker ? "not-allowed" : "pointer" }}
-                    >
-                      Pay
-                    </button>
-                  )}
-                </div>
-              ))}
+            <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 8 }}>
+              {split.parts.map((part) => {
+                const paid = part.status === "PAID";
+                return (
+                  <div
+                    key={part.id}
+                    data-bill-part={part.label}
+                    data-part-status={part.status}
+                    style={{ border: `1px solid ${COLORS.border}`, borderLeft: `5px solid ${colorOf(part.number)}`, borderRadius: 12, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6, background: paid ? "#fafbfb" : "#fff" }}
+                  >
+                    <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                      <span style={{ fontSize: 14.5, fontWeight: 600 }}>{part.label}</span>
+                      {paid && (
+                        <span style={{ height: 24, padding: "0 10px", borderRadius: 12, background: "#e3f4ee", color: COLORS.tealDark, fontSize: 12, fontWeight: 700, display: "flex", alignItems: "center", gap: 5 }}>
+                          <Check size={13} strokeWidth={2.4} />
+                          Paid
+                        </span>
+                      )}
+                      <span style={{ marginLeft: "auto", fontFamily: FONTS.display, fontSize: 17, fontWeight: 600, fontVariantNumeric: "tabular-nums" }}>{part.amount}</span>
+                    </div>
+                    {part.items.length > 0 && (
+                      <span style={{ fontSize: 12.5, color: COLORS.slateMid, lineHeight: 1.45 }}>
+                        {part.items.map((item) => itemText(item.units, item.name)).join(", ")}
+                      </span>
+                    )}
+                    {order.editable && !paid && (
+                      <button
+                        type="button"
+                        aria-label={`Pay ${part.label}`}
+                        disabled={!!payBlocker}
+                        title={payBlocker ?? `Take payment for ${part.label}`}
+                        onClick={() => setPopup({ pay: { partId: part.id, title: `${order.table} · ${part.label}`, due: part.amountValue } })}
+                        style={{ height: 48, border: "none", borderRadius: 10, background: payBlocker ? COLORS.borderStrong : COLORS.teal, color: "#fff", fontSize: 14.5, fontWeight: 600, cursor: payBlocker ? "not-allowed" : "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}
+                      >
+                        <Banknote size={17} strokeWidth={1.8} />
+                        Pay {part.amount}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </section>
         )}
