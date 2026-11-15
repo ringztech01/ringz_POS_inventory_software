@@ -113,8 +113,20 @@ export async function deleteMenuItem(id: string): Promise<MenuItemResult> {
 }
 
 // Available / On menu, from the list's switches. Neither touches stock.
-export async function setMenuItemFlag(id: string, field: "isAvailable" | "showOnMenu", value: boolean): Promise<ActionResult> {
+// Available (86) changing is logged, with who did it (MenuAvailabilityLog,
+// Restaurant Reports' 86'd minutes); switching it to what it already is
+// changes and logs nothing.
+export async function setMenuItemFlag(id: string, field: "isAvailable" | "showOnMenu", value: boolean, userId: string | null = null): Promise<ActionResult> {
   return prisma.$transaction(async (tx): Promise<ActionResult> => {
+    if (field === "isAvailable") {
+      const changed = await tx.product.updateMany({ where: { id, productType: "MENU_ITEM", deletedAt: null, isAvailable: !value }, data: { isAvailable: value } });
+      if (changed.count === 1) {
+        await tx.menuAvailabilityLog.create({ data: { productId: id, available: value, userId } });
+        return { ok: true };
+      }
+      const exists = await tx.product.count({ where: { id, productType: "MENU_ITEM", deletedAt: null } });
+      return exists === 1 ? { ok: true } : { ok: false, error: MENU_ITEM_GONE };
+    }
     const updated = await tx.product.updateMany({ where: { id, productType: "MENU_ITEM", deletedAt: null }, data: { [field]: value } });
     return updated.count === 1 ? { ok: true } : { ok: false, error: MENU_ITEM_GONE };
   });

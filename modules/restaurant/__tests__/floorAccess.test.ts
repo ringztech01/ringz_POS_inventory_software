@@ -47,9 +47,10 @@ test("every /restaurant/* page, and the POS tables screen, checks the module its
 
 test("every /restaurant/* route handler checks the module and the permission (guardRoute)", () => {
   const routes = filesUnder("app/(dashboard)/restaurant", "route.ts");
-  assert.deepEqual(routes.sort(), ["app/(dashboard)/restaurant/settings/floor/image/[areaId]/route.ts", "app/(dashboard)/restaurant/tables/[id]/qr/route.ts"]);
+  assert.deepEqual(routes.sort(), ["app/(dashboard)/restaurant/reports/export/[tab]/route.ts", "app/(dashboard)/restaurant/settings/floor/image/[areaId]/route.ts", "app/(dashboard)/restaurant/tables/[id]/qr/route.ts"]);
   for (const route of routes) assert.match(read(target(route)), /const denied = await guardRoute\(/, route);
   assert.match(read("modules/restaurant/server/routes/floorImage.ts"), /guardRoute\(RESTAURANT_PERMISSIONS\.MANAGE_FLOOR_PLAN\)/);
+  assert.match(read("modules/restaurant/server/reportExportRoute.ts"), /guardRoute\(RESTAURANT_PERMISSIONS\.RESTAURANT_REPORTS\)/, "the Reports export: Restaurant Reports");
 });
 
 test("the editor page: redirected on the server without Manage Floor Plan (not just a hidden link)", () => {

@@ -52,7 +52,7 @@ async function settled(areaId: string, productId: string, closedAt: Date, device
 }
 
 const none: ReportFilters = { area: null, waiter: null, type: null, station: null, device: null };
-// Only this file's orders: the waiter (the copy's admin) on these far-off days.
+// Only this file's orders: its own waiter, on these far-off days.
 const mine = (f: Partial<ReportFilters> = {}): ReportFilters => ({ ...none, waiter: userId, ...f });
 const count = async (from: string, to: string, dayStart: number, f: ReportFilters) => {
   const result = await countSettledOrders(periodOf({ from, to }, dayStart), f);
@@ -62,7 +62,9 @@ const count = async (from: string, to: string, dayStart: number, f: ReportFilter
 
 describe("Reports shell (database copy)", { skip: enabled ? false : "set RESTAURANT_DB_TEST=1 and use a *_restaurant_check database" }, () => {
   before(async () => {
-    userId = (await prisma.user.findFirstOrThrow({ where: { deletedAt: null, userRole: { isSystem: true, deletedAt: null } }, select: { id: true } })).id;
+    // This file's own waiter: other files on the same copy settle orders too.
+    const admin = await prisma.user.findFirstOrThrow({ where: { deletedAt: null, userRole: { isSystem: true, deletedAt: null } }, select: { roleId: true } });
+    userId = (await prisma.user.create({ data: { firstName: "Shola", lastName: "Reports", email: `shola-${Date.now()}@check.test`, password: "x", roleId: admin.roleId }, select: { id: true } })).id;
     await prisma.businessSetting.upsert({ where: { id: "default" }, create: { id: "default" }, update: { restaurantServiceChargePercent: 0 } });
     // No receipt or drawer prints from this copy.
     await prisma.printerAssignment.deleteMany({ where: { role: "RECEIPT" } });

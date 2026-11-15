@@ -65,7 +65,7 @@ export async function setMenuItemFlag(input: unknown): Promise<ActionResult> {
     const parsed = menuItemFlagSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: "That change isn't valid." };
 
-    const result = await menuItems.setMenuItemFlag(parsed.data.id, parsed.data.field, parsed.data.value);
+    const result = await menuItems.setMenuItemFlag(parsed.data.id, parsed.data.field, parsed.data.value, authCheck.userId);
     if (result.ok) refresh();
     return result;
   });

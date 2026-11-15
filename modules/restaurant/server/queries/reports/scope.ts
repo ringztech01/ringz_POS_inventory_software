@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import type { ReportFilters, ReportPeriod } from "./filters";
 
 // What every restaurant report counts: orders settled in the period — Billed
@@ -32,3 +32,23 @@ export function settledOrdersWhere(period: Pick<ReportPeriod, "start" | "end">, 
     ...(filters.station ? { items: { some: { stationId: filters.station, deletedAt: null, cancelledAt: null } } } : {}),
   };
 }
+
+// The same, as SQL for the reports that add up in the database. Use with
+// ORDER_SALE (o: the Order, s: its Sale); closedIn adds the period.
+export const ORDER_SALE = Prisma.sql`\`Order\` o JOIN \`Sale\` s ON s.\`id\` = o.\`saleId\` AND s.\`deletedAt\` IS NULL`;
+
+export function orderScopeSql(filters: ReportFilters): Prisma.Sql {
+  const parts: Prisma.Sql[] = [Prisma.sql`o.\`deletedAt\` IS NULL AND o.\`training\` = 0 AND o.\`status\` = 'BILLED' AND o.\`closedAt\` IS NOT NULL`];
+  if (filters.area) parts.push(Prisma.sql`EXISTS (SELECT 1 FROM \`Table\` t WHERE t.\`id\` = o.\`tableId\` AND t.\`areaId\` = ${filters.area})`);
+  if (filters.waiter) parts.push(Prisma.sql`o.\`waiterId\` = ${filters.waiter}`);
+  if (filters.type) parts.push(Prisma.sql`o.\`type\` = ${filters.type}`);
+  if (filters.station) parts.push(Prisma.sql`EXISTS (SELECT 1 FROM \`OrderItem\` fi WHERE fi.\`orderId\` = o.\`id\` AND fi.\`stationId\` = ${filters.station} AND fi.\`deletedAt\` IS NULL AND fi.\`cancelledAt\` IS NULL)`);
+  if (filters.device) {
+    parts.push(
+      Prisma.sql`EXISTS (SELECT 1 FROM \`SalePayment\` fp JOIN \`TillSession\` ft ON ft.\`id\` = fp.\`tillSessionId\` WHERE fp.\`saleId\` = s.\`id\` AND fp.\`deletedAt\` IS NULL AND ft.\`deviceId\` = ${filters.device})`,
+    );
+  }
+  return Prisma.join(parts, " AND ");
+}
+
+export const closedIn = (period: Pick<ReportPeriod, "start" | "end">) => Prisma.sql`o.\`closedAt\` >= ${period.start} AND o.\`closedAt\` < ${period.end}`;

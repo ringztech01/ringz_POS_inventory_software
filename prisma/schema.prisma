@@ -241,6 +241,9 @@ model BusinessSetting {
   // midnight (Africa/Lagos) — 240: an order closed at 01:30 counts on the
   // day before. 0–360, in steps of 30 (Settings › Touch POS).
   restaurantDayStartMinutes       Int      @default(0)
+  // Restaurant Reports › Shifts & cash-up: a cash-up whose variance (over or
+  // short) is more than this shows red (Settings › Touch POS).
+  restaurantCashVarianceLimit     Decimal  @default(500) @db.Decimal(12, 2)
   // Emergency access (Part 6f Step 4): one recovery code at a time — its
   // bcrypt hash; used once by an Administrator on a device that isn't a
   // terminal. Made in Settings › Staff.
@@ -541,6 +544,7 @@ model Product {
   usedInRecipes       RecipeLine[]         @relation("RecipeIngredient")
   wasteEntries        WasteEntry[]
   wasteLines          WasteEntryLine[]
+  availabilityLog     MenuAvailabilityLog[]
   kitchenStation      KitchenStation?      @relation(fields: [stationId], references: [id], onDelete: SetNull)
   menuGroup           MenuGroup?           @relation(fields: [menuGroupId], references: [id], onDelete: SetNull)
 
@@ -877,6 +881,8 @@ model SaleReturn {
   @@index([customerId])
   @@index([warehouseId])
   @@index([date])
+  // Restaurant Reports (Step 11)
+  @@index([createdAt])
 }
 
 model SaleReturnItem {
@@ -1300,6 +1306,10 @@ model Order {
   @@index([discountById])
   @@index([discountApprovedById])
   @@index([openedAt])
+  // Restaurant Reports (Step 11)
+  @@index([status, closedAt])
+  @@index([waiterId, closedAt])
+  @@index([training, closedAt])
 }
 
 // One line of an order. Price, tax and modifiers are snapshots taken when
@@ -1338,6 +1348,12 @@ model OrderItem {
   // [{ productId, productName, quantity }]. A refund that goes back to stock
   // returns that many times this, even if the recipe has changed since.
   stockPerUnit  Json?
+  // What one of this line cost when the bill was settled — those stock lines
+  // × each product's cost then (Restaurant Reports' food cost). Null: some
+  // of them had no cost (or the line wasn't sold). Lines settled before it
+  // was recorded were filled in once from the recipes and costs of 12 Nov
+  // 2026 (add_order_item_cost).
+  unitCost      Decimal?  @db.Decimal(14, 4)
   // A remake (Kitchen Display › Remake): the line it remakes. Made at no
   // charge and never billed, settled, split or refunded — the waste entry
   // for the spoilt one takes its stock, the original line is billed once.
@@ -1368,6 +1384,9 @@ model OrderItem {
   @@index([stationId, kitchenStatus])
   @@index([remakeOfId])
   @@index([deletedAt])
+  // Restaurant Reports (Step 11)
+  @@index([orderId, productId])
+  @@index([cancelledAt])
 }
 
 // A set of choices for menu items (Portion, Extras, Spice level), shared by
@@ -1601,6 +1620,8 @@ model WasteEntry {
   @@index([loggedById])
   @@index([approvedById])
   @@index([deletedAt])
+  // Restaurant Reports (Step 11)
+  @@index([businessId, status, createdAt])
 }
 
 // One stock line of a waste entry: what came out (or, on a VOID entry, went
@@ -1730,6 +1751,8 @@ model Kot {
   @@index([stationId, bumpedAt])
   @@index([orderId])
   @@index([createdById])
+  // Restaurant Reports (Step 11)
+  @@index([orderId, createdAt])
 }
 
 // One line of a KOT, as it was when the ticket was made.
@@ -2001,6 +2024,9 @@ model DrawerEvent {
   @@index([reason, createdAt])
   @@index([printerId])
   @@index([userId])
+  // Restaurant Reports (Step 11)
+  @@index([businessId, createdAt])
+  @@index([deviceId, createdAt])
 }
 
 // A button group on the touch POS (Part 6e): a tree under each department —
@@ -2104,6 +2130,8 @@ model StaffShift {
 
   @@index([userId, endedAt])
   @@index([startedAt])
+  // Restaurant Reports (Step 11)
+  @@index([userId, startedAt])
 }
 
 // A till's session (Part 6f Step 7b, cash-up): a device opened with a float
@@ -2144,4 +2172,22 @@ enum TerminalRole {
   POS
   KITCHEN
   BAR
+}
+
+// Each time a menu item is 86'd or comes back (Food › Menu items' Available
+// switch), from 12 Nov 2026: Restaurant Reports' "86'd" minutes. available:
+// the state it changed to. Items already 86'd then got one row at that time.
+// Out of stock isn't recorded here.
+model MenuAvailabilityLog {
+  id        String   @id @default(cuid())
+  productId String
+  available Boolean
+  // Who switched it (none: before the log, or the system).
+  userId    String?
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id])
+
+  @@index([productId, createdAt])
+  @@index([createdAt])
 }

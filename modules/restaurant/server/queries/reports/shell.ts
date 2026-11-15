@@ -31,13 +31,15 @@ export async function getReportSetup(): Promise<ReportResult<ReportSetup>> {
     const [setting, areas, waiterIds, stations, deviceIds] = await Promise.all([
       prisma.businessSetting.findUnique({ where: { id: BUSINESS_SETTINGS_ID }, select: { restaurantDayStartMinutes: true } }),
       prisma.diningArea.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
-      prisma.order.groupBy({ by: ["waiterId"], where: { training: false, deletedAt: null, waiterId: { not: null } } }),
+      // Everyone who has waited an order (not a training one): one index
+      // lookup a person, stopping at their first — never a pass over the orders.
+      prisma.$queryRaw<{ waiterId: string }[]>`SELECT u.id AS waiterId FROM \`User\` u WHERE EXISTS (SELECT 1 FROM \`Order\` o WHERE o.waiterId = u.id AND o.training = 0 AND o.deletedAt IS NULL)`,
       prisma.kitchenStation.findMany({ where: { deletedAt: null }, orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
       prisma.tillSession.groupBy({ by: ["deviceId"] }),
     ]);
     const [waiters, devices] = await Promise.all([
       prisma.user.findMany({
-        where: { id: { in: waiterIds.map((w) => w.waiterId).filter((w): w is string => w !== null) } },
+        where: { id: { in: waiterIds.map((w) => w.waiterId) } },
         select: { id: true, displayName: true, firstName: true, lastName: true },
       }),
       prisma.device.findMany({ where: { id: { in: deviceIds.map((d) => d.deviceId) } }, select: { id: true, name: true, userAgent: true } }),

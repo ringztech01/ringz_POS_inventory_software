@@ -14,23 +14,29 @@ export type DonutSlice = {
   value: number;
   // Shown in the tooltip, e.g. "7 sold" or "₦560,000.00".
   detail?: string;
+  // Its own colour (otherwise the next of DONUT_COLORS).
+  color?: string;
 };
 
 type DonutCardProps = {
   title: string;
   headerExtra?: ReactNode;
   slices: DonutSlice[];
+  // Optional (Restaurant Reports): a list under the chart naming each slice
+  // with its detail and share, and a hole in the middle ("62%").
+  legend?: boolean;
+  cutout?: string;
 };
 
 // A doughnut card (RingzPOS Dashboard design): each slice's share of the
 // total. With no data it draws the design's single grey "No sales" disc,
 // without a tooltip.
-export default function DonutCard({ title, headerExtra, slices }: DonutCardProps) {
+export default function DonutCard({ title, headerExtra, slices, legend = false, cutout = "0%" }: DonutCardProps) {
   const total = slices.reduce((sum, slice) => sum + slice.value, 0);
   const empty = slices.length === 0 || total <= 0;
   const labels = empty ? ["No sales"] : slices.map((slice) => slice.label);
   const data = empty ? [1] : slices.map((slice) => slice.value);
-  const colors = empty ? [COLORS.border] : slices.map((_, i) => DONUT_COLORS[i % DONUT_COLORS.length]);
+  const colors = empty ? [COLORS.border] : slices.map((slice, i) => slice.color ?? DONUT_COLORS[i % DONUT_COLORS.length]);
 
   return (
     <div
@@ -56,13 +62,13 @@ export default function DonutCard({ title, headerExtra, slices }: DonutCardProps
         <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>{title}</h3>
         {headerExtra}
       </div>
-      <div style={{ padding: 22, height: 340, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div style={{ padding: 22, height: legend ? 220 : 340, display: "flex", alignItems: "center", justifyContent: "center" }}>
         <Doughnut
           data={{ labels, datasets: [{ data, backgroundColor: colors, borderWidth: 0 }] }}
           options={{
             responsive: true,
             maintainAspectRatio: false,
-            cutout: "0%",
+            cutout,
             plugins: {
               legend: { display: false },
               tooltip: empty
@@ -82,6 +88,18 @@ export default function DonutCard({ title, headerExtra, slices }: DonutCardProps
           }}
         />
       </div>
+      {legend && !empty && (
+        <ul data-donut-legend style={{ listStyle: "none", margin: 0, padding: "0 22px 18px", display: "flex", flexDirection: "column", gap: 8 }}>
+          {slices.map((slice, i) => (
+            <li key={slice.label} style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 13 }}>
+              <span aria-hidden style={{ width: 10, height: 10, borderRadius: 3, background: colors[i], flexShrink: 0 }} />
+              <span style={{ flex: 1, minWidth: 0 }}>{slice.label}</span>
+              {slice.detail && <span style={{ color: COLORS.slate, whiteSpace: "nowrap" }}>{slice.detail}</span>}
+              <span style={{ width: 52, textAlign: "right", fontWeight: 600, whiteSpace: "nowrap" }}>{Math.round((slice.value / total) * 1000) / 10}%</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

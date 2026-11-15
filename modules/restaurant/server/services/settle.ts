@@ -16,6 +16,7 @@ import { billPartLabel } from "../../lib/billSplit";
 import { orderRef } from "../../lib/format";
 import { orderToSale, toSalePayments } from "../../lib/orderToSale";
 import { resolveStockLines } from "../../lib/resolveStockLines";
+import { unitCostOf } from "../../lib/lineCost";
 import { tender, type Tender } from "../../lib/tender";
 import type { SettleInput } from "../../schemas/bill";
 import { lockOrderAt, STALE, type OrderFailure } from "./orders";
@@ -197,7 +198,8 @@ export async function settleOrder(input: SettleInput, userId: string, { deviceId
                     select: {
                       name: true,
                       productType: true,
-                      recipeLines: { where: { deletedAt: null }, select: { ingredientId: true, quantity: true, ingredient: { select: { name: true } } } },
+                      cost: true,
+                      recipeLines: { where: { deletedAt: null }, select: { ingredientId: true, quantity: true, ingredient: { select: { name: true, cost: true } } } },
                     },
                   },
                 },
@@ -255,10 +257,17 @@ export async function settleOrder(input: SettleInput, userId: string, { deviceId
               }
               await decreaseStock(tx, { productId: move.productId, warehouseId: order.warehouseId, quantity: move.quantity.toNumber(), productName: move.productName, warehouseName: order.warehouse.name });
             }
-            // What one of each line took, as settled — what a refund puts back (Step 7).
+            // What one of each line took, as settled — what a refund puts back (Step 7) —
+            // and what it cost then (Restaurant Reports' food cost).
+            const productCost = new Map<string, string | null>();
+            for (const line of order.items) {
+              productCost.set(line.productId, line.product.cost?.toString() ?? null);
+              for (const r of line.product.recipeLines) productCost.set(r.ingredientId, r.ingredient.cost?.toString() ?? null);
+            }
             for (const line of sold) {
               const perUnit = resolveStockLines([{ ...line, quantity: 1 }]).map((m) => ({ productId: m.productId, productName: m.productName, quantity: m.quantity.toNumber() }));
-              await tx.orderItem.update({ where: { id: line.id }, data: { stockPerUnit: perUnit } });
+              const unitCost = unitCostOf(line, productCost);
+              await tx.orderItem.update({ where: { id: line.id }, data: { stockPerUnit: perUnit, unitCost: unitCost ? unitCost.toFixed(4) : null } });
             }
             await tx.order.update({ where: { id: input.orderId }, data: { saleId } });
           } else {
