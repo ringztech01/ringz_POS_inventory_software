@@ -1,1 +1,1 @@
-export { default, metadata, viewport } from "@/modules/restaurant/pages/PublicMenuPage";
+export { default, metadata, generateViewport } from "@/modules/restaurant/pages/PublicMenuPage";

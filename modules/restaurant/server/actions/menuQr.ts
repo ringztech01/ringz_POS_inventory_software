@@ -2,11 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { parseMenuAddress } from "../../lib/menuAddress";
-import { menuAddressSchema, menuWifiSchema, newQrPointSchema, qrTargetSchema, renameQrPointSchema } from "../../schemas/menuQr";
+import { menuAddressSchema, menuDesignSchema, menuWifiSchema, newQrPointSchema, qrTargetSchema, renameQrPointSchema } from "../../schemas/menuQr";
 import { idSchema } from "../../schemas/common";
 import { requireMenuQr } from "../guard";
 import { safely } from "../safely";
-import { addQrPoint, removeQrPoint, renameQrPoint, rotateQr, saveMenuAddress, saveMenuWifi } from "../services/menuQr";
+import { addQrPoint, removeQrPoint, renameQrPoint, rotateQr, saveMenuAddress, saveMenuDesign, saveMenuWifi } from "../services/menuQr";
 
 // Digital menu › QR codes (Part 8 Step 2). The Administrator or Manage Floor
 // Plan (requireMenuQr), checked before anything is read.
@@ -29,6 +29,17 @@ export async function saveMenuAddressAction(input: unknown): Promise<MenuQrAnswe
     const address = parseMenuAddress(parsed.data.address);
     if (!address.ok) return address;
     await saveMenuAddress(address.url, auth.userId);
+    return done();
+  });
+}
+
+export async function saveMenuDesignAction(input: unknown): Promise<MenuQrAnswer> {
+  return safely("save menu design", async (): Promise<MenuQrAnswer> => {
+    const auth = await requireMenuQr();
+    if (auth.error !== undefined) return { ok: false, error: auth.error };
+    const parsed = menuDesignSchema.safeParse(input);
+    if (!parsed.success) return BAD;
+    await saveMenuDesign(parsed.data.design, auth.userId);
     return done();
   });
 }

@@ -2237,6 +2237,14 @@ enum MenuCurrencyDisplay {
   CODE
 }
 
+// The guest menu's look: SHOWCASE, the dark one with the dishes up front
+// (the default, design: RingzPOS Digital Menu v2); CLASSIC, the light,
+// plain one Part 8 started with.
+enum MenuDesign {
+  SHOWCASE
+  CLASSIC
+}
+
 // A QR code that isn't a table: "Takeaway counter", "Bar". Its token is
 // made like a table's (lib/qrToken.ts: 144 random bits) and only says which
 // point it is.
@@ -2367,6 +2375,7 @@ model MenuSettings {
   logoPath              String?
   accentColour          String              @default("#0f7d6a") @db.VarChar(7)
   currencyDisplay       MenuCurrencyDisplay @default(SYMBOL)
+  menuDesign            MenuDesign          @default(SHOWCASE)
   callWaiterEnabled     Boolean             @default(false)
   requestBillEnabled    Boolean             @default(false)
   // Guest ordering's caps (Step 7): lines per order, and its value (the

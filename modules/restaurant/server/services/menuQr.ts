@@ -25,6 +25,15 @@ export async function saveMenuAddress(url: string, userId: string): Promise<Serv
   return { ok: true };
 }
 
+// The guest menu's look (Showcase or Classic): every menu switches at its
+// next load.
+export async function saveMenuDesign(design: "SHOWCASE" | "CLASSIC", userId: string): Promise<ServiceResult> {
+  const before = await menuSettings();
+  await prisma.menuSettings.update({ where: { id: before.id }, data: { menuDesign: design } });
+  if (before.menuDesign !== design) await writeAudit({ userId, action: "menu.design.update", entityType: "MenuSettings", entityId: before.id, meta: { from: before.menuDesign, to: design } });
+  return { ok: true };
+}
+
 export async function saveMenuWifi(name: string, password: string, userId: string): Promise<ServiceResult> {
   const before = await menuSettings();
   const wifiName = name.trim() || null;

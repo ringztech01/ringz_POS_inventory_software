@@ -3,17 +3,17 @@
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { AlertTriangle, BellRing, Download, Pencil, Plus, Printer, RefreshCw, Trash2, Wifi } from "lucide-react";
+import { AlertTriangle, BellRing, Download, Palette, Pencil, Plus, Printer, RefreshCw, Trash2, Wifi } from "lucide-react";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import type { AddressChoice } from "../../lib/menuAddress";
-import { QR_POINT_NAME_MAX, QR_POINT_TYPE_LABELS, QR_POINT_TYPES, WIFI_MAX } from "../../schemas/menuQr";
+import { QR_POINT_NAME_MAX, QR_POINT_TYPE_LABELS, QR_POINT_TYPES, WIFI_MAX, type MenuDesignChoice } from "../../schemas/menuQr";
 import { saveServiceButtonsAction } from "../../server/actions/tableRequests";
 import GuestOrderingCard, { type GuestOrderingView } from "./GuestOrderingCard";
-import { addQrPointAction, removeQrPointAction, renameQrPointAction, rotateMenuQrAction, saveMenuAddressAction, saveMenuWifiAction, type MenuQrAnswer } from "../../server/actions/menuQr";
+import { addQrPointAction, removeQrPointAction, renameQrPointAction, rotateMenuQrAction, saveMenuAddressAction, saveMenuDesignAction, saveMenuWifiAction, type MenuQrAnswer } from "../../server/actions/menuQr";
 
 // Digital menu › QR codes (Part 8 Step 2): the address the codes open, the
-// Wi-Fi printed on the cards, the guest buttons on a table's menu (Call
+// Wi-Fi printed on the cards, the menu's look (Showcase or Classic), the guest buttons on a table's menu (Call
 // waiter / Request bill, Step 6), every table's and QR point's code with Print,
 // Download PNG and Rotate, and the QR points themselves.
 
@@ -33,6 +33,7 @@ type Props = {
   choices: AddressChoice[];
   wifiName: string;
   wifiPassword: string;
+  design: MenuDesignChoice;
   serviceButtons: { callWaiter: boolean; requestBill: boolean };
   ordering: GuestOrderingView;
   tables: QrRowView[];
@@ -121,7 +122,24 @@ function Switch({ on, label, help, disabled, onChange, data }: { on: boolean; la
   );
 }
 
-export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, serviceButtons, ordering, tables, points, reportsPrinter }: Props) {
+// The two looks, each with a small picture of itself.
+const DESIGNS: { value: MenuDesignChoice; name: string; help: string; swatch: [string, string, string] }[] = [
+  { value: "SHOWCASE", name: "Showcase", help: "Dark and warm, big round dish photos, the chef's signatures to swipe, 360° and 3D up front. The default.", swatch: ["#14100D", "#F2A93B", "#F5EDE1"] },
+  { value: "CLASSIC", name: "Classic", help: "Light and plain in the menu's accent colour, system fonts: the lightest on old phones.", swatch: ["#fafbfb", "#0f7d6a", "#171b1c"] },
+];
+
+function DesignSwatch({ swatch: [bg, accent, ink] }: { swatch: [string, string, string] }) {
+  return (
+    <span aria-hidden style={{ width: 54, height: 72, flexShrink: 0, borderRadius: 8, background: bg, border: `1px solid ${COLORS.border}`, padding: 6, display: "flex", flexDirection: "column", gap: 4 }}>
+      <span style={{ height: 6, width: "70%", borderRadius: 3, background: ink, opacity: 0.85 }} />
+      <span style={{ height: 14, borderRadius: 7, background: accent }} />
+      <span style={{ flex: 1, borderRadius: 4, background: ink, opacity: 0.12 }} />
+      <span style={{ flex: 1, borderRadius: 4, background: ink, opacity: 0.12 }} />
+    </span>
+  );
+}
+
+export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, design, serviceButtons, ordering, tables, points, reportsPrinter }: Props) {
   const router = useRouter();
   const [typed, setTyped] = useState(address ?? choices.find((c) => c.kind === "ip")?.url ?? "");
   const [wifi, setWifi] = useState({ name: wifiName, password: wifiPassword });
@@ -257,6 +275,39 @@ export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, 
           <Button tone="primary" disabled={busy !== null || (wifi.name === wifiName && wifi.password === wifiPassword)} onClick={() => act("wifi", () => saveMenuWifiAction(wifi), "Wi-Fi saved.")} data={{ "wifi-save": "" }}>
             Save Wi-Fi
           </Button>
+        </div>
+      </section>
+
+      <section data-menu-design-card style={card}>
+        <span style={{ fontSize: 14, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
+          <Palette size={16} strokeWidth={1.8} /> Menu design
+        </span>
+        <span style={{ fontSize: 12.5, color: COLORS.slateMid }}>How the menu looks on guests&apos; phones. Both show the same dishes, prices and buttons; a phone switches when it next opens or refreshes the menu.</span>
+        <div role="radiogroup" aria-label="Menu design" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: 10 }}>
+          {DESIGNS.map((d) => {
+            const on = d.value === design;
+            return (
+              <button
+                key={d.value}
+                type="button"
+                role="radio"
+                aria-checked={on}
+                data-menu-design={d.value}
+                disabled={busy !== null}
+                onClick={() => !on && act("design", () => saveMenuDesignAction({ design: d.value }), `The menu now uses the ${d.name} design.`)}
+                style={{ display: "flex", gap: 12, alignItems: "flex-start", textAlign: "left", padding: 12, borderRadius: 10, border: `1.5px solid ${on ? COLORS.teal : COLORS.borderStrong}`, background: on ? COLORS.tealTint : "#fff", cursor: on || busy !== null ? "default" : "pointer", color: COLORS.ink, fontFamily: "inherit" }}
+              >
+                <DesignSwatch swatch={d.swatch} />
+                <span style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                  <span style={{ fontSize: 13.5, fontWeight: 600 }}>
+                    {d.name}
+                    {on && <span style={{ marginLeft: 8, fontSize: 11.5, fontWeight: 600, color: COLORS.teal }}>In use</span>}
+                  </span>
+                  <span style={{ fontSize: 12.5, color: COLORS.slateMid, lineHeight: 1.45 }}>{d.help}</span>
+                </span>
+              </button>
+            );
+          })}
         </div>
       </section>
 

@@ -114,7 +114,15 @@ const settingsSelect = {
   logoPath: true,
   accentColour: true,
   currencyDisplay: true,
+  menuDesign: true,
 } as const;
+
+// The guest menu's look, on its own (the page's theme colour needs it
+// before the menu loads). No settings row yet: Showcase.
+export async function menuDesign(): Promise<"SHOWCASE" | "CLASSIC"> {
+  const settings = await prisma.menuSettings.findUnique({ where: { businessId: BUSINESS_SETTINGS_ID }, select: { menuDesign: true } });
+  return settings?.menuDesign ?? "SHOWCASE";
+}
 
 export type PublicMenuPage =
   | { kind: "off" }
@@ -122,6 +130,8 @@ export type PublicMenuPage =
   | { kind: "closed"; title: string }
   | {
       kind: "menu";
+      // Showcase (the default) or Classic (Digital menu › QR codes).
+      design: "SHOWCASE" | "CLASSIC";
       where: PublicMenuWhere;
       header: PublicMenuHeader;
       sections: PublicMenuSection[];
@@ -205,6 +215,7 @@ export async function loadPublicMenu(token: string): Promise<PublicMenuPage> {
   const departments = (["FOOD", "BAR"] as const).filter((d) => items.some((i) => i.department === d));
   return {
     kind: "menu",
+    design: settings?.menuDesign ?? "SHOWCASE",
     where: { title: where.title, area: where.area, startDepartment: departments.includes(where.startDepartment) ? where.startDepartment : (departments[0] ?? "FOOD") },
     header: {
       title,

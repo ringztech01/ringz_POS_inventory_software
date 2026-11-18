@@ -1,15 +1,20 @@
 import type { Metadata, Viewport } from "next";
 import { notFound } from "next/navigation";
 import { MENU_STRINGS as S } from "../lib/menuStrings";
-import { loadPublicMenu } from "../server/queries/publicMenu";
+import { loadPublicMenu, menuDesign } from "../server/queries/publicMenu";
 import PublicMenu from "../components/publicMenu/PublicMenu";
+import ShowcaseMenu from "../components/publicMenu/showcase/ShowcaseMenu";
 
 // /menu/[qrToken] — the guest's digital menu (Part 8 Step 3): public, on the
 // restaurant's Wi-Fi, no sign-in. 404 while the module is off; a code that
-// was rotated, removed or mistyped gets a friendly message instead.
+// was rotated, removed or mistyped gets a friendly message instead. In the
+// Showcase design (the default) or Classic, as Digital menu › QR codes says.
 
 export const metadata: Metadata = { title: S.defaultTitle, robots: { index: false, follow: false } };
-export const viewport: Viewport = { width: "device-width", initialScale: 1, themeColor: "#0f7d6a" };
+// The phone's browser bar matches the design.
+export async function generateViewport(): Promise<Viewport> {
+  return { width: "device-width", initialScale: 1, themeColor: (await menuDesign()) === "CLASSIC" ? "#0f7d6a" : "#14100D" };
+}
 
 const FONT = `-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`;
 
@@ -31,5 +36,8 @@ export default async function PublicMenuPage({ params }: { params: Promise<{ qrT
   if (page.kind === "off") notFound();
   if (page.kind === "inactive") return <Message title={S.inactiveTitle} body={S.inactiveBody} />;
   if (page.kind === "closed") return <Message heading={page.title} title={S.closedTitle} body={S.closedBody} />;
+  if (page.design === "SHOWCASE") {
+    return <ShowcaseMenu token={qrToken} where={page.where} header={page.header} sections={page.sections} items={page.items} departments={page.departments} service={page.service} ordering={page.ordering} />;
+  }
   return <PublicMenu token={qrToken} where={page.where} header={page.header} sections={page.sections} items={page.items} departments={page.departments} service={page.service} ordering={page.ordering} />;
 }

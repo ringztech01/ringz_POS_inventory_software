@@ -8,6 +8,11 @@ export const WIFI_MAX = 64;
 
 export const menuAddressSchema = z.object({ address: z.string().max(300) });
 
+// The guest menu's look: Showcase (the default) or Classic.
+export const MENU_DESIGNS = ["SHOWCASE", "CLASSIC"] as const;
+export type MenuDesignChoice = (typeof MENU_DESIGNS)[number];
+export const menuDesignSchema = z.object({ design: z.enum(MENU_DESIGNS) });
+
 export const menuWifiSchema = z.object({
   name: z.string().trim().max(WIFI_MAX, `At most ${WIFI_MAX} characters.`),
   password: z.string().max(WIFI_MAX, `At most ${WIFI_MAX} characters.`),

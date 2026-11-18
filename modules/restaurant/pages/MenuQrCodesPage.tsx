@@ -35,6 +35,7 @@ export default async function MenuQrCodesPage() {
         choices={choices}
         wifiName={page.wifiName ?? ""}
         wifiPassword={page.wifiPassword ?? ""}
+        design={page.design}
         serviceButtons={{ callWaiter: page.callWaiter, requestBill: page.requestBill }}
         ordering={page.ordering}
         tables={tables}

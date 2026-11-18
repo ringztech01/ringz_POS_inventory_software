@@ -14,7 +14,8 @@ import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "@/lib/db";
 import { newQrToken } from "../lib/qrToken";
-import { addQrPoint, removeQrPoint, renameQrPoint, rotateQr, saveMenuAddress, saveMenuWifi } from "../server/services/menuQr";
+import { addQrPoint, removeQrPoint, renameQrPoint, rotateQr, saveMenuAddress, saveMenuDesign, saveMenuWifi } from "../server/services/menuQr";
+import { loadPublicMenu, menuDesign } from "../server/queries/publicMenu";
 import { buildMenuCards, getMenuQrPage } from "../server/queries/menuQr";
 import { findTableByQrToken } from "../server/queries/tables";
 import { savedMenuAddress } from "../server/qr";
@@ -117,6 +118,37 @@ describe("Digital menu QR codes (database copy)", { skip }, () => {
     const logged = await prisma.auditLog.findMany({ where: { userId, action: "menu.wifi.update" }, select: { meta: true } });
     assert.equal(logged.length, 2);
     assert.ok(!JSON.stringify(logged).includes("jollof2026"), "no password in the log");
+  });
+});
+
+describe("The menu design (database copy)", { skip }, () => {
+  test("Showcase by default; Classic saved and logged once; the guest's page follows; back to Showcase", async () => {
+    const admin = await prisma.user.findFirstOrThrow({ where: { deletedAt: null, userRole: { isSystem: true, deletedAt: null } }, select: { id: true } });
+    const table = await prisma.table.findFirstOrThrow({ where: { deletedAt: null, area: { deletedAt: null } }, select: { qrToken: true } });
+    const s = await prisma.menuSettings.findFirstOrThrow();
+    const was = s.menuDesign;
+    try {
+      await prisma.menuSettings.update({ where: { id: s.id }, data: { menuDesign: "SHOWCASE" } });
+      assert.equal((await getMenuQrPage()).design, "SHOWCASE");
+      assert.equal(await menuDesign(), "SHOWCASE");
+      const shown = await loadPublicMenu(table.qrToken);
+      assert.equal(shown.kind === "menu" ? shown.design : shown.kind, "SHOWCASE");
+
+      const since = new Date(Date.now() - 1000);
+      await saveMenuDesign("CLASSIC", admin.id);
+      await saveMenuDesign("CLASSIC", admin.id);
+      assert.equal((await getMenuQrPage()).design, "CLASSIC");
+      assert.equal(await menuDesign(), "CLASSIC");
+      const classic = await loadPublicMenu(table.qrToken);
+      assert.equal(classic.kind === "menu" ? classic.design : classic.kind, "CLASSIC");
+      const logged = await prisma.auditLog.findMany({ where: { userId: admin.id, action: "menu.design.update", createdAt: { gte: since } }, select: { meta: true } });
+      assert.deepEqual(logged.map((l) => l.meta), [{ from: "SHOWCASE", to: "CLASSIC" }], "logged once: the second save changed nothing");
+
+      await saveMenuDesign("SHOWCASE", admin.id);
+      assert.equal(await menuDesign(), "SHOWCASE");
+    } finally {
+      await prisma.menuSettings.update({ where: { id: s.id }, data: { menuDesign: was } });
+    }
   });
 });
 

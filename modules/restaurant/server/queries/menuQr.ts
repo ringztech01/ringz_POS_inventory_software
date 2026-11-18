@@ -17,6 +17,8 @@ export type MenuQrPageData = {
   address: string | null;
   wifiName: string | null;
   wifiPassword: string | null;
+  // The guest menu's look.
+  design: "SHOWCASE" | "CLASSIC";
   // The guest buttons on a table's menu (Step 6).
   callWaiter: boolean;
   requestBill: boolean;
@@ -42,6 +44,7 @@ export async function getMenuQrPage(): Promise<MenuQrPageData> {
     address: settings.menuBaseUrl,
     wifiName: settings.wifiName,
     wifiPassword: settings.wifiPassword,
+    design: settings.menuDesign,
     callWaiter: settings.callWaiterEnabled,
     requestBill: settings.requestBillEnabled,
     ordering: {
