@@ -57,14 +57,15 @@ export async function getPosStaff(): Promise<{ staff: PosStaff[]; withoutPin: nu
   return { staff: staff.map((u) => ({ id: u.id, name: `${u.firstName} ${u.lastName.slice(0, 1)}${u.lastName ? "." : ""}`.trim(), role: u.userRole?.name })), withoutPin };
 }
 
-export type CounterOrder = { id: string; ref: string; label: string; type: OrderType; open: string; lines: number; waiter: string | null; training: boolean };
+// note: "Pay at counter" / "Pay at the bar" on a QR point's order (Part 8 Step 8).
+export type CounterOrder = { id: string; ref: string; label: string; type: OrderType; open: string; lines: number; waiter: string | null; training: boolean; note: string | null };
 
 // Open orders with no table (takeaways, bar tabs, deliveries), oldest
 // first — to pick up again from the touch POS's floor plan.
 export async function getCounterOrders(): Promise<CounterOrder[]> {
   const orders = await prisma.order.findMany({
     where: { deletedAt: null, tableId: null, status: { in: ["OPEN", "SENT", "SERVED"] } },
-    select: { id: true, number: true, type: true, tabName: true, openedAt: true, training: true, waiter: { select: { firstName: true } }, _count: { select: { items: { where: { deletedAt: null, cancelledAt: null } } } } },
+    select: { id: true, number: true, type: true, tabName: true, notes: true, openedAt: true, training: true, waiter: { select: { firstName: true } }, _count: { select: { items: { where: { deletedAt: null, cancelledAt: null } } } } },
     orderBy: [{ openedAt: "asc" }, { number: "asc" }],
     take: 40,
   });
@@ -78,5 +79,6 @@ export async function getCounterOrders(): Promise<CounterOrder[]> {
     lines: o._count.items,
     waiter: o.waiter?.firstName ?? null,
     training: o.training,
+    note: o.notes,
   }));
 }

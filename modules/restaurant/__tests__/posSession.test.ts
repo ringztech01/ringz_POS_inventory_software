@@ -44,7 +44,10 @@ test("no secret, no token", () => {
 test("an order with no table: a bar tab by its name, others by their type", () => {
   assert.equal(noTableLabel("BAR_TAB", "Ada"), "Tab · Ada");
   assert.equal(noTableLabel("BAR_TAB", null), "Bar tab");
-  assert.equal(noTableLabel("TAKEAWAY", "ignored"), "Takeaway");
+  assert.equal(noTableLabel("TAKEAWAY", null), "Takeaway");
+  // A takeaway a guest ordered from a QR point carries their name (Part 8 Step 8).
+  assert.equal(noTableLabel("TAKEAWAY", "Ada"), "Takeaway · Ada");
+  assert.equal(noTableLabel("DELIVERY", "ignored"), "Delivery");
 });
 
 test("what the browser may send: a takeaway, a named tab, a PIN, the settings", () => {

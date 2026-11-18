@@ -3,7 +3,7 @@ import { ArrowLeft } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
-import { appOrigin, menuUrl, qrSvg } from "../server/qr";
+import { menuOrigin, menuUrl, qrSvg } from "../server/qr";
 import { getQrSheetTables } from "../server/queries/tables";
 import PrintSheetButton from "../components/tables/PrintSheetButton";
 
@@ -15,7 +15,7 @@ export default async function QrSheetPage({ searchParams }: { searchParams: Prom
   if (denied) return <div style={{ padding: 32 }}>{denied}</div>;
 
   const { area } = await searchParams;
-  const [tables, origin] = await Promise.all([getQrSheetTables(area || undefined), appOrigin()]);
+  const [tables, origin] = await Promise.all([getQrSheetTables(area || undefined), menuOrigin()]);
   // SVG made here from our own URL — safe to inline.
   const codes = await Promise.all(tables.map(async (table) => ({ ...table, svg: await qrSvg(menuUrl(origin, table.qrToken)) })));
   const scope = area && tables[0] ? tables[0].areaName : "All areas";

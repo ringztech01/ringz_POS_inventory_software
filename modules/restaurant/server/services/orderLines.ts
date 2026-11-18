@@ -34,7 +34,7 @@ const groupSelect = {
   orderBy: [{ sortOrder: "asc" as const }, { name: "asc" as const }],
 };
 
-type Dish = Prisma.ProductGetPayload<{
+export type Dish = Prisma.ProductGetPayload<{
   select: {
     id: true;
     name: true;
@@ -48,7 +48,8 @@ type Dish = Prisma.ProductGetPayload<{
   };
 }>;
 
-async function loadDish(tx: Prisma.TransactionClient, productId: string): Promise<Dish | null> {
+// Also the guest's order (Part 8 Step 7): the same dish, the same rules.
+export async function loadDish(tx: Prisma.TransactionClient, productId: string): Promise<Dish | null> {
   return tx.product.findFirst({
     where: { id: productId, productType: "MENU_ITEM", deletedAt: null },
     select: {
@@ -72,7 +73,7 @@ const liveGroups = (dish: Dish) => dish.modifierGroups.filter((g) => g.modifiers
 // Checks the chosen options against the dish's groups (min / max, options
 // that belong to it) and returns them in the dish's group order, priced.
 // `keepPrices`: options already on the line keep their snapshot price.
-function chooseOptions(dish: Dish, modifierIds: readonly string[], keepPrices: ReadonlyMap<string, string> = new Map()) {
+export function chooseOptions(dish: Dish, modifierIds: readonly string[], keepPrices: ReadonlyMap<string, string> = new Map()) {
   const groups = liveGroups(dish);
   const problem = checkSelection(
     groups.map((g) => ({ id: g.id, name: g.name, minSelect: g.minSelect, maxSelect: g.maxSelect, optionIds: g.modifiers.map((m) => m.id) })),

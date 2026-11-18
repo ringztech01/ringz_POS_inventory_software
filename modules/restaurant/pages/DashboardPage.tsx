@@ -1,3 +1,6 @@
+import { prisma } from "@/lib/db";
+import { BUSINESS_SETTINGS_ID } from "@/lib/business-settings";
+import GuestOrderingSwitch from "../components/dashboard/GuestOrderingSwitch";
 import Link from "next/link";
 import { Banknote, CircleX, ClipboardList, Clock, ConciergeBell, LayoutGrid, ReceiptText, Trash2, Users } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
@@ -75,6 +78,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     loadWidget("top wasted items", getTopWastedItems(now)),
     getCurrentUserPermissions(),
   ]);
+  // Guest ordering's pause switch (Part 8 Step 7): for whoever looks after
+  // the menu, while guest ordering is on.
+  const mayPause = !!current.userId && (current.isAdmin || current.permissions.has(RESTAURANT_PERMISSIONS.MANAGE_FLOOR_PLAN));
+  const guestOrdering = mayPause ? await prisma.menuSettings.findUnique({ where: { businessId: BUSINESS_SETTINGS_ID }, select: { guestOrderingEnabled: true, guestOrderingPausedAt: true } }) : null;
   const canOpenWaste = current.permissions.has(RESTAURANT_PERMISSIONS.LOG_WASTE) || current.permissions.has(RESTAURANT_PERMISSIONS.APPROVE_WASTE);
   const vsName = period.previousName;
   const place = warehouses.ok && warehouses.data.length ? `${warehouses.data.join(", ")} · ` : "";
@@ -87,6 +94,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
       <HeaderActions>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {guestOrdering?.guestOrderingEnabled && <GuestOrderingSwitch paused={!!guestOrdering.guestOrderingPausedAt} />}
           <RangeSelect value={period.key} />
           <Link
             href={routes.tables()}

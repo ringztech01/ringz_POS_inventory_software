@@ -10,6 +10,9 @@ import { withCheck } from "../../lib/orderLines";
 import { lineAmount, orderTotals } from "../../lib/orderTotals";
 import type { FixtureType, TableShape } from "../../lib/floorGeometry";
 import { TABLE_STATUSES, tableStatus, type TableStatus } from "../../lib/tableStatus";
+import { activeRequestWhere, type FloorRequest } from "../../lib/tableRequests";
+import type { FloorGuestOrder, PendingGuestLine } from "../../lib/guestOrdering";
+import { lineDetail, noTableLabel, readModifiers } from "../../lib/orderLines";
 import { formatAppTime, formatOpenFor } from "../../lib/time";
 import { getTableStatusRules } from "../rules";
 import { byFloorOrder, tableStateSelect } from "./tables";
@@ -57,6 +60,8 @@ export type FloorOrder = {
   lines: { id: string; quantity: number; name: string; amount: string; kitchenStatus: KitchenStatus }[];
   // Dishes the kitchen has finished, waiting to be served (the card's dot).
   ready: number;
+  // A guest's lines from the menu waiting for a waiter (Part 8 Step 7).
+  pending: PendingGuestLine[];
 };
 
 export type FloorTable = {
@@ -115,6 +120,13 @@ export type FloorData = {
   room: { widthM: number; heightM: number } | null;
   fixtures: FloorFixtureView[];
   targets: FloorTarget[];
+  // Guests' Call waiter / Request bill still to deal with (Part 8 Step 6),
+  // every area's — the selected area's tables show a bell; the toasts
+  // reach a waiter wherever they're looking.
+  requests: FloorRequest[];
+  // Guests' orders from the menu waiting for a waiter (Part 8 Step 7),
+  // every area's.
+  guestOrders: FloorGuestOrder[];
 };
 
 // The floor plan: every table's status from tableStatus (for the legend),
@@ -123,7 +135,7 @@ export type FloorData = {
 export async function getFloor(areaParam?: string): Promise<FloorData> {
   const now = new Date();
   const [rules, settings] = await Promise.all([getTableStatusRules(), getBusinessSettings()]);
-  const [areas, tables] = await Promise.all([
+  const [areas, tables, requestRows] = await Promise.all([
     prisma.diningArea.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true, roomWidthM: true, roomHeightM: true, layouts: { where: { isActive: true }, select: { name: true }, take: 1 } },
@@ -145,6 +157,11 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
         area: { select: { sortOrder: true, createdAt: true, name: true, warehouseId: true } },
         ...tableStateSelect(now, rules),
       },
+    }),
+    prisma.tableRequest.findMany({
+      where: { ...activeRequestWhere(now), table: { deletedAt: null, area: { deletedAt: null } } },
+      select: { id: true, tableId: true, type: true, status: true, createdAt: true },
+      orderBy: { createdAt: "asc" },
     }),
   ]);
   const areaId = areas.some((area) => area.id === areaParam) ? (areaParam ?? null) : (areas[0]?.id ?? null);
@@ -188,6 +205,11 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
           discountValue: true,
           serviceCharge: true,
           waiter: { select: { firstName: true, lastName: true } },
+          guestLines: {
+            where: { status: "PENDING" },
+            select: { id: true, sendId: true, quantity: true, unitPrice: true, modifiers: true, note: true, createdAt: true, product: { select: { name: true } } },
+            orderBy: { createdAt: "asc" },
+          },
           items: {
             where: { deletedAt: null, cancelledAt: null },
             select: {
@@ -243,10 +265,85 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
         kitchenStatus: line.kitchenStatus,
       })),
       ready: order.items.filter((line) => line.kitchenStatus === "READY").reduce((sum, line) => sum + line.quantity, 0),
+      pending: order.guestLines.map((g) => ({
+        id: g.id,
+        name: g.product.name,
+        quantity: g.quantity,
+        detail: lineDetail(readModifiers(g.modifiers), g.note),
+        amount: formatNaira(g.unitPrice.times(g.quantity).toFixed(2)),
+        time: formatAppTime(g.createdAt),
+      })),
     };
   };
 
+  const stateOf = new Map(states.map(({ table, state }) => [table.id, { table, state }]));
+  const requests = requestRows.flatMap((r): FloorRequest[] => {
+    const held = stateOf.get(r.tableId);
+    if (!held || r.status === "DONE") return [];
+    return [
+      {
+        id: r.id,
+        tableId: r.tableId,
+        tableName: held.table.name,
+        areaId: held.table.areaId,
+        areaName: held.table.area.name,
+        type: r.type,
+        status: r.status,
+        minutes: Math.max(0, Math.floor((now.getTime() - r.createdAt.getTime()) / 60_000)),
+        waiterIds: [...new Set(held.state.orders.flatMap((o) => byId.get(o.id)?.waiterId ?? []))],
+      },
+    ];
+  });
+
+  const guestOrders = states.flatMap(({ table, state }) =>
+    state.orders.flatMap((held): FloorGuestOrder[] => {
+      const order = byId.get(held.id);
+      // A training order (Part 6f) never carries a guest's order.
+      if (!order || order.training || order.guestLines.length === 0) return [];
+      const first = order.guestLines[0];
+      return [
+        {
+          orderId: order.id,
+          tableId: table.id,
+          tableName: table.name,
+          areaId: table.areaId,
+          areaName: table.area.name,
+          label: null,
+          lines: order.guestLines.length,
+          sendId: order.guestLines[order.guestLines.length - 1].sendId,
+          minutes: Math.max(0, Math.floor((now.getTime() - first.createdAt.getTime()) / 60_000)),
+          waiterIds: order.waiterId ? [order.waiterId] : [],
+        },
+      ];
+    }),
+  );
+
+  // QR points' takeaways and tabs (Step 8) with lines waiting: no table, so
+  // they're found by their held lines.
+  const counterRows = await prisma.order.findMany({
+    where: { tableId: null, deletedAt: null, training: false, status: { in: ["OPEN", "SENT", "SERVED"] }, guestLines: { some: { status: "PENDING" } } },
+    select: { id: true, type: true, tabName: true, waiterId: true, guestLines: { where: { status: "PENDING" }, select: { sendId: true, createdAt: true }, orderBy: { createdAt: "asc" } } },
+    orderBy: { openedAt: "asc" },
+    take: 40,
+  });
+  for (const order of counterRows) {
+    guestOrders.push({
+      orderId: order.id,
+      tableId: null,
+      tableName: "",
+      areaId: null,
+      areaName: "",
+      label: noTableLabel(order.type, order.tabName),
+      lines: order.guestLines.length,
+      sendId: order.guestLines[order.guestLines.length - 1].sendId,
+      minutes: Math.max(0, Math.floor((now.getTime() - order.guestLines[0].createdAt.getTime()) / 60_000)),
+      waiterIds: order.waiterId ? [order.waiterId] : [],
+    });
+  }
+
   return {
+    requests,
+    guestOrders,
     areas: areas.map((area) => ({ id: area.id, name: area.name, layout: area.layouts[0]?.name ?? null, ...areaCounts(area.id) })),
     room: shown ? { widthM: Number(shown.roomWidthM), heightM: Number(shown.roomHeightM) } : null,
     fixtures: fixtures.map((f) => ({ id: f.id, type: f.type, label: f.label, ...metres(f) })),

@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { DEVICE_COOKIE, DEVICE_ID } from "@/lib/hardware/device";
 import { isModuleEnabled } from "@/lib/modules/enabled.server";
 import { isServicePath } from "@/modules/restaurant/lib/serviceAccess";
+import { GUEST_SURFACE_HEADER, isGuestMenuPath } from "@/modules/restaurant/lib/publicMenu";
 import { staffHomeOn } from "@/modules/restaurant/server/services/pinSignIn";
 
 const PUBLIC_PATHS = ["/", "/api/auth"];
@@ -13,6 +14,14 @@ function isPublicPath(pathname: string) {
 
 export default auth(async (req) => {
   const { pathname } = req.nextUrl;
+  // Part 8: the guest's digital menu (/menu/…) is public — guests scan a QR
+  // code on the restaurant's Wi-Fi, no sign-in — and staff signed in on the
+  // same phone see it too. Marked so the root layout serves it lean.
+  if (isGuestMenuPath(pathname)) {
+    const headers = new Headers(req.headers);
+    headers.set(GUEST_SURFACE_HEADER, "menu");
+    return NextResponse.next({ request: { headers } });
+  }
   if (!req.auth && !isPublicPath(pathname)) {
     return NextResponse.redirect(new URL("/", req.nextUrl));
   }
@@ -26,6 +35,13 @@ export default auth(async (req) => {
   if (user?.id && user.accessLevel === "SERVICE" && !isServicePath(pathname)) {
     const home = await serviceHome(user.id, req.cookies.get(DEVICE_COOKIE)?.value ?? "");
     if (home) return NextResponse.redirect(new URL(home, req.nextUrl));
+  }
+
+  // Only the proxy marks a guest menu request: one sent from outside is dropped.
+  if (req.headers.has(GUEST_SURFACE_HEADER)) {
+    const headers = new Headers(req.headers);
+    headers.delete(GUEST_SURFACE_HEADER);
+    return NextResponse.next({ request: { headers } });
   }
 });
 

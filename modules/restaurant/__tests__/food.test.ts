@@ -49,8 +49,8 @@ test("menu item form: required fields, price format, code characters, descriptio
   for (const price of ["0", "0.00", "-5", "18.555", "abc", "1,000"]) assert.deepEqual(errors({ ...valid, price }), ["price"], price);
   for (const price of ["18", "18.5", "0.01", "1250.00"]) assert.equal(errors({ ...valid, price }), null, price);
   assert.deepEqual(errors({ ...valid, code: "MN 001" }), ["code"]);
-  assert.deepEqual(errors({ ...valid, description: "x".repeat(501) }), ["description"]);
-  assert.equal(errors({ ...valid, description: "x".repeat(500) }), null);
+  assert.deepEqual(errors({ ...valid, description: "x".repeat(301) }), ["description"]);
+  assert.equal(errors({ ...valid, description: "x".repeat(300) }), null);
 });
 
 test("the list's switches: Available or On menu, true/false only", () => {

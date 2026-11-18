@@ -93,6 +93,8 @@ export async function mergeOrders(orderId: string, version: number, targetOrderI
 
     // Every line moves (cancelled and removed ones too, to keep the history).
     await tx.orderItem.updateMany({ where: { orderId }, data: { orderId: targetOrderId } });
+    // A guest's lines from the menu go with them, still waiting if they were (Part 8 Step 7).
+    await tx.guestOrderLine.updateMany({ where: { orderId }, data: { orderId: targetOrderId } });
 
     // Then the joined order's status follows its lines.
     const [live, sent, unserved] = await Promise.all([

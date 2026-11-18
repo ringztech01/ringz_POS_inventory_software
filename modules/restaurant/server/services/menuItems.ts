@@ -1,5 +1,5 @@
 import "server-only";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { invalid, type ActionResult } from "../../lib/actionResult";
 import type { MenuItemField, MenuItemInput } from "../../schemas/menuItem";
@@ -56,6 +56,9 @@ const fields = (input: MenuItemInput) => ({
   price: input.price,
   menuDescription: input.description,
   stationId: input.stationId,
+  allergens: input.allergens.length ? input.allergens : Prisma.DbNull,
+  calories: input.calories,
+  isSignature: input.isSignature,
 });
 
 // The unique index on code is the last word if two saves race.

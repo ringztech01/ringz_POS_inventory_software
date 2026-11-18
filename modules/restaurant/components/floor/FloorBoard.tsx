@@ -12,6 +12,9 @@ import { seatReservation } from "../../server/actions/reservations";
 import type { FloorTable, FloorTarget } from "../../server/queries/floor";
 import { pickableTables, type MoveMode } from "../../lib/tableMoves";
 import TablePickerModal from "./TablePickerModal";
+import { GuestOrderBadge, guestOrderByTable, RequestBell, requestsByTable, useGuestOrderToasts, useRequestToasts } from "./RequestBell";
+import type { FloorRequest } from "../../lib/tableRequests";
+import type { FloorGuestOrder } from "../../lib/guestOrdering";
 import { routesFor } from "../../lib/serviceRoutes";
 import { useServiceRoutes } from "../ServiceRoutes";
 
@@ -20,7 +23,21 @@ import { useServiceRoutes } from "../ServiceRoutes";
 // touch-size panel keys.
 const Flat = createContext(false);
 
-function TableCard({ table, selected, onSelect }: { table: FloorTable; selected: boolean; onSelect: () => void }) {
+function TableCard({
+  table,
+  selected,
+  onSelect,
+  requests,
+  guestOrder,
+  onOpenOrder,
+}: {
+  table: FloorTable;
+  selected: boolean;
+  onSelect: () => void;
+  requests: FloorRequest[];
+  guestOrder: FloorGuestOrder | undefined;
+  onOpenOrder: (orderId: string) => void;
+}) {
   const flat = useContext(Flat);
   const look = FLOOR_CARD[table.status];
   const detail =
@@ -35,49 +52,56 @@ function TableCard({ table, selected, onSelect }: { table: FloorTable; selected:
     : "";
 
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-pressed={selected}
-      data-floor-table={table.name}
-      data-status={table.status}
-      style={{
-        height: 132,
-        border: selected ? FLOOR_SELECTED.border : look.border,
-        borderRadius: flat ? 4 : 14,
-        background: look.background,
-        padding: 14,
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "flex-start",
-        gap: 4,
-        cursor: "pointer",
-        textAlign: "left",
-        boxShadow: selected && !flat ? FLOOR_SELECTED.boxShadow : "none",
-        outline: selected && flat ? "3px solid #171b1c" : "none",
-        outlineOffset: 1,
-        color: look.color,
-      }}
-    >
-      <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <span style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 600 }}>{table.name}</span>
-          {!!table.order?.ready && (
-            <span
-              data-ready={table.order.ready}
-              role="img"
-              aria-label={`${table.order.ready} ready to serve`}
-              title={`${table.order.ready} ready to serve`}
-              style={{ width: 10, height: 10, borderRadius: 5, background: COLORS.teal, boxShadow: "0 0 0 2px #fff" }}
-            />
-          )}
-        </span>
-        <span style={{ fontFamily: FONTS.mono, fontSize: 11.5 }}>{table.seats} seats</span>
-      </div>
-      <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>{table.status}</span>
-      <span style={{ marginTop: "auto", fontSize: 13 }}>{detail}</span>
-      <span style={{ fontFamily: FONTS.mono, fontSize: 12 }}>{meta}</span>
-    </button>
+    // The guests' bell (Part 8 Step 6) sits on the card's corner, beside it
+    // rather than inside (a button can't hold a button).
+    <div style={{ position: "relative" }}>
+      <button
+        type="button"
+        onClick={onSelect}
+        aria-pressed={selected}
+        data-floor-table={table.name}
+        data-status={table.status}
+        style={{
+          height: 132,
+          border: selected ? FLOOR_SELECTED.border : look.border,
+          borderRadius: flat ? 4 : 14,
+          background: look.background,
+          padding: 14,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "flex-start",
+          gap: 4,
+          cursor: "pointer",
+          textAlign: "left",
+          boxShadow: selected && !flat ? FLOOR_SELECTED.boxShadow : "none",
+          outline: selected && flat ? "3px solid #171b1c" : "none",
+          outlineOffset: 1,
+          color: look.color,
+          width: "100%",
+        }}
+      >
+        <div style={{ width: "100%", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ display: "flex", alignItems: "center", gap: 7 }}>
+            <span style={{ fontFamily: FONTS.display, fontSize: 22, fontWeight: 600 }}>{table.name}</span>
+            {!!table.order?.ready && (
+              <span
+                data-ready={table.order.ready}
+                role="img"
+                aria-label={`${table.order.ready} ready to serve`}
+                title={`${table.order.ready} ready to serve`}
+                style={{ width: 10, height: 10, borderRadius: 5, background: COLORS.teal, boxShadow: "0 0 0 2px #fff" }}
+              />
+            )}
+          </span>
+          <span style={{ fontFamily: FONTS.mono, fontSize: 11.5 }}>{table.seats} seats</span>
+        </div>
+        <span style={{ fontSize: 12, fontWeight: 600, letterSpacing: ".06em", textTransform: "uppercase" }}>{table.status}</span>
+        <span style={{ marginTop: "auto", fontSize: 13 }}>{detail}</span>
+        <span style={{ fontFamily: FONTS.mono, fontSize: 12 }}>{meta}</span>
+      </button>
+      <RequestBell requests={requests} tableName={table.name} style={{ position: "absolute", top: -9, right: -9 }} />
+      <GuestOrderBadge order={guestOrder} onOpen={onOpenOrder} style={{ position: "absolute", top: -9, left: -9 }} />
+    </div>
   );
 }
 
@@ -146,6 +170,10 @@ export default function FloorBoard({
   emptyMessage,
   canOrders,
   canBook,
+  requests = [],
+  guestOrders = [],
+  userId = null,
+  areaId = null,
   toPos = false,
   quickOpen = false,
   fill = false,
@@ -156,6 +184,13 @@ export default function FloorBoard({
   emptyMessage: string;
   canOrders: boolean;
   canBook: boolean;
+  // Guests' Call waiter / Request bill (Part 8 Step 6), every area's; who's
+  // looking (their tables' requests pop a toast); the area shown.
+  requests?: FloorRequest[];
+  // Guests' orders from the menu waiting for a waiter (Part 8 Step 7).
+  guestOrders?: FloorGuestOrder[];
+  userId?: string | null;
+  areaId?: string | null;
   // A table's order opens on the touch POS instead of the order screen (the
   // floor was opened from it: FloorPage ?to=pos).
   toPos?: boolean;
@@ -172,6 +207,10 @@ export default function FloorBoard({
   const [confirmSeat, setConfirmSeat] = useState(false);
   const [picking, setPicking] = useState<MoveMode | null>(null);
   const [isWorking, startWork] = useTransition();
+  const bells = requestsByTable(requests);
+  useRequestToasts(requests, userId, areaId);
+  const guestBadges = guestOrderByTable(guestOrders);
+  useGuestOrderToasts(guestOrders, userId, areaId);
   // A table that left the area (or was deleted) falls back to the first.
   const selected = tables.find((t) => t.id === selectedId) ?? tables[0] ?? null;
 
@@ -264,6 +303,9 @@ export default function FloorBoard({
                 key={table.id}
                 table={table}
                 selected={table.id === selected?.id}
+                requests={bells.get(table.id) ?? []}
+                guestOrder={guestBadges.get(table.id)}
+                onOpenOrder={goToOrder}
                 onSelect={() => {
                   setSelectedId(table.id);
                   if (quickOpen && canOrders && (table.status === "Occupied" || table.status === "Available")) primary(table);
@@ -299,6 +341,16 @@ export default function FloorBoard({
               </div>
             </div>
 
+            {guestBadges.get(selected.id) && (
+              <button
+                type="button"
+                data-guest-order-panel
+                onClick={() => goToOrder(guestBadges.get(selected.id)!.orderId)}
+                style={{ border: "2px solid #6B3FA0", background: "#F1ECFB", color: "#4B2A78", borderRadius: 10, padding: "10px 12px", textAlign: "left", fontSize: 13.5, fontWeight: 600, cursor: "pointer" }}
+              >
+                Guest order · {guestBadges.get(selected.id)!.lines} to confirm. Open the order to confirm or reject.
+              </button>
+            )}
             {selected.order ? (
               <div aria-label="Current order" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 <span style={{ fontSize: 11.5, fontWeight: 600, letterSpacing: ".08em", textTransform: "uppercase", color: COLORS.slateMid }}>

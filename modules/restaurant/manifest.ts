@@ -66,7 +66,8 @@ export const restaurantModule = defineModule({
     { label: "Food", href: "/restaurant/food", permissions: [P.MANAGE_FOOD, P.LOG_WASTE, P.APPROVE_WASTE] },
     // Tables, areas and reservations share the page; each part needs its own.
     { label: "Tables", href: "/restaurant/tables", permissions: [P.MANAGE_TABLES, P.MANAGE_RESERVATIONS] },
-    { label: "Digital menu", href: "/restaurant/digital-menu", permissions: [P.MANAGE_FOOD] },
+    // The menu (Manage Food) and its QR codes (Manage Floor Plan; the Administrator has both).
+    { label: "Digital menu", href: "/restaurant/digital-menu", permissions: [P.MANAGE_FOOD, P.MANAGE_FLOOR_PLAN] },
     // Sidebar only (the designs' header has the seven tabs above).
     // Back office (Managers and the Administrator): sales, dishes, staff,
     // tables, payments, waste, voids and cash-up.

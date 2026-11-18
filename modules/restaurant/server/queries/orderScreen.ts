@@ -1,4 +1,6 @@
 import "server-only";
+import type { PendingGuestLine } from "../../lib/guestOrdering";
+import { pendingGuestLines } from "../services/guestOrders";
 import type { KitchenStatus, OrderCourse, OrderStatus, OrderType } from "@prisma/client";
 import { Decimal } from "@prisma/client/runtime/index-browser";
 import { prisma } from "@/lib/db";
@@ -91,6 +93,9 @@ export type OrderScreenData = {
     openedTime: string;
     saleId: string | null;
     cancelReason: string | null;
+    // The order's note: "Pay at counter" / "Pay at the bar" on a QR point's
+    // takeaway or tab (Part 8 Step 8).
+    note: string | null;
     editable: boolean;
     // Why Cancel order isn't possible right now, or null when it is.
     cancelBlocker: string | null;
@@ -107,6 +112,9 @@ export type OrderScreenData = {
   modifierGroups: Record<string, ModifierGroupView[]>;
   // Users with Manage Orders (plus the current waiter if they've lost it).
   waiters: { id: string; name: string }[];
+  // A guest's lines from the table's menu waiting for a waiter to confirm
+  // them (Part 8 Step 7) — not order lines yet, not on the bill.
+  guestLines: PendingGuestLine[];
 };
 
 const money = (value: Decimal) => formatNaira(value.toFixed(2));
@@ -123,7 +131,7 @@ export async function getMenu(warehouseId: string): Promise<{ menu: OrderScreenD
       code: true,
       price: true,
       isAvailable: true,
-      menuImage: true,
+      photoPath: true,
       prepStation: true,
       kitchenStation: { select: { code: true } },
       menuGroupId: true,
@@ -160,7 +168,7 @@ export async function getMenu(warehouseId: string): Promise<{ menu: OrderScreenD
       code: item.code,
       categoryId: item.category.id,
       price: money(new Decimal(item.price.toString())),
-      image: item.menuImage,
+      image: item.photoPath,
       hasOptions: (groups[item.id]?.length ?? 0) > 0,
       requiredOptions: (groups[item.id] ?? []).some((g) => g.minSelect >= 1),
       department: tree.dishDepartment[item.id],
@@ -199,6 +207,7 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
       closedAt: true,
       saleId: true,
       cancelReason: true,
+      notes: true,
       discountType: true,
       discountValue: true,
       serviceCharge: true,
@@ -233,7 +242,7 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
   });
   if (!order) return null;
 
-  const [settings, { menu, groups }, waiters] = await Promise.all([getBusinessSettings(), getMenu(order.warehouseId), getWaiters(order.waiterId)]);
+  const [settings, { menu, groups }, waiters, guestLines] = await Promise.all([getBusinessSettings(), getMenu(order.warehouseId), getWaiters(order.waiterId), pendingGuestLines(order.id)]);
   // Lines whose dish has left the menu still need their groups for the pencil.
   const missing = order.items.map((line) => line.productId).filter((id) => !(id in groups));
   const modifierGroups = missing.length ? { ...groups, ...(await getModifierGroupsFor(missing)) } : groups;
@@ -259,6 +268,7 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
       openedTime: formatAppTime(order.openedAt),
       saleId: order.saleId,
       cancelReason: order.cancelReason,
+      note: order.notes,
       editable,
       cancelBlocker: cancelOrderBlocker(
         order.items.filter((line) => countsTowardsTotal(line) && line.kitchenStatus !== "NEW").length,
@@ -305,5 +315,6 @@ export async function getOrderScreen(id: string): Promise<OrderScreenData | null
     menu,
     modifierGroups,
     waiters,
+    guestLines: EDITABLE_ORDER_STATUSES.includes(order.status) ? guestLines : [],
   };
 }

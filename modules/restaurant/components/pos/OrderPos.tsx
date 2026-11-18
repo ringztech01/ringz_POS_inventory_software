@@ -22,6 +22,7 @@ import type { OrderChangeResult } from "../../server/services/orders";
 import BillPanel from "../order/BillPanel";
 import CancelModal, { type CancelExtras, type CancelOutcome } from "../order/CancelModal";
 import PaymentModal from "../order/PaymentModal";
+import GuestLinesPanel from "../order/GuestLinesPanel";
 import ReadyToServe from "../order/ReadyToServe";
 import RefundModal, { type RefundOutcome, type RefundRequest } from "../order/RefundModal";
 import type { DiscountOutcome, DiscountRequest } from "../order/DiscountModal";
@@ -539,7 +540,7 @@ export default function OrderPos({
       </>
     ) : null;
   const covers = order.guests > 0 ? `${order.guests} cover${order.guests === 1 ? "" : "s"}` : null;
-  const headerDetail = [order.areaName, covers, waiter && waiter !== session.userName ? `Waiter: ${waiter}` : null].filter(Boolean).join(" · ") || null;
+  const headerDetail = [order.areaName, covers, waiter && waiter !== session.userName ? `Waiter: ${waiter}` : null, order.note].filter(Boolean).join(" · ") || null;
 
   return (
     <>
@@ -573,6 +574,7 @@ export default function OrderPos({
             banner={
               open ? (
                 <>
+                  <GuestLinesPanel touch lines={data.guestLines} busy={saving} onConfirm={actions.confirmGuest} onReject={(ids) => void actions.rejectGuest(ids)} />
                   <ReadyToServe lines={lines} busy={saving} onServe={actions.serveReady} />
                   {heldNow.map((g) => (
                     <div key={g.course ?? "none"} data-held-bar={g.course ?? "none"} style={{ margin: "6px 6px 0", padding: "4px 4px 4px 12px", borderRadius: TOUCH.radius, background: TOUCH.tag.HOLD[0], color: TOUCH.tag.HOLD[1], display: "flex", alignItems: "center", gap: 6, fontSize: 14, fontWeight: 700 }}>

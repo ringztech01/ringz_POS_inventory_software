@@ -28,7 +28,7 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
   const denied = await guardPageAny(VIEWERS);
   if (denied) return denied;
 
-  const { permissions } = await getCurrentUserPermissions();
+  const { permissions, userId } = await getCurrentUserPermissions();
   const canOrders = permissions.has(P.MANAGE_ORDERS);
   const canBook = permissions.has(P.MANAGE_RESERVATIONS);
   const { area, to } = await searchParams;
@@ -121,6 +121,10 @@ export default async function FloorPage({ searchParams }: { searchParams: Promis
         emptyMessage={emptyMessage}
         canOrders={canOrders}
         canBook={canBook}
+        requests={floor.requests}
+        guestOrders={floor.guestOrders}
+        userId={userId ?? null}
+        areaId={floor.areaId}
         toPos={toPos}
       />
       <FloorPolling />

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { headers } from "next/headers";
 import AppToaster from "@/components/providers/AppToaster";
+import { GUEST_SURFACE_HEADER } from "@/modules/restaurant/lib/publicMenu";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,7 +20,17 @@ export const metadata: Metadata = {
   description: "RingzPOS inventory & POS admin dashboard",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // The guest's digital menu (Part 8, /menu/…, marked by the proxy): phones
+  // on the restaurant's Wi-Fi, maybe with no internet — no web fonts from
+  // Google, no toasts; system fonts and the page's own styles only.
+  if ((await headers()).get(GUEST_SURFACE_HEADER) === "menu") {
+    return (
+      <html lang="en">
+        <body style={{ margin: 0, background: "#fafbfb", color: "#171b1c", WebkitFontSmoothing: "antialiased" }}>{children}</body>
+      </html>
+    );
+  }
   return (
     <html
       lang="en"

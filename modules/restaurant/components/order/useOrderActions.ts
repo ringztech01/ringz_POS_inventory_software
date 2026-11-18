@@ -9,6 +9,7 @@ import { sentMessage } from "../../lib/kds";
 import type { BillSplit } from "../../schemas/bill";
 import { applyDiscount, refundBill, removeBillSplit, setServiceCharge, settleBill, splitBill } from "../../server/actions/bill";
 import { cancelOrderLine, cancelRestaurantOrder, markOrderLineServed, markOrderLinesServed, sendOrderToKitchen } from "../../server/actions/orders";
+import { confirmGuestLinesAction, rejectGuestLinesAction } from "../../server/actions/guestOrders";
 import type { BillView } from "../../server/queries/bill";
 import type { OrderScreenData, TicketLine } from "../../server/queries/orderScreen";
 import type { CancelExtras, CancelOutcome } from "./CancelModal";
@@ -70,6 +71,27 @@ export function useOrderActions(data: OrderScreenData, bill: BillView) {
       { quiet: true },
     );
     return accepted ? { ok: true } : (refused.result ?? { ok: false });
+  }
+
+  // A guest's lines from the menu (Part 8 Step 7): confirmed, they're New
+  // lines to send as usual; rejected, the guest's phone says so.
+  function confirmGuest(lineIds: string[]) {
+    void run(async (version) => {
+      const result = await confirmGuestLinesAction({ orderId, version, lineIds });
+      if (result.ok) toast.success(lineIds.length === 1 ? "Guest line confirmed. Send it when ready." : `${lineIds.length} guest lines confirmed. Send them when ready.`);
+      return result;
+    });
+  }
+
+  async function rejectGuest(lineIds: string[]) {
+    try {
+      const result = await rejectGuestLinesAction({ orderId, lineIds });
+      if (result.ok) toast.success(lineIds.length === 1 ? "Guest line rejected." : `${lineIds.length} guest lines rejected.`);
+      else toast.error(result.error);
+    } catch {
+      toast.error(OFFLINE);
+    }
+    router.refresh();
   }
 
   async function cancelOrder(reason: CancelReason, details: string): Promise<CancelOutcome> {
@@ -162,5 +184,5 @@ export function useOrderActions(data: OrderScreenData, bill: BillView) {
     });
   }
 
-  return { run, saving, send, serve, serveReady, cancelLine, cancelOrder, discount, serviceCharge, split, settle, settled, clearSettled: () => setSettled(null), refund, removeSplit };
+  return { run, saving, send, serve, serveReady, cancelLine, cancelOrder, confirmGuest, rejectGuest, discount, serviceCharge, split, settle, settled, clearSettled: () => setSettled(null), refund, removeSplit };
 }

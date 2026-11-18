@@ -44,9 +44,13 @@ export const ORDER_TYPE_LABEL: Record<OrderType, string> = {
 };
 
 // An order with no table, where a table's name would go: a bar tab by its
-// name ("Tab · Ada"), others by their type ("Takeaway").
+// name ("Tab · Ada"), a takeaway by the guest's name when it has one (one
+// ordered from a QR point, Part 8 Step 8: "Takeaway · Ada"), others by
+// their type ("Takeaway").
 export function noTableLabel(type: OrderType, tabName?: string | null): string {
-  return type === "BAR_TAB" && tabName ? `Tab · ${tabName}` : ORDER_TYPE_LABEL[type];
+  if (type === "BAR_TAB" && tabName) return `Tab · ${tabName}`;
+  if (type === "TAKEAWAY" && tabName) return `${ORDER_TYPE_LABEL[type]} · ${tabName}`;
+  return ORDER_TYPE_LABEL[type];
 }
 
 // The order screen takes changes only while the order is in one of these.

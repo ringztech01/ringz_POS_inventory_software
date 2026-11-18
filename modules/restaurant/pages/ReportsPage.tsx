@@ -27,7 +27,7 @@ import VoidsReport from "../components/reports/VoidsReport";
 import { getShiftsReport } from "../server/queries/reports/shifts";
 import ShiftsReport from "../components/reports/ShiftsReport";
 import ReportActions from "../components/reports/ReportActions";
-import { businessName } from "../server/reportExportRoute";
+import { businessName } from "../server/businessName";
 import { REPORTS } from "@/lib/hardware/assignments";
 import { formatAppDateTime as stamp } from "../lib/time";
 import { ORDER_TYPE_LABELS } from "../lib/reportTabs";

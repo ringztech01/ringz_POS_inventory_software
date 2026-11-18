@@ -11,6 +11,7 @@ import assert from "node:assert/strict";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/db";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
+import { newQrToken } from "../lib/qrToken";
 import { checkUserPin, findByPin, setApprovalPin } from "../server/services/approvalPins";
 import { createCounterOrder, discardEmptyOrder, openTableCheck, openTableOrder } from "../server/services/floor";
 import { getFloor } from "../server/queries/floor";
@@ -83,7 +84,7 @@ describe("Touch POS orders and till session (database copy)", { skip: enabled ? 
 
   test("an empty order left behind is thrown away and frees its table; one with lines, a tab or a sent ticket stays", async () => {
     const area = await prisma.diningArea.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } });
-    const table = await prisma.table.create({ data: { name: `Empty ${Date.now()}`, seats: 2, areaId: area.id, qrToken: `empty-${Date.now()}` }, select: { id: true } });
+    const table = await prisma.table.create({ data: { name: `Empty ${Date.now()}`, seats: 2, areaId: area.id, qrToken: newQrToken() }, select: { id: true } });
     const product = await prisma.product.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } });
     const holding = () => prisma.order.count({ where: { activeTableId: table.id } });
 
@@ -137,7 +138,7 @@ describe("Touch POS orders and till session (database copy)", { skip: enabled ? 
 
   test("separate checks at a shared table: each guest their own order, bill and total; the table stays taken until the last goes", async () => {
     const area = await prisma.diningArea.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } });
-    const table = await prisma.table.create({ data: { name: `Shared ${Date.now()}`, seats: 8, areaId: area.id, qrToken: `shared-${Date.now()}` }, select: { id: true, name: true } });
+    const table = await prisma.table.create({ data: { name: `Shared ${Date.now()}`, seats: 8, areaId: area.id, qrToken: newQrToken() }, select: { id: true, name: true } });
     const product = await prisma.product.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } });
     const line = (orderId: string, unitPrice: string) => prisma.orderItem.create({ data: { orderId, productId: product.id, quantity: 1, unitPrice, kitchenStatus: "SERVED" } });
 

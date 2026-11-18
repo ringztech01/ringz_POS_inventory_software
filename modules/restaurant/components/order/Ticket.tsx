@@ -13,6 +13,7 @@ import { updateOrderDetails } from "../../server/actions/orders";
 import type { OrderScreenData, TicketLine } from "../../server/queries/orderScreen";
 import type { OrderChangeResult } from "../../server/services/orders";
 import type { Pending } from "./OrderScreen";
+import GuestLinesPanel from "./GuestLinesPanel";
 import ReadyToServe from "./ReadyToServe";
 import PrintButton from "@/components/hardware/PrintButton";
 import { printReceiptAction } from "../../server/actions/printing";
@@ -224,6 +225,8 @@ export default function Ticket({
   onBill,
   onRefund,
   receiptPrinter,
+  onConfirmGuest,
+  onRejectGuest,
 }: {
   data: OrderScreenData;
   run: (change: (version: number) => Promise<OrderChangeResult>) => Promise<boolean>;
@@ -241,6 +244,9 @@ export default function Ticket({
   onRefund?: () => void;
   // Where Print receipt goes (null: the browser's print page).
   receiptPrinter: string | null;
+  // A guest's lines from the menu (Part 8 Step 7).
+  onConfirmGuest: (lineIds: string[]) => void;
+  onRejectGuest: (lineIds: string[]) => void;
 }) {
   const { order, lines, totals, newCount, waiters } = data;
   const server: Header = { type: order.type, waiterId: order.waiterId ?? "", guests: order.guests };
@@ -273,6 +279,7 @@ export default function Ticket({
           <h1 style={{ margin: 0, fontFamily: FONTS.display, fontSize: 22, fontWeight: 600 }}>{title}</h1>
           <span style={{ fontFamily: FONTS.mono, fontSize: 12, color: COLORS.slateMid }}>
             {order.ref} · {order.open}
+            {order.note && <span data-order-note> · {order.note}</span>}
           </span>
           {order.editable && (
             <button
@@ -327,6 +334,11 @@ export default function Ticket({
         </div>
       </div>
 
+      {data.guestLines.length > 0 && (
+        <div style={{ padding: "10px 20px 0" }}>
+          <GuestLinesPanel lines={data.guestLines} busy={busy} onConfirm={onConfirmGuest} onReject={onRejectGuest} />
+        </div>
+      )}
       <ReadyToServe lines={lines} busy={busy} onServe={onServeReady} />
       <div aria-label="Order lines" style={{ flex: 1, overflowY: "auto", padding: "8px 20px" }}>
         {visible.length === 0 ? (

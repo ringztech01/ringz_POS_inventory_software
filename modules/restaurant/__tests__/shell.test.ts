@@ -89,8 +89,12 @@ describe("sidebar", () => {
       ["My PIN", "/restaurant/settings/approval-pin"],
     ]);
     assert.deepEqual(restaurantGroup([PERMISSIONS.LOG_WASTE])?.children?.map((c) => [c.label, c.href]), [["Food", "/restaurant/food"]]);
-    // The floor plan editor: Manage Floor Plan only, sidebar only.
-    assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_FLOOR_PLAN])?.children?.map((c) => [c.label, c.href]), [["Floor plan", "/restaurant/settings/floor"]]);
+    // The floor plan editor: Manage Floor Plan only, sidebar only. Part 8: and
+    // the Digital menu, for its QR codes.
+    assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_FLOOR_PLAN])?.children?.map((c) => [c.label, c.href]), [
+      ["Digital menu", "/restaurant/digital-menu"],
+      ["Floor plan", "/restaurant/settings/floor"],
+    ]);
     assert.equal(PERMISSIONS.LOG_WASTE, "Log Waste");
     assert.deepEqual(restaurantGroup([PERMISSIONS.MANAGE_KITCHEN]), undefined, "Manage Kitchen alone opens no page");
   });

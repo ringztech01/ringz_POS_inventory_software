@@ -202,6 +202,8 @@ export default function OrderScreen({
         onBill={() => setBilling(true)}
         onRefund={refundView && canSettle ? () => setRefunding(true) : undefined}
         receiptPrinter={printers.receipt}
+        onConfirmGuest={actions.confirmGuest}
+        onRejectGuest={(ids) => void actions.rejectGuest(ids)}
       />
       {refunding && refundView && (
         <RefundModal title={data.order.tableName ? `Table ${data.order.tableName}` : data.order.ref} view={refundView} onSubmit={refund} onClose={closeRefund} />

@@ -50,7 +50,8 @@ const snapshot = (line: KotSource) => ({
 export async function sendNewLines(
   tx: Prisma.TransactionClient,
   orderId: string,
-  userId: string,
+  // Null: a guest's order sent straight to the kitchen (Part 8 Step 7).
+  userId: string | null,
   only?: readonly string[],
 ): Promise<{ ok: true; sent: SentToStation[]; kotIds: string[] } | { ok: false; error: string }> {
   const lines = await tx.orderItem.findMany({

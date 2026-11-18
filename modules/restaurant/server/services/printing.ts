@@ -22,7 +22,8 @@ import { getReceiptExtras } from "../queries/receipt";
 // page as before. Never fails the action that asked: a print problem is
 // logged and shows on the queue.
 
-type Who = { userId: string; deviceId: string | null };
+// userId null: a guest's order sent straight to the kitchen (Part 8 Step 7).
+type Who = { userId: string | null; deviceId: string | null };
 
 export async function kotTicket(kotId: string): Promise<{ ticket: KotTicket; stationId: string; label: string; printCount: number } | null> {
   const kot = await getKotForPrint(kotId);

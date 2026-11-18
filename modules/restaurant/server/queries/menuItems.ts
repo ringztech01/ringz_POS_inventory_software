@@ -1,4 +1,5 @@
 import "server-only";
+import { allergensOf } from "../../lib/publicMenu";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { foodCost, marginPercent, recipeLineCost, trimQuantity } from "../../lib/foodCost";
@@ -19,6 +20,10 @@ export type MenuItemRow = {
   station: string | null;
   isAvailable: boolean;
   showOnMenu: boolean;
+  // The digital menu's details (Part 8 Step 5).
+  allergens: string[];
+  calories: number | null;
+  isSignature: boolean;
   groups: string[];
   groupIds: string[];
   recipe: { name: string; quantity: string; unit: string; cost: string }[];
@@ -59,6 +64,9 @@ export async function getMenuItemList({ q, categoryId, page, perPage }: MenuItem
         menuDescription: true,
         isAvailable: true,
         showOnMenu: true,
+        allergens: true,
+        calories: true,
+        isSignature: true,
         categoryId: true,
         stationId: true,
         category: { select: { name: true } },
@@ -104,6 +112,9 @@ export async function getMenuItemList({ q, categoryId, page, perPage }: MenuItem
       station: item.kitchenStation && !item.kitchenStation.deletedAt ? item.kitchenStation.name : null,
       isAvailable: item.isAvailable,
       showOnMenu: item.showOnMenu,
+      allergens: allergensOf(item.allergens),
+      calories: item.calories,
+      isSignature: item.isSignature,
       groups: item.modifierGroups.map((g) => g.name),
       groupIds: item.modifierGroups.map((g) => g.id),
       recipe: item.recipeLines.map((line) => ({

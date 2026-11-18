@@ -35,10 +35,10 @@ function target(routeFile: string): string {
   return routeFile;
 }
 
-const PAGE_GUARDS = /\b(guardPage|guardPageAny|guardFloorPlanPage|requireRestaurant)\(/;
+const PAGE_GUARDS = /\b(guardPage|guardPageAny|guardFloorPlanPage|guardMenuQrPage|requireRestaurant)\(/;
 
 test("every /restaurant/* page, and the POS tables screen, checks the module itself (a 404 while it's off)", () => {
-  const pages = [...filesUnder("app/(dashboard)/restaurant", "page.tsx"), "app/(pos)/pos/floor/page.tsx"];
+  const pages = [...filesUnder("app/(dashboard)/restaurant", "page.tsx"), "app/(pos)/pos/floor/page.tsx", "app/(print)/restaurant/menu-cards/page.tsx"];
   assert.ok(pages.length >= 15, `found ${pages.length} pages`);
   const unguarded = pages.filter((page) => !PAGE_GUARDS.test(read(target(page))));
   assert.deepEqual(unguarded, []);
@@ -47,9 +47,18 @@ test("every /restaurant/* page, and the POS tables screen, checks the module its
 
 test("every /restaurant/* route handler checks the module and the permission (guardRoute)", () => {
   const routes = filesUnder("app/(dashboard)/restaurant", "route.ts");
-  assert.deepEqual(routes.sort(), ["app/(dashboard)/restaurant/reports/export/[tab]/route.ts", "app/(dashboard)/restaurant/settings/floor/image/[areaId]/route.ts", "app/(dashboard)/restaurant/tables/[id]/qr/route.ts"]);
-  for (const route of routes) assert.match(read(target(route)), /const denied = await guardRoute\(/, route);
+  assert.deepEqual(routes.sort(), [
+    "app/(dashboard)/restaurant/digital-menu/qr-codes/card/[kind]/[id]/route.ts",
+    "app/(dashboard)/restaurant/food/media/[productId]/[kind]/route.ts",
+    "app/(dashboard)/restaurant/food/media/[productId]/file/[file]/route.ts",
+    "app/(dashboard)/restaurant/reports/export/[tab]/route.ts",
+    "app/(dashboard)/restaurant/settings/floor/image/[areaId]/route.ts",
+    "app/(dashboard)/restaurant/tables/[id]/qr/route.ts",
+  ]);
+  for (const route of routes) assert.match(read(target(route)), /const denied = await (guardRoute|guardMenuQrRoute)\(/, route);
+  assert.match(read("modules/restaurant/server/routes/menuCardPng.ts"), /const denied = await guardMenuQrRoute\(\)/, "the menu card PNG: the Administrator or Manage Floor Plan");
   assert.match(read("modules/restaurant/server/routes/floorImage.ts"), /guardRoute\(RESTAURANT_PERMISSIONS\.MANAGE_FLOOR_PLAN\)/);
+  for (const media of ["menuMediaUpload", "menuMediaFile"]) assert.match(read(`modules/restaurant/server/routes/${media}.ts`), /guardRoute\(RESTAURANT_PERMISSIONS\.MANAGE_FOOD\)/, `${media}: Manage Food`);
   assert.match(read("modules/restaurant/server/reportExportRoute.ts"), /guardRoute\(RESTAURANT_PERMISSIONS\.RESTAURANT_REPORTS\)/, "the Reports export: Restaurant Reports");
 });
 

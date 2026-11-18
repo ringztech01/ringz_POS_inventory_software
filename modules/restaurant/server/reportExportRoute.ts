@@ -1,6 +1,5 @@
 import "server-only";
 import { prisma } from "@/lib/db";
-import { BUSINESS_SETTINGS_ID } from "@/lib/business-settings";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
 import { buildWorkbook, workbookStream, xlsxResponse, xlsxStreamResponse } from "@/lib/reports/exportXlsx";
 import { reportTabFor, type ReportTabKey } from "../lib/reportTabs";
@@ -10,22 +9,13 @@ import { guardRoute } from "./guard";
 import { keepKnown, parseReportFilters } from "./queries/reports/filters";
 import { getReportSetup } from "./queries/reports/shell";
 import { buildReportExport } from "./reportExport";
+import { businessName } from "./businessName";
 
 // GET /restaurant/reports/export/<tab>?<the page's query> — the tab as an
 // Excel workbook (server/reportExport.ts): the same filters, sorting and
 // grouping as on screen. 404 while the module is off; Restaurant Reports
 // needed (the Service-only roles never have it). Over STREAM_ROWS rows, the
 // workbook streams.
-
-// The business's name for the sheets' header: the receipt header's first
-// line, else the first warehouse, else the app's.
-export async function businessName(): Promise<string> {
-  const [setting, warehouse] = await Promise.all([
-    prisma.businessSetting.findUnique({ where: { id: BUSINESS_SETTINGS_ID }, select: { printHeader: true } }),
-    prisma.warehouse.findFirst({ where: { deletedAt: null }, orderBy: { createdAt: "asc" }, select: { name: true } }),
-  ]);
-  return setting?.printHeader?.split(/\r?\n/).map((l) => l.trim()).find(Boolean) ?? warehouse?.name ?? "RingzPOS";
-}
 
 export async function exportReport(request: Request, segment: string): Promise<Response> {
   const denied = await guardRoute(RESTAURANT_PERMISSIONS.RESTAURANT_REPORTS);

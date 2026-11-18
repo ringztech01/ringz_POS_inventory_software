@@ -180,49 +180,49 @@ enum WasteStatus {
 // lib/business-settings.ts, which falls back to these defaults until the row
 // is first saved (from the Settings page).
 model BusinessSetting {
-  id                              String   @id @default("default")
+  id                              String              @id @default("default")
   // The optional Restaurant module (modules/restaurant). Off: its routes
   // 404 and its sidebar group and Role-form permissions are hidden.
-  restaurantEnabled               Boolean  @default(false)
+  restaurantEnabled               Boolean             @default(false)
   // Restaurant rules. A Booked reservation shows its table as Reserved this
   // many minutes before its time.
-  restaurantReservedWindowMinutes Int      @default(60)
+  restaurantReservedWindowMinutes Int                 @default(60)
   // Bookings on one table must be at least this many minutes apart.
-  restaurantBookingGapMinutes     Int      @default(120)
+  restaurantBookingGapMinutes     Int                 @default(120)
   // true: a billed table shows Cleaning until it's marked clean; false: it's
   // Available as soon as the bill is paid.
-  restaurantManualCleaning        Boolean  @default(true)
+  restaurantManualCleaning        Boolean             @default(true)
   // Added to every restaurant bill: this % of the items before tax.
-  restaurantServiceChargePercent  Decimal  @default(10) @db.Decimal(5, 2)
+  restaurantServiceChargePercent  Decimal             @default(10) @db.Decimal(5, 2)
   // A discount above this % of the bill's sub total needs a PIN from someone
   // with Approve Discount.
-  restaurantDiscountLimitPercent  Decimal  @default(10) @db.Decimal(5, 2)
+  restaurantDiscountLimitPercent  Decimal             @default(10) @db.Decimal(5, 2)
   // Waste is taken out of this warehouse (an order line's waste: its order's
   // warehouse). Filled by the add_waste migration with the dining areas'.
   restaurantWarehouseId           String?
   // Waste costing more than this (₦) needs a PIN from someone with Approve
   // Waste; 0: no approval needed.
-  restaurantWasteApprovalLimit    Decimal  @default(0) @db.Decimal(12, 2)
+  restaurantWasteApprovalLimit    Decimal             @default(0) @db.Decimal(12, 2)
   // The dashboard's Waste today KPI turns amber / red above these % of
   // today's food cost.
-  restaurantWasteAmberPercent     Decimal  @default(5) @db.Decimal(5, 2)
-  restaurantWasteRedPercent       Decimal  @default(10) @db.Decimal(5, 2)
+  restaurantWasteAmberPercent     Decimal             @default(5) @db.Decimal(5, 2)
+  restaurantWasteRedPercent       Decimal             @default(10) @db.Decimal(5, 2)
   // Touch POS: after a dish is added, back to the department's home (on) or
   // stay on the grid it came from (off).
-  restaurantPosReturnHome         Boolean  @default(false)
+  restaurantPosReturnHome         Boolean             @default(false)
   // Touch POS Note keypad: the quick notes, in order (a JSON list of
   // strings); none: the default list (lib/quickNotes).
   restaurantQuickNotes            Json?
   // Touch POS: after Send, back to the floor plan (on) or stay on the order.
-  restaurantPosSendToFloor        Boolean  @default(true)
+  restaurantPosSendToFloor        Boolean             @default(true)
   // Touch POS: lock the screen (PIN to carry on) after this many seconds
   // without a tap; 0 never.
-  restaurantPosLockSeconds        Int      @default(0)
+  restaurantPosLockSeconds        Int                 @default(0)
   // The same for Managers and the Administrator (back-office roles, Part 6f
   // Step 6); used only while auto-lock is on (restaurantPosLockSeconds > 0).
-  restaurantPosLockSecondsManager Int      @default(300)
+  restaurantPosLockSecondsManager Int                 @default(300)
   // Touch POS: the light theme (on) or the dark frame (off), on every till.
-  restaurantPosLightTheme         Boolean  @default(false)
+  restaurantPosLightTheme         Boolean             @default(false)
   // Which restaurant screens the app uses (Part 6f): SERVICE — PIN login,
   // the touch Tables screen and Restaurant POS; CLASSIC — Restaurant ›
   // Floor, the Table order page, and the retail POS on /pos. A device can
@@ -230,43 +230,43 @@ model BusinessSetting {
   restaurantInterface             RestaurantInterface @default(SERVICE)
   // Staff PINs (Part 6f; Settings › Staff, Administrator only): allow weak
   // ones (1234, 0000…); let staff change their own (with the old one).
-  restaurantAllowWeakPins         Boolean  @default(false)
-  restaurantStaffSelfPin          Boolean  @default(false)
+  restaurantAllowWeakPins         Boolean             @default(false)
+  restaurantStaffSelfPin          Boolean             @default(false)
   // The PIN screen without the on-shift names (type your PIN only).
-  restaurantPinHideNames          Boolean  @default(false)
+  restaurantPinHideNames          Boolean             @default(false)
   // Clock in / out (Part 6f Step 6, Settings › Staff): "Start shift?" after a
   // PIN sign-in, "End shift?" at LOCK; the PIN screen lists who's on shift.
-  restaurantClockInOut            Boolean  @default(false)
+  restaurantClockInOut            Boolean             @default(false)
   // Restaurant Reports: the business day starts this many minutes after
   // midnight (Africa/Lagos) — 240: an order closed at 01:30 counts on the
   // day before. 0–360, in steps of 30 (Settings › Touch POS).
-  restaurantDayStartMinutes       Int      @default(0)
+  restaurantDayStartMinutes       Int                 @default(0)
   // Restaurant Reports › Shifts & cash-up: a cash-up whose variance (over or
   // short) is more than this shows red (Settings › Touch POS).
-  restaurantCashVarianceLimit     Decimal  @default(500) @db.Decimal(12, 2)
+  restaurantCashVarianceLimit     Decimal             @default(500) @db.Decimal(12, 2)
   // Emergency access (Part 6f Step 4): one recovery code at a time — its
   // bcrypt hash; used once by an Administrator on a device that isn't a
   // terminal. Made in Settings › Staff.
-  recoveryCodeHash                String?  @db.VarChar(100)
+  recoveryCodeHash                String?             @db.VarChar(100)
   recoveryCodeAt                  DateTime?
   // ---- Printed tickets (Settings › Ticket templates; lib/hardware/tickets.ts)
   // The logo on receipts and pre-bills: on/off, and the image itself, turned
   // to 1-bit once (at most 384 × 240 dots) — rows of ceil(width / 8) bytes.
-  printLogo                       Boolean  @default(false)
+  printLogo                       Boolean             @default(false)
   printLogoWidth                  Int?
   printLogoHeight                 Int?
-  printLogoData                   Bytes?   @db.MediumBlob
+  printLogoData                   Bytes?              @db.MediumBlob
   // The business header and the footer, line by line (null: the defaults).
-  printHeader                     String?  @db.Text
-  printFooter                     String?  @db.Text
+  printHeader                     String?             @db.Text
+  printFooter                     String?             @db.Text
   // KOT lines in large type; prices on KOT lines (default off).
-  printKitchenLarge               Boolean  @default(false)
-  printKotPrices                  Boolean  @default(false)
+  printKitchenLarge               Boolean             @default(false)
+  printKotPrices                  Boolean             @default(false)
   // A QR code under receipts and pre-bills, holding this (a link, Wi-Fi…).
-  printQr                         Boolean  @default(false)
-  printQrText                     String?  @db.VarChar(300)
-  createdAt                       DateTime @default(now())
-  updatedAt                       DateTime @updatedAt
+  printQr                         Boolean             @default(false)
+  printQrText                     String?             @db.VarChar(300)
+  createdAt                       DateTime            @default(now())
+  updatedAt                       DateTime            @updatedAt
 
   restaurantWarehouse Warehouse?          @relation("RestaurantWarehouse", fields: [restaurantWarehouseId], references: [id])
   wasteEntries        WasteEntry[]
@@ -275,51 +275,53 @@ model BusinessSetting {
   printJobs           PrintJob[]
   drawerEvents        DrawerEvent[]
   auditLogs           AuditLog[]
+  menuSettings        MenuSettings?
+  qrPoints            QrPoint[]
 }
 
 model User {
-  id          String    @id @default(cuid())
-  firstName   String
-  lastName    String
-  email       String    @unique
-  password    String
-  phoneNumber String?
-  image       String?
+  id             String    @id @default(cuid())
+  firstName      String
+  lastName       String
+  email          String    @unique
+  password       String
+  phoneNumber    String?
+  image          String?
   // LEGACY (see UserRole) — replaced by roleId; dropped in a follow-up
   // migration once every user's mapping is confirmed.
-  role        UserRole  @default(CASHIER)
+  role           UserRole  @default(CASHIER)
   // Nullable until that follow-up migration makes it required.
-  roleId      String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
-  deletedAt   DateTime?
+  roleId         String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
   // ---- Staff (Part 6f). The name on tickets ("Ada O."); their colour on the
   // POS; where their Tables screen opens / the station their kitchen display
   // shows (else the role's).
-  displayName String?   @db.VarChar(40)
-  colour      String?   @db.VarChar(7)
-  homeAreaId  String?
-  homeStation String?   @db.VarChar(20)
+  displayName    String?   @db.VarChar(40)
+  colour         String?   @db.VarChar(7)
+  homeAreaId     String?
+  homeStation    String?   @db.VarChar(20)
   // Disabled: can't sign in, history kept (instead of deleting).
-  disabledAt  DateTime?
-  lastLoginAt DateTime?
+  disabledAt     DateTime?
+  lastLoginAt    DateTime?
   // The device (Device.id) they last signed in on.
-  lastDeviceId String?  @db.VarChar(64)
+  lastDeviceId   String?   @db.VarChar(64)
   // +1 ends every session they have, on every device (a PIN reset, disabling).
-  sessionVersion Int    @default(0)
+  sessionVersion Int       @default(0)
   // Added in Settings › Staff: signs in by PIN only (the email and password
   // are placeholders nobody knows).
-  pinOnly     Boolean   @default(false)
+  pinOnly        Boolean   @default(false)
   // A staff card or badge (Part 6f Step 7d): RFID/NFC or a barcode, read by
   // the scanner — signs in like the PIN. Kept as a keyed hash only (one
   // person per card); cardLabel is its last characters, to tell cards apart.
-  cardHash    String?   @unique @db.VarChar(64)
-  cardLabel   String?   @db.VarChar(12)
-  cardSetAt   DateTime?
+  cardHash       String?   @unique @db.VarChar(64)
+  cardLabel      String?   @db.VarChar(12)
+  cardSetAt      DateTime?
   // Training mode (Part 6f Step 7f; Settings › Staff): their orders are
   // TRAINING ones — the real floor, but nothing printed to or shown in the
   // kitchen, no stock moved, no sale when settled.
-  trainingMode Boolean  @default(false)
+  trainingMode   Boolean   @default(false)
 
   userRole           Role?               @relation(fields: [roleId], references: [id])
   homeArea           DiningArea?         @relation("StaffHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
@@ -343,6 +345,8 @@ model User {
   approvalPin        ApprovalPin?
   settlements        OrderSettlement[]
   tips               OrderTip[]          @relation("OrderTipWaiter")
+  ackedRequests      TableRequest[]      @relation("TableRequestAck")
+  decidedGuestLines  GuestOrderLine[]    @relation("GuestLineDecidedBy")
   orderRefunds       OrderRefund[]
   wasteLogged        WasteEntry[]        @relation("WasteLoggedBy")
   printJobs          PrintJob[]
@@ -360,9 +364,9 @@ model User {
 // A named set of permissions (Roles & Permissions). The seeded admin role is
 // isSystem: it implicitly has every permission and can't be deleted.
 model Role {
-  id        String    @id @default(cuid())
-  name      String    @unique
-  isSystem  Boolean   @default(false)
+  id          String      @id @default(cuid())
+  name        String      @unique
+  isSystem    Boolean     @default(false)
   // ---- Staff roles (Part 6f). The six built-in ones (Administrator,
   // Manager, Cashier, Waiter, Bartender, Kitchen) carry their key and can't
   // be deleted; a custom role (often a copy of one) has none.
@@ -375,9 +379,9 @@ model Role {
   homeScreen  HomeScreen  @default(TABLES)
   homeAreaId  String?
   homeStation String?     @db.VarChar(20)
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
-  deletedAt DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  deletedAt   DateTime?
 
   homeArea    DiningArea?      @relation(fields: [homeAreaId], references: [id], onDelete: SetNull)
   permissions RolePermission[]
@@ -488,48 +492,62 @@ model Unit {
 }
 
 model Product {
-  id                 String       @id @default(cuid())
+  id                 String        @id @default(cuid())
   name               String
-  code               String       @unique
-  price              Decimal      @db.Decimal(12, 2)
+  code               String        @unique
+  price              Decimal       @db.Decimal(12, 2)
   // Default net unit cost for purchase lines; not yet on the Product form.
-  cost               Decimal?     @db.Decimal(12, 2)
+  cost               Decimal?      @db.Decimal(12, 2)
   categoryId         String
   brandId            String
   unitId             String
   stockAlert         Int?
-  orderTax           Decimal?     @db.Decimal(5, 2)
+  orderTax           Decimal?      @db.Decimal(5, 2)
   taxType            TaxType
   quantityLimitation Int?
-  notes              String?      @db.Text
+  notes              String?       @db.Text
   // Array of uploaded image paths; the first entry is the list thumbnail.
   // MySQL has no native array column, so this is stored as JSON.
   images             Json?
   // Restaurant module. Every existing product is STANDARD (retail); the
   // other columns only mean something for MENU_ITEM.
-  productType        ProductType  @default(STANDARD)
+  productType        ProductType   @default(STANDARD)
   // Listed on the digital menu.
-  showOnMenu         Boolean      @default(false)
+  showOnMenu         Boolean       @default(false)
   // Can be ordered right now (off: "Unavailable" on the menu and order screen).
-  isAvailable        Boolean      @default(true)
+  isAvailable        Boolean       @default(true)
   // Superseded by stationId (kept so nothing existing changes).
   prepStation        PrepStation?
   // Where it's made (the kitchen display's station). None: the first active
   // station.
   stationId          String?
-  menuDescription    String?      @db.Text
-  menuImage          String?
+  // Digital menu (Part 8): the card's short description (300 at most), its
+  // media and what the guest is told about it.
+  menuDescription    String?       @db.VarChar(300)
+  // The photo (uploads/menu/<productId>/…, WebP); was menuImage.
+  photoPath          String?
+  // 360° spin: the frames' paths in order — none, or 24–36.
+  spinFrames         Json?
+  // 3D: GLB for the browser and Android AR, USDZ for iPhone AR.
+  modelGlbPath       String?
+  modelUsdzPath      String?
+  // Which media the menu shows.
+  mediaType          MenuMediaType @default(PHOTO)
+  // Allergen names, as a JSON array of strings.
+  allergens          Json?
+  calories           Int?
+  isSignature        Boolean       @default(false)
   // Touch POS: the group its button sits in, and its cell in that group's
   // grid (0-based across pages of 30; none: the next free cell).
   menuGroupId        String?
   menuGridPosition   Int?
-  createdAt          DateTime     @default(now())
-  updatedAt          DateTime     @updatedAt
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
   deletedAt          DateTime?
 
-  category            Category             @relation(fields: [categoryId], references: [id])
-  brand               Brand                @relation(fields: [brandId], references: [id])
-  unit                Unit                 @relation(fields: [unitId], references: [id])
+  category            Category              @relation(fields: [categoryId], references: [id])
+  brand               Brand                 @relation(fields: [brandId], references: [id])
+  unit                Unit                  @relation(fields: [unitId], references: [id])
   stocks              ProductStock[]
   adjustmentItems     AdjustmentItem[]
   purchaseItems       PurchaseItem[]
@@ -539,14 +557,15 @@ model Product {
   transferItems       TransferItem[]
   // Restaurant module.
   orderItems          OrderItem[]
+  guestOrderLines     GuestOrderLine[]
   modifierGroups      ModifierGroup[]
-  recipeLines         RecipeLine[]         @relation("RecipeMenuItem")
-  usedInRecipes       RecipeLine[]         @relation("RecipeIngredient")
+  recipeLines         RecipeLine[]          @relation("RecipeMenuItem")
+  usedInRecipes       RecipeLine[]          @relation("RecipeIngredient")
   wasteEntries        WasteEntry[]
   wasteLines          WasteEntryLine[]
   availabilityLog     MenuAvailabilityLog[]
-  kitchenStation      KitchenStation?      @relation(fields: [stationId], references: [id], onDelete: SetNull)
-  menuGroup           MenuGroup?           @relation(fields: [menuGroupId], references: [id], onDelete: SetNull)
+  kitchenStation      KitchenStation?       @relation(fields: [stationId], references: [id], onDelete: SetNull)
+  menuGroup           MenuGroup?            @relation(fields: [menuGroupId], references: [id], onDelete: SetNull)
 
   @@index([deletedAt])
   @@index([productType])
@@ -1102,16 +1121,17 @@ model DiningArea {
   updatedAt         DateTime  @updatedAt
   deletedAt         DateTime?
 
-  warehouse Warehouse      @relation(fields: [warehouseId], references: [id])
-  tables    Table[]
-  fixtures  FloorFixture[]
-  layouts   FloorLayout[]
+  warehouse    Warehouse      @relation(fields: [warehouseId], references: [id])
+  tables       Table[]
+  fixtures     FloorFixture[]
+  layouts      FloorLayout[]
   // Roles whose Tables screen opens here (Part 6f: the Bartender on the Bar).
   homeForRoles Role[]
   // Staff whose Tables screen opens here (Part 6f).
-  homeForStaff User[] @relation("StaffHomeArea")
+  homeForStaff User[]         @relation("StaffHomeArea")
 
-  devices      Device[]     @relation("DeviceHomeArea")
+  devices Device[] @relation("DeviceHomeArea")
+
   @@index([deletedAt])
   @@index([warehouseId])
 }
@@ -1207,6 +1227,8 @@ model Table {
   // The digital menu link, /menu/[qrToken]: random and URL-safe, made on the
   // server. Regenerating it replaces it, so the old link stops working.
   qrToken       String     @unique
+  // When its token was last replaced (Rotate token, Part 8); null: never.
+  qrRotatedAt   DateTime?
   // Set when its order is billed while cleaning is manual
   // (BusinessSetting.restaurantManualCleaning); cleared by "Mark clean".
   needsCleaning Boolean    @default(false)
@@ -1214,9 +1236,10 @@ model Table {
   updatedAt     DateTime   @updatedAt
   deletedAt     DateTime?
 
-  area         DiningArea    @relation(fields: [areaId], references: [id])
+  area         DiningArea     @relation(fields: [areaId], references: [id])
   orders       Order[]
   reservations Reservation[]
+  requests     TableRequest[]
 
   @@index([deletedAt])
   @@index([areaId])
@@ -1275,6 +1298,8 @@ model Order {
   // the guest's name ("Ada"), if given. Dine-in orders only.
   checkNumber          Int?
   checkName            String?            @db.VarChar(40)
+  // GUEST: opened by a guest's order from the table's menu (Part 8 Step 7).
+  source               OrderSource        @default(STAFF)
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
   deletedAt            DateTime?
@@ -1295,6 +1320,7 @@ model Order {
   settlements        OrderSettlement[]
   tips               OrderTip[]
   refunds            OrderRefund[]
+  guestLines         GuestOrderLine[]
 
   @@index([deletedAt])
   @@index([status])
@@ -1353,7 +1379,7 @@ model OrderItem {
   // of them had no cost (or the line wasn't sold). Lines settled before it
   // was recorded were filled in once from the recipes and costs of 12 Nov
   // 2026 (add_order_item_cost).
-  unitCost      Decimal?  @db.Decimal(14, 4)
+  unitCost      Decimal?      @db.Decimal(14, 4)
   // A remake (Kitchen Display › Remake): the line it remakes. Made at no
   // charge and never billed, settled, split or refunded — the waste entry
   // for the spoilt one takes its stock, the original line is billed once.
@@ -1376,6 +1402,7 @@ model OrderItem {
   kotLines       KotLine[]
   billPartLines  OrderBillPartLine[]
   wasteEntries   WasteEntry[]
+  guestLine      GuestOrderLine?
 
   @@index([orderId])
   @@index([productId])
@@ -1734,7 +1761,9 @@ model Kot {
   type          KotType   @default(NEW)
   orderId       String
   stationId     String
-  createdById   String
+  // Who sent it; null when a guest's order went straight to the kitchen
+  // (Part 8 Step 7, autoSendGuestOrders).
+  createdById   String?
   // "VOID: <reason>" on a VOID ticket.
   note          String?   @db.Text
   printCount    Int       @default(0)
@@ -1745,7 +1774,7 @@ model Kot {
 
   order     Order          @relation(fields: [orderId], references: [id], onDelete: Cascade)
   station   KitchenStation @relation(fields: [stationId], references: [id])
-  createdBy User           @relation(fields: [createdById], references: [id])
+  createdBy User?          @relation(fields: [createdById], references: [id])
   lines     KotLine[]
 
   @@index([stationId, bumpedAt])
@@ -1865,11 +1894,11 @@ model PrinterAssignment {
 // A browser that prints (a cashier tablet, the kitchen PC): its id is a
 // long-lived cookie, its name the admin's ("Cashier tablet 2").
 model Device {
-  id         String   @id
-  name       String?  @db.VarChar(80)
-  userAgent  String?  @db.VarChar(255)
-  lastSeenAt DateTime @default(now())
-  createdAt  DateTime @default(now())
+  id                  String               @id
+  name                String?              @db.VarChar(80)
+  userAgent           String?              @db.VarChar(255)
+  lastSeenAt          DateTime             @default(now())
+  createdAt           DateTime             @default(now())
   // This device's own restaurant view (Settings › Devices), e.g. a bar PC
   // kept on Classic; null: the business's (BusinessSetting.restaurantInterface).
   restaurantInterface RestaurantInterface?
@@ -1877,19 +1906,19 @@ model Device {
   // restaurant terminal: it always opens on the PIN screen, never the email
   // sign-in. Wrong PINs typed here lock it: 5 in a row → 30 s, then longer
   // each time (pinLockLevel), up to 5 minutes; a right one starts over.
-  pinLogin       Boolean   @default(false)
-  pairedAt       DateTime?
-  pinFailures    Int       @default(0)
-  pinLockedUntil DateTime?
-  pinLockLevel   Int       @default(0)
+  pinLogin            Boolean              @default(false)
+  pairedAt            DateTime?
+  pinFailures         Int                  @default(0)
+  pinLockedUntil      DateTime?
+  pinLockLevel        Int                  @default(0)
   // What a paired device is (Part 6f Step 7c): a PIN terminal (POS), the
   // Kitchen screen (opens the kitchen display; Kitchen staff and managers
   // only) or a Bar terminal (opens Tables on its area, homeAreaId).
-  terminalRole   TerminalRole @default(POS)
-  homeAreaId     String?
+  terminalRole        TerminalRole         @default(POS)
+  homeAreaId          String?
 
   overrides DeviceOverride[]
-  homeArea  DiningArea?    @relation("DeviceHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
+  homeArea  DiningArea?      @relation("DeviceHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
 
   @@index([lastSeenAt])
 }
@@ -2190,4 +2219,171 @@ model MenuAvailabilityLog {
 
   @@index([productId, createdAt])
   @@index([createdAt])
+}
+
+// ---------------------------------------------------------------- Digital menu (Part 8)
+
+// What the digital menu shows for an item.
+enum MenuMediaType {
+  PHOTO
+  SPIN
+  MODEL
+}
+
+// How prices read on the menu: SYMBOL "₦1,500.00", CODE "NGN 1,500.00"
+// (the currency is the app's).
+enum MenuCurrencyDisplay {
+  SYMBOL
+  CODE
+}
+
+// A QR code that isn't a table: "Takeaway counter", "Bar". Its token is
+// made like a table's (lib/qrToken.ts: 144 random bits) and only says which
+// point it is.
+model QrPoint {
+  id          String    @id @default(cuid())
+  // The single business (BusinessSetting "default").
+  businessId  String    @default("default")
+  name        String    @db.VarChar(80)
+  qrToken     String    @unique
+  // What an order from it is: TAKEAWAY (no table, a name) or BAR_TAB.
+  orderType   OrderType
+  qrRotatedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  business BusinessSetting @relation(fields: [businessId], references: [id])
+
+  @@index([businessId, deletedAt])
+}
+
+// A guest's Call waiter / Request bill from the table's menu (Part 8 Step
+// 6). OPEN: the bell pulses on the floor screens; ACKNOWLEDGED: a waiter
+// tapped it (ackBy, ackAt); DONE: a waiter tapped it again, or it lapsed
+// (lib/tableRequests.ts). One open request of each type per table.
+model TableRequest {
+  id        String             @id @default(cuid())
+  tableId   String
+  type      TableRequestType
+  status    TableRequestStatus @default(OPEN)
+  createdAt DateTime           @default(now())
+  ackById   String?
+  ackAt     DateTime?
+  doneAt    DateTime?
+  updatedAt DateTime           @updatedAt
+
+  table Table @relation(fields: [tableId], references: [id])
+  ackBy User? @relation("TableRequestAck", fields: [ackById], references: [id])
+
+  @@index([tableId, status])
+  @@index([status, createdAt])
+  @@index([ackById])
+}
+
+enum TableRequestType {
+  CALL_WAITER
+  REQUEST_BILL
+}
+
+enum TableRequestStatus {
+  OPEN
+  ACKNOWLEDGED
+  DONE
+}
+
+// A line a guest sent from the table's menu (Part 8 Step 7). Priced here on
+// the server when it was sent. PENDING: waiting for a waiter to confirm it
+// (it isn't on the bill or the kitchen's screen yet); CONFIRMED: it became
+// the order line orderItemId; REJECTED: a waiter turned it down. Each keeps
+// the code it came through and the guest's phone (a cookie id, address and
+// browser) — the abuse log.
+model GuestOrderLine {
+  id          String          @id @default(cuid())
+  orderId     String
+  // One Send to waiter: its lines share this.
+  sendId      String          @db.VarChar(32)
+  productId   String
+  quantity    Int
+  unitPrice   Decimal         @db.Decimal(12, 2)
+  taxType     TaxType         @default(EXCLUSIVE)
+  taxRate     Decimal         @default(0) @db.Decimal(5, 2)
+  // [{ id, group, name, price }], as on an order line.
+  modifiers   Json?
+  note        String?         @db.Text
+  status      GuestLineStatus @default(PENDING)
+  orderItemId String?         @unique
+  qrToken     String          @db.VarChar(64)
+  deviceId    String          @db.VarChar(64)
+  ipAddress   String          @db.VarChar(64)
+  userAgent   String          @db.VarChar(255)
+  decidedById String?
+  decidedAt   DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+
+  order     Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product    @relation(fields: [productId], references: [id])
+  orderItem OrderItem? @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  decidedBy User?      @relation("GuestLineDecidedBy", fields: [decidedById], references: [id])
+
+  @@index([orderId, status])
+  @@index([qrToken, createdAt])
+  @@index([deviceId])
+  @@index([status, createdAt])
+  @@index([productId])
+  @@index([decidedById])
+}
+
+enum GuestLineStatus {
+  PENDING
+  CONFIRMED
+  REJECTED
+}
+
+enum OrderSource {
+  STAFF
+  GUEST
+}
+
+// The digital menu's settings, one row for the business. Guest ordering is
+// off until an admin turns it on; with it off the menu is view-only.
+model MenuSettings {
+  id                    String              @id @default(cuid())
+  businessId            String              @unique @default("default")
+  menuEnabled           Boolean             @default(true)
+  guestOrderingEnabled  Boolean             @default(false)
+  autoSendGuestOrders   Boolean             @default(false)
+  requireWaiterConfirm  Boolean             @default(true)
+  showPrices            Boolean             @default(true)
+  // Sold-out items: true, shown greyed; false, hidden.
+  showSoldOut           Boolean             @default(true)
+  showCalories          Boolean             @default(true)
+  showAllergens         Boolean             @default(true)
+  // Null: the business's name.
+  menuTitle             String?             @db.VarChar(80)
+  welcomeText           String?             @db.VarChar(300)
+  footerText            String?             @db.VarChar(300)
+  logoPath              String?
+  accentColour          String              @default("#0f7d6a") @db.VarChar(7)
+  currencyDisplay       MenuCurrencyDisplay @default(SYMBOL)
+  callWaiterEnabled     Boolean             @default(false)
+  requestBillEnabled    Boolean             @default(false)
+  // Guest ordering's caps (Step 7): lines per order, and its value (the
+  // menu prices; null: no cap). Paused: Add to order is off until resumed
+  // (the dashboard's switch), the menu stays up.
+  guestOrderMaxLines    Int                 @default(20)
+  guestOrderMaxValue    Decimal?            @default(100000) @db.Decimal(12, 2)
+  guestOrderingPausedAt DateTime?
+  // The address every QR code opens (Step 2): the server on the restaurant's
+  // network, e.g. http://192.168.1.20:3000, chosen by an admin. Null: not
+  // set yet, so no codes are printed.
+  menuBaseUrl           String?             @db.VarChar(200)
+  // Printed on the table QR cards only (Step 2), never on the menu.
+  wifiName              String?             @db.VarChar(64)
+  wifiPassword          String?             @db.VarChar(64)
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+
+  business BusinessSetting @relation(fields: [businessId], references: [id])
 }

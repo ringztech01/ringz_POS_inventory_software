@@ -90,3 +90,34 @@ export async function guardFloorPlanPage(): Promise<{ userId: string }> {
 // For the floor plan's server actions: the module on, signed in, Manage
 // Floor Plan. TODO(6f): also require accessLevel BACK_OFFICE.
 export const requireFloorPlan = () => requirePermission(RESTAURANT_PERMISSIONS.MANAGE_FLOOR_PLAN);
+
+// Digital menu › QR codes (Part 8 Step 2): the Administrator, or anyone with
+// Manage Floor Plan. The page sends anyone else to the app's start.
+const mayManageMenuQr = (current: Awaited<ReturnType<typeof getCurrentUserPermissions>>) =>
+  current.isAdmin || current.permissions.has(RESTAURANT_PERMISSIONS.MANAGE_FLOOR_PLAN);
+
+export async function guardMenuQrPage(): Promise<{ userId: string }> {
+  await requireRestaurant();
+  const current = await getCurrentUserPermissions();
+  if (!current.userId) redirect("/");
+  if (!mayManageMenuQr(current)) redirect("/");
+  return { userId: current.userId };
+}
+
+// For its actions: refused while the module is off, signed out, or without it.
+export async function requireMenuQr(): Promise<{ error: string; userId?: undefined } | { error?: undefined; userId: string }> {
+  if (!(await isModuleEnabled(restaurantModule.id))) return { error: "The Restaurant module is turned off." };
+  const current = await getCurrentUserPermissions();
+  if (!current.userId) return { error: "You must be signed in to do that." };
+  if (!mayManageMenuQr(current)) return { error: "You don't have permission to manage the menu's QR codes." };
+  return { userId: current.userId };
+}
+
+// For its route handlers: 404 while off, 401 signed out, 403 without it.
+export async function guardMenuQrRoute(): Promise<Response | null> {
+  if (!(await isModuleEnabled(restaurantModule.id))) return new Response("Not found", { status: 404 });
+  const current = await getCurrentUserPermissions();
+  if (!current.userId) return new Response("Unauthorized", { status: 401 });
+  if (!mayManageMenuQr(current)) return new Response("Forbidden", { status: 403 });
+  return null;
+}

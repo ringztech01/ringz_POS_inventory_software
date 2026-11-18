@@ -3,7 +3,13 @@ import { idSchema } from "./common";
 
 export const MENU_CODE_MAX = 30;
 export const MENU_NAME_MAX = 80;
-export const MENU_DESCRIPTION_MAX = 500;
+export const MENU_DESCRIPTION_MAX = 300;
+// Digital menu details (Part 8 Step 5).
+export const MENU_ALLERGEN_MAX = 40;
+export const MENU_ALLERGENS_MAX = 20;
+export const MENU_CALORIES_MAX = 9999;
+// The 14 allergens food labels name; others can be typed in.
+export const COMMON_ALLERGENS = ["Celery", "Cereals containing gluten", "Crustaceans", "Eggs", "Fish", "Lupin", "Milk", "Molluscs", "Mustard", "Peanuts", "Sesame", "Soya", "Sulphites", "Tree nuts"] as const;
 
 // A menu item (Food › Menu items). The price is the item's own list price;
 // order lines keep their own snapshot of it (Part 3). Code uniqueness is
@@ -37,6 +43,21 @@ export const menuItemSchema = z.object({
     .string()
     .trim()
     .transform((value) => value || null),
+  // On the digital menu (Part 8 Step 5): allergen names (no repeats),
+  // calories (a whole number, or none), the Signature pill.
+  allergens: z
+    .array(z.string().trim().min(1, "An allergen can't be blank.").max(MENU_ALLERGEN_MAX, `An allergen can be at most ${MENU_ALLERGEN_MAX} characters.`))
+    .max(MENU_ALLERGENS_MAX, `At most ${MENU_ALLERGENS_MAX} allergens.`)
+    .default([])
+    // The first spelling of a repeated name is kept.
+    .transform((names) => names.filter((n, i) => names.findIndex((m) => m.toLowerCase() === n.toLowerCase()) === i)),
+  calories: z
+    .string()
+    .trim()
+    .default("")
+    .refine((value) => value === "" || (/^\d{1,4}$/.test(value) && Number(value) <= MENU_CALORIES_MAX), `Calories: a whole number up to ${MENU_CALORIES_MAX}, or leave it empty.`)
+    .transform((value) => (value === "" ? null : Number(value))),
+  isSignature: z.boolean().default(false),
 });
 
 export type MenuItemInput = z.infer<typeof menuItemSchema>;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore, useTransition, type CSSProperties } from "react";
+import { Fragment, useEffect, useState, useSyncExternalStore, useTransition, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
 import { Lock, Maximize, Minimize } from "lucide-react";
@@ -18,6 +18,9 @@ import { seatReservation } from "../../server/actions/reservations";
 import type { FloorData, FloorTable, FloorTarget } from "../../server/queries/floor";
 import type { CounterOrder, PosSettings, PosStaff } from "../../server/queries/posScreen";
 import FloorPolling from "../floor/FloorPolling";
+import { GuestOrderBadge, guestOrderByOrder, guestOrderByTable, RequestBell, requestsByTable, useGuestOrderToasts, useRequestToasts } from "../floor/RequestBell";
+import GuestLinesPanel from "../order/GuestLinesPanel";
+import { confirmGuestLinesAction, rejectGuestLinesAction } from "../../server/actions/guestOrders";
 import TablePickerModal from "../floor/TablePickerModal";
 import BarTabDialog from "./BarTabDialog";
 import FunctionBar, { type FnKey } from "./FunctionBar";
@@ -206,6 +209,14 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
     setCheckId(null);
   };
   const area = floor.areas.find((a) => a.id === floor.areaId) ?? null;
+  // Guests' Call waiter / Request bill (Part 8 Step 6): a bell on the table,
+  // a toast for its waiter.
+  const bells = requestsByTable(floor.requests);
+  useRequestToasts(floor.requests, session.userId || null, floor.areaId);
+  // Guests' orders from the menu (Step 7): a bag on the table, a toast.
+  const guestBadges = guestOrderByTable(floor.guestOrders);
+  const counterBadges = guestOrderByOrder(floor.guestOrders);
+  useGuestOrderToasts(floor.guestOrders, session.userId || null, floor.areaId);
 
   useEffect(() => {
     router.prefetch(back);
@@ -282,6 +293,19 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
     toast.error(result.error);
     if (result.stale) router.refresh();
     return false;
+  }
+  // A guest's held lines, confirmed or rejected from the side panel.
+  function guestDecision(order: { id: string; version: number }, lineIds: string[], confirm: boolean) {
+    startWork(async () => {
+      try {
+        const result = confirm ? await confirmGuestLinesAction({ orderId: order.id, version: order.version, lineIds }) : await rejectGuestLinesAction({ orderId: order.id, lineIds });
+        if (result.ok) toast.success(confirm ? (lineIds.length === 1 ? "Guest line confirmed. Send it from the order." : `${lineIds.length} guest lines confirmed. Send them from the order.`) : lineIds.length === 1 ? "Guest line rejected." : `${lineIds.length} guest lines rejected.`);
+        else toast.error(result.error);
+      } catch {
+        toast.error("Couldn't reach the server. Check the connection and try again.");
+      }
+      router.refresh();
+    });
   }
   const pick = (mode: MoveMode) => {
     if (!can.orders) return void toast.error("Needs the Manage Orders permission.");
@@ -396,18 +420,22 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
           {counter.length > 0 && (
             <div aria-label="Takeaways and tabs" data-counter-orders style={{ display: "flex", gap: 6, padding: "8px 14px", borderBottom: `1px solid ${TOUCH.line}`, overflowX: "auto", flexShrink: 0 }}>
               {counter.map((o) => (
-                <TouchButton
-                  key={o.id}
-                  data-counter-order={o.label}
-                  background={o.type === "BAR_TAB" ? TOUCH.bar : TOUCH.teal}
-                  onClick={() => goToOrder(o.id)}
-                  style={{ height: 44, padding: "0 12px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-start", gap: 1, flexShrink: 0 }}
-                >
-                  <span style={{ fontSize: 14, fontWeight: 700 }}>{o.label}</span>
-                  <span style={{ fontFamily: TOUCH.mono, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
-                    {o.ref} · {o.lines} {o.lines === 1 ? "item" : "items"} · {o.open}
-                  </span>
-                </TouchButton>
+                <div key={o.id} style={{ position: "relative", display: "flex", flexShrink: 0, paddingTop: counterBadges.has(o.id) ? 6 : 0 }}>
+                  <TouchButton
+                    data-counter-order={o.label}
+                    background={o.type === "BAR_TAB" ? TOUCH.bar : TOUCH.teal}
+                    onClick={() => goToOrder(o.id)}
+                    style={{ height: 44, padding: "0 12px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-start", gap: 1, flexShrink: 0 }}
+                  >
+                    <span style={{ fontSize: 14, fontWeight: 700 }}>{o.label}</span>
+                    <span style={{ fontFamily: TOUCH.mono, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
+                      {o.ref} · {o.lines} {o.lines === 1 ? "item" : "items"} · {o.open}
+                      {o.note ? ` · ${o.note}` : ""}
+                    </span>
+                  </TouchButton>
+                  {/* A guest's lines from a QR point waiting (Part 8 Step 8). */}
+                  <GuestOrderBadge order={counterBadges.get(o.id)} onOpen={(id) => goToOrder(id)} size={26} style={{ position: "absolute", top: -4, right: -6 }} />
+                </div>
               ))}
             </div>
           )}
@@ -421,13 +449,27 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
               fixtures={floor.fixtures}
               tables={floor.tables}
               render={(table, at) => (
-                <TableTile key={table.id} table={table} view="floor" at={at} selected={table.id === selectedId} dim={mine && !!table.order && table.order.waiterId !== session.userId} onTap={() => pickTable(table.id === selectedId ? null : table.id)} />
+                <Fragment key={table.id}>
+                  <TableTile table={table} view="floor" at={at} selected={table.id === selectedId} dim={mine && !!table.order && table.order.waiterId !== session.userId} onTap={() => pickTable(table.id === selectedId ? null : table.id)} />
+                  {/* On the table's top-right corner (as placed, before any turn). */}
+                  <RequestBell
+                    requests={bells.get(table.id) ?? []}
+                    tableName={table.name}
+                    size={34}
+                    style={{ position: "absolute", left: `calc(${at.style.left} + ${at.style.width})`, top: at.style.top, transform: "translate(-65%, -35%)" }}
+                  />
+                  <GuestOrderBadge order={guestBadges.get(table.id)} onOpen={(id) => goToOrder(id)} size={34} style={{ position: "absolute", left: at.style.left, top: at.style.top, transform: "translate(-35%, -35%)" }} />
+                </Fragment>
               )}
             />
           ) : (
             <div data-tables-view="grid" style={{ flex: 1, minHeight: 0, overflowY: "auto", display: "grid", gridTemplateColumns: "repeat(6, minmax(0,1fr))", gridAutoRows: 118, gap: TOUCH.gap, padding: 8, alignContent: "start" }}>
               {floor.tables.map((table) => (
-                <TableTile key={table.id} table={table} view="grid" selected={table.id === selectedId} dim={mine && !!table.order && table.order.waiterId !== session.userId} onTap={() => pickTable(table.id === selectedId ? null : table.id)} />
+                <div key={table.id} style={{ position: "relative", display: "grid", minWidth: 0 }}>
+                  <TableTile table={table} view="grid" selected={table.id === selectedId} dim={mine && !!table.order && table.order.waiterId !== session.userId} onTap={() => pickTable(table.id === selectedId ? null : table.id)} />
+                  <RequestBell requests={bells.get(table.id) ?? []} tableName={table.name} size={34} style={{ position: "absolute", top: -6, right: -6 }} />
+                  <GuestOrderBadge order={guestBadges.get(table.id)} onOpen={(id) => goToOrder(id)} size={34} style={{ position: "absolute", top: -6, left: -6 }} />
+                </div>
               ))}
             </div>
           )}
@@ -508,6 +550,7 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
                       })}
                     </div>
                   )}
+                  <GuestLinesPanel touch lines={check.pending} busy={working} onConfirm={(ids) => guestDecision(check, ids, true)} onReject={(ids) => guestDecision(check, ids, false)} />
                   <div aria-label="Lines" style={{ flex: 1, overflowY: "auto", padding: "6px 16px" }}>
                     {check.lines.length === 0 && <p style={{ margin: "10px 0", fontSize: 14, color: TOUCH.inkFaint }}>Nothing ordered yet.</p>}
                     {check.lines.map((line) => {

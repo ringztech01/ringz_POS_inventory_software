@@ -2,7 +2,7 @@ import "server-only";
 import type { NextRequest } from "next/server";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
 import { guardRoute } from "../guard";
-import { appOrigin, menuUrl, qrPng } from "../qr";
+import { menuOrigin, menuUrl, qrPng } from "../qr";
 import { getTableQr } from "../queries/tables";
 
 const slug = (text: string) =>
@@ -21,7 +21,7 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
   const table = await getTableQr(id);
   if (!table) return new Response("Table not found", { status: 404 });
 
-  const png = await qrPng(menuUrl(await appOrigin(), table.qrToken));
+  const png = await qrPng(menuUrl(await menuOrigin(), table.qrToken));
   return new Response(new Uint8Array(png), {
     headers: {
       "Content-Type": "image/png",

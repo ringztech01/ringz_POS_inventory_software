@@ -13,6 +13,9 @@ export type ModifierOptionView = {
   // "+₦4.00", or "" for no price change. Formatted here — the browser
   // never adds prices up.
   price: string;
+  // The same as a plain amount ("4.00") — the guest menu's running total
+  // (Part 8 Step 7: shown only; the server prices every line itself).
+  value: string;
 };
 
 export type ModifierGroupView = {
@@ -63,6 +66,7 @@ export async function getModifierGroupsFor(productIds: readonly string[]): Promi
             id: m.id,
             name: m.name,
             price: m.price.isZero() ? "" : `+${formatNaira(m.price.toFixed(2))}`,
+            value: m.price.toFixed(2),
           })),
         })),
     ]),
