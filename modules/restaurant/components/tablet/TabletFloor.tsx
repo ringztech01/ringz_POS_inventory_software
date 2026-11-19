@@ -5,6 +5,8 @@ import { fitRoom, placeIn, shownWidth, tableRadius } from "../../lib/floorView";
 import type { TableShape } from "../../lib/floorGeometry";
 import { FLOOR_LEGEND, floorLabels, legendCounts, lookLabel, tableTitle, type TabletCheck, type TabletLook, type TabletTile } from "../../lib/tabletTables";
 import { TABLE_STATE, T } from "./tabletTheme";
+import { RequestBell } from "../floor/RequestBell";
+import type { FloorRequest } from "../../lib/tableRequests";
 import { useTabletClock } from "./useTabletClock";
 
 // Tables in landscape (Part 6g Step 4; design: RingzPOS Tablet.dc.html ›
@@ -38,6 +40,15 @@ export type TabletFloorProps = {
   room: { widthM: number; heightM: number } | null;
   fixtures: Fixture[];
   places: Record<string, Place>;
+  // Never saved in the editor: drawn in a grid by number (6g follow-up 3).
+  planSaved: boolean;
+  // A manager who may edit the floor plan: the link to arrange it.
+  canArrange: boolean;
+  // Guests waiting (6g follow-up 2): a pulsing bell on the table; tapped, `onBell`.
+  bells: Map<string, FloorRequest[]>;
+  onBell: () => void;
+  // The open takeaways and tabs, under the stats when no table is picked.
+  counter: ReactNode;
   summary: { free: number; openOrders: number; openValue: string };
   can: { book: boolean; settle: boolean };
   mineOnly: boolean;
@@ -58,7 +69,7 @@ export type TabletFloorProps = {
   grid: ReactNode;
 };
 
-function Room({ room, fixtures, tiles, places, selectedId, isDim, onPick }: { room: { widthM: number; heightM: number }; fixtures: Fixture[]; tiles: TabletTile[]; places: Record<string, Place>; selectedId: string | null; isDim: (tile: TabletTile) => boolean; onPick: (id: string) => void }) {
+function Room({ room, fixtures, tiles, places, selectedId, isDim, onPick, bells, onBell }: { room: { widthM: number; heightM: number }; fixtures: Fixture[]; tiles: TabletTile[]; places: Record<string, Place>; selectedId: string | null; isDim: (tile: TabletTile) => boolean; onPick: (id: string) => void; bells: Map<string, FloorRequest[]>; onBell: () => void }) {
   const ref = useRef<HTMLDivElement>(null);
   const [panel, setPanel] = useState<{ w: number; h: number } | null>(null);
   useEffect(() => {
@@ -110,10 +121,33 @@ function Room({ room, fixtures, tiles, places, selectedId, isDim, onPick }: { ro
               </button>
             );
           })}
+          {tiles.map((tile) => {
+            const place = places[tile.id];
+            const requests = bells.get(tile.id);
+            if (!place || !requests?.length) return null;
+            const corner = bellCorner(place, room);
+            return (
+              <span key={`bell-${tile.id}`} style={{ position: "absolute", left: `${corner.x}%`, top: `${corner.y}%`, transform: "translate(-60%, -40%)", zIndex: 4 }}>
+                <RequestBell requests={requests} tableName={tile.name} size={46} onDone={onBell} />
+              </span>
+            );
+          })}
         </div>
       )}
     </div>
   );
+}
+
+// Where a table's bell goes: the top right corner of what's drawn, turned
+// tables included (a box turned by θ spans |w·cosθ| + |h·sinθ| across) — as
+// a % of the room.
+function bellCorner(place: Place, room: { widthM: number; heightM: number }): { x: number; y: number } {
+  const turn = (place.rotation * Math.PI) / 180;
+  const across = Math.abs(place.w * Math.cos(turn)) + Math.abs(place.h * Math.sin(turn));
+  const down = Math.abs(place.w * Math.sin(turn)) + Math.abs(place.h * Math.cos(turn));
+  const cx = place.x + place.w / 2;
+  const cy = place.y + place.h / 2;
+  return { x: ((cx + across / 2) / room.widthM) * 100, y: ((cy - down / 2) / room.heightM) * 100 };
 }
 
 const big = (bg: string, fg: string = T.text) => ({ border: "none", borderRadius: 8, background: bg, color: fg, fontWeight: 900, fontFamily: "inherit", cursor: "pointer" }) as const;
@@ -178,7 +212,7 @@ function BusyPanel({ tile, check, onCheck, can, working, onOpenOrder, onPrintBil
 }
 
 export default function TabletFloor(props: TabletFloorProps) {
-  const { user, areas, areaId, areaName, tiles, room, fixtures, places, summary, can, mineOnly, isDim, working } = props;
+  const { user, areas, areaId, tiles, room, fixtures, places, summary, can, mineOnly, isDim, working } = props;
   const clock = useTabletClock();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [checkId, setCheckId] = useState<string | null>(null);
@@ -226,14 +260,16 @@ export default function TabletFloor(props: TabletFloorProps) {
             ))}
           </div>
           {plan && room ? (
-            <Room room={room} fixtures={fixtures} tiles={tiles} places={places} selectedId={selectedId} isDim={isDim} onPick={(id) => (setSelectedId(id === selectedId ? null : id), setCheckId(null))} />
+            <>
+              <Room room={room} fixtures={fixtures} tiles={tiles} places={places} selectedId={selectedId} isDim={isDim} onPick={(id) => (setSelectedId(id === selectedId ? null : id), setCheckId(null))} bells={props.bells} onBell={props.onBell} />
+              {!props.planSaved && props.canArrange && areaId && (
+                <a data-arrange-floor href={`/restaurant/settings/floor?area=${encodeURIComponent(areaId)}`} style={{ alignSelf: "flex-end", fontSize: 15, fontWeight: 700, color: T.soft, textDecoration: "underline", padding: "4px 6px" }}>
+                  Arrange in Floor plan editor
+                </a>
+              )}
+            </>
           ) : (
             <div data-no-floor-plan style={{ flex: 1, minHeight: 0, width: "100%", display: "flex", flexDirection: "column", gap: 10 }}>
-              {user.manager && (
-                <span style={{ padding: "10px 14px", borderRadius: 8, background: T.bg, fontSize: 16, fontWeight: 700, color: T.soft }}>
-                  No floor plan for {areaName}. Set up in Floor plan editor.
-                </span>
-              )}
               {props.grid}
             </div>
           )}
@@ -241,7 +277,7 @@ export default function TabletFloor(props: TabletFloorProps) {
 
         <aside data-floor-panel style={{ background: T.raised, borderRadius: 10, display: "flex", flexDirection: "column", overflow: "hidden", minHeight: 0 }}>
           {!selected || !head ? (
-            <div data-panel-empty style={{ flex: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 16, padding: 20 }}>
+            <div data-panel-empty style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column", justifyContent: "center", gap: 16, padding: 20 }}>
               <span style={{ fontSize: 28, fontWeight: 900 }}>Tap a table</span>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                 {(
@@ -258,6 +294,7 @@ export default function TabletFloor(props: TabletFloorProps) {
                   </div>
                 ))}
               </div>
+              {props.counter}
             </div>
           ) : check ? (
             <BusyPanel tile={selected} check={check} onCheck={setCheckId} can={can} working={working} onOpenOrder={props.onOpenOrder} onPrintBill={props.onPrintBill} onPay={props.onPay} />

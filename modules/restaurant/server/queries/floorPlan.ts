@@ -3,6 +3,7 @@ import type { FloorFixtureType, TableShape } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { todayInAppZone } from "@/lib/dateRanges";
 import { bookingReason, openOrderReason } from "../../lib/floorRules";
+import { autoFloor, planSaved } from "../../lib/floorAuto";
 import { appDayBounds, formatAppTime } from "../../lib/time";
 import { toBackground, type FloorBackground } from "../services/floorImage";
 import { getAreaLayouts, type EditorLayout } from "../services/floorLayouts";
@@ -45,6 +46,7 @@ export async function getFloorEditor(): Promise<EditorArea[]> {
       roomHeightM: true,
       gridSizeM: true,
       layoutVersion: true,
+      floorPlanSavedAt: true,
       isLocked: true,
       backgroundImage: true,
       backgroundOpacity: true,
@@ -79,17 +81,22 @@ export async function getFloorEditor(): Promise<EditorArea[]> {
   };
   const layouts = await getAreaLayouts(areas.map((a) => a.id));
   const metres = <T extends { x: unknown; y: unknown; w: unknown; h: unknown }>(row: T) => ({ ...row, x: Number(row.x), y: Number(row.y), w: Number(row.w), h: Number(row.h) });
-  return areas.map((area) => ({
+  return areas.map((area) => {
+    // Never saved (6g follow-up 3): the editor starts from the grid every
+    // floor draws for it; saving stores real places.
+    const auto = planSaved(area.floorPlanSavedAt) ? null : autoFloor(area.tables.map((t) => ({ id: t.id, name: t.name, w: Number(t.w), h: Number(t.h) })), { widthM: Number(area.roomWidthM), heightM: Number(area.roomHeightM) });
+    return {
     id: area.id,
     name: area.name,
     prefix: area.prefix,
-    room: { widthM: Number(area.roomWidthM), heightM: Number(area.roomHeightM), gridM: Number(area.gridSizeM) },
+    room: { widthM: auto ? auto.room.widthM : Number(area.roomWidthM), heightM: auto ? auto.room.heightM : Number(area.roomHeightM), gridM: Number(area.gridSizeM) },
     layoutVersion: area.layoutVersion,
     isLocked: area.isLocked,
     background: toBackground(area.id, area),
-    tables: area.tables.map((t) => ({ ...metres(t), busy: busy(t) })),
+    tables: area.tables.map((t) => ({ ...metres(t), ...(auto?.places[t.id] ?? {}), busy: busy(t) })),
     layouts: layouts[area.id]?.layouts ?? [],
     hasNormal: layouts[area.id]?.hasNormal ?? false,
     fixtures: area.fixtures.map(metres),
-  }));
+    };
+  });
 }

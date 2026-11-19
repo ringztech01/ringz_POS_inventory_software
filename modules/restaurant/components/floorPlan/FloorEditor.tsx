@@ -108,9 +108,9 @@ const withIds = (plans: Plans, created: Record<string, string>): Plans =>
 // tables and repeated numbers turn red; SAVE waits until they're fixed),
 // and saved — every changed area at once, against the version it was
 // opened at. Undo / Redo keep the last 50 steps. Mouse and touch alike.
-export default function FloorEditor({ areas, role }: { areas: EditorArea[]; role: { name: string; admin: boolean } }) {
+export default function FloorEditor({ areas, role, initialAreaId = null }: { areas: EditorArea[]; role: { name: string; admin: boolean }; initialAreaId?: string | null }) {
   const router = useRouter();
-  const [areaId, setAreaId] = useState(areas[0]?.id ?? "");
+  const [areaId, setAreaId] = useState(areas.find((a) => a.id === initialAreaId)?.id ?? areas[0]?.id ?? "");
   const [meta, setMeta] = useState(areas);
   const [plans, setPlans] = useState<Plans>(() => fromAreas(areas));
   const [saved, setSaved] = useState<Plans>(() => fromAreas(areas));

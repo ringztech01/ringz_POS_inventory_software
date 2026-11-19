@@ -3,17 +3,18 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
-import { BellRing, Receipt, ShoppingBag } from "lucide-react";
+import { BellRing, Receipt, ShoppingBag, Smartphone } from "lucide-react";
 import { announcement, isForMe, REQUEST_LABEL, toAnnounce, type FloorRequest } from "../../lib/tableRequests";
 import { guestOrderAnnouncement, type FloorGuestOrder } from "../../lib/guestOrdering";
 import { tapTableRequestAction } from "../../server/actions/tableRequests";
 
-// Guests' Call waiter / Request bill on the floor screens (Part 8 Step 6):
-// the desktop Tables screen and the waiter's tablet. A table with a request
-// gets a bell — pulsing while nobody's acknowledged it, steady once someone
-// has. Tapping it acknowledges (OPEN → ACKNOWLEDGED); tapping it again says
-// it's done. A new request also pops a toast for the table's waiter (or for
-// everyone, when no one has the table).
+// Guests' Call waiter / Request bill on the floor screens (Part 8 Step 6;
+// 6g follow-up 2): the desktop Tables screen, the Classic floor and the
+// tablet. A table whose guest is waiting gets a pulsing bell; one tap
+// acknowledges (OPEN → ACKNOWLEDGED) and the bell goes. The guest's phone
+// then says the waiter is on the way, until it clears by itself
+// (lib/tableRequests ACK_CLEARS_MIN). A new request also pops a toast for the
+// table's waiter (or for everyone, when no one has the table).
 
 const RED = "#DC2626";
 const PULSE = `@keyframes ringz-request-bell { 0% { box-shadow: 0 0 0 0 rgba(220,38,38,.65); } 70% { box-shadow: 0 0 0 12px rgba(220,38,38,0); } 100% { box-shadow: 0 0 0 0 rgba(220,38,38,0); } }
@@ -21,42 +22,44 @@ const PULSE = `@keyframes ringz-request-bell { 0% { box-shadow: 0 0 0 0 rgba(220
 
 const OFFLINE = "Couldn't reach the server. Check the connection and try again.";
 
-// The bell on one table: its requests (one or both types).
-export function RequestBell({ requests, tableName, style, size = 30 }: { requests: FloorRequest[]; tableName: string; style?: CSSProperties; size?: number }) {
+// Only the requests nobody has acknowledged yet show (and ring).
+export const openRequests = (requests: readonly FloorRequest[]) => requests.filter((r) => r.status === "OPEN");
+
+// The bell on one table: its open requests (one or both types). `onDone`:
+// what to do once tapped (the tablet refreshes only when it's online);
+// otherwise the page refreshes.
+export function RequestBell({ requests, tableName, style, size = 30, onDone }: { requests: FloorRequest[]; tableName: string; style?: CSSProperties; size?: number; onDone?: () => void }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
-  if (requests.length === 0) return null;
-  const open = requests.filter((r) => r.status === "OPEN");
-  // A tap deals with every request at that step: all the new ones, else
-  // all the acknowledged ones.
-  const acting = open.length ? open : requests;
-  const what = requests.map((r) => REQUEST_LABEL[r.type]).join(", ");
-  const hint = open.length ? "tap to acknowledge" : "tap when done";
+  const open = openRequests(requests);
+  if (open.length === 0) return null;
+  const what = open.map((r) => REQUEST_LABEL[r.type]).join(", ");
 
   async function tap() {
     if (busy) return;
     setBusy(true);
     try {
-      const results = await Promise.all(acting.map((r) => tapTableRequestAction({ id: r.id, seen: r.status })));
+      const results = await Promise.all(open.map((r) => tapTableRequestAction({ id: r.id, seen: "OPEN" })));
       const failed = results.find((r) => !r.ok);
       if (failed && !failed.ok) toast.error(failed.error);
-      else toast.success(open.length ? `Table ${tableName}: acknowledged.` : `Table ${tableName}: done.`, { id: `request-tap-${tableName}` });
+      else toast.success(`Table ${tableName}: acknowledged.`, { id: `request-tap-${tableName}` });
     } catch {
       toast.error(OFFLINE);
     } finally {
       setBusy(false);
-      router.refresh();
+      if (onDone) onDone();
+      else router.refresh();
     }
   }
 
-  const pulsing = open.length > 0;
   return (
     <button
       type="button"
       data-request-bell={tableName}
-      data-request-state={pulsing ? "open" : "acknowledged"}
-      aria-label={`Table ${tableName}: ${what} — ${hint}`}
-      title={`${requests.map((r) => `${REQUEST_LABEL[r.type]} · ${r.minutes} min`).join("\n")}\n(${hint})`}
+      data-request-state="open"
+      data-request-types={open.map((r) => r.type).join(" ")}
+      aria-label={`Table ${tableName}: ${what} — tap to acknowledge`}
+      title={`${open.map((r) => `${REQUEST_LABEL[r.type]} · ${r.minutes} min`).join("\n")}\n(tap to acknowledge)`}
       onClick={(event) => {
         event.stopPropagation();
         void tap();
@@ -67,15 +70,15 @@ export function RequestBell({ requests, tableName, style, size = 30 }: { request
         minWidth: size,
         padding: "0 7px",
         borderRadius: size / 2,
-        border: pulsing ? "2px solid #fff" : `2px solid ${RED}`,
-        background: pulsing ? RED : "#fff",
-        color: pulsing ? "#fff" : RED,
+        border: "2px solid #fff",
+        background: RED,
+        color: "#fff",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
         gap: 3,
         cursor: busy ? "progress" : "pointer",
-        animation: pulsing ? "ringz-request-bell 1.4s ease-out infinite" : "none",
+        animation: "ringz-request-bell 1.4s ease-out infinite",
         touchAction: "manipulation",
         WebkitTapHighlightColor: "transparent",
         opacity: busy ? 0.7 : 1,
@@ -86,8 +89,8 @@ export function RequestBell({ requests, tableName, style, size = 30 }: { request
       <style href="ringz-request-bell" precedence="default">
         {PULSE}
       </style>
-      {requests.some((r) => r.type === "CALL_WAITER") && <BellRing size={size * 0.52} strokeWidth={2.4} aria-hidden />}
-      {requests.some((r) => r.type === "REQUEST_BILL") && <Receipt size={size * 0.52} strokeWidth={2.4} aria-hidden />}
+      {open.some((r) => r.type === "CALL_WAITER") && <BellRing size={size * 0.52} strokeWidth={2.4} aria-hidden />}
+      {open.some((r) => r.type === "REQUEST_BILL") && <Receipt size={size * 0.52} strokeWidth={2.4} aria-hidden />}
     </button>
   );
 }
@@ -137,9 +140,20 @@ export function requestsByTable(requests: FloorRequest[]): Map<string, FloorRequ
   return map;
 }
 
+// A takeaway order (6g follow-up 2): a bag, on the takeaways-and-tabs strips
+// of the desktop Tables screen and the tablet. Bar tabs have none.
+export function TakeawayBag({ size = 16, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <span data-takeaway-bag aria-label="Takeaway" role="img" style={{ display: "inline-flex", alignItems: "center", flexShrink: 0 }}>
+      <ShoppingBag size={size} strokeWidth={2.4} color={color} aria-hidden />
+    </span>
+  );
+}
+
 // A guest's order from the menu waiting for a waiter (Part 8 Step 7): a
-// violet bag on the table, pulsing; a tap opens the order (Confirm / Reject
-// are there and on the tablet's side panel).
+// violet phone on the table, pulsing; a tap opens the order (Confirm / Reject
+// are there and on the tablet's side panel). A phone, not a bag: the bag
+// means a takeaway (6g follow-up 2).
 const VIOLET = "#6B3FA0";
 const BAG_PULSE = `@keyframes ringz-guest-order { 0% { box-shadow: 0 0 0 0 rgba(107,63,160,.65); } 70% { box-shadow: 0 0 0 12px rgba(107,63,160,0); } 100% { box-shadow: 0 0 0 0 rgba(107,63,160,0); } }
 @media (prefers-reduced-motion: reduce) { [data-guest-order-badge] { animation: none !important; } }`;
@@ -181,7 +195,7 @@ export function GuestOrderBadge({ order, onOpen, style, size = 30 }: { order: Fl
       <style href="ringz-guest-order" precedence="default">
         {BAG_PULSE}
       </style>
-      <ShoppingBag size={size * 0.5} strokeWidth={2.4} aria-hidden />
+      <Smartphone size={size * 0.5} strokeWidth={2.4} aria-hidden />
       {order.lines}
     </button>
   );
@@ -197,7 +211,7 @@ export function useGuestOrderToasts(orders: FloorGuestOrder[], userId: string | 
     if (fresh.length === 0) return;
     for (const order of fresh) {
       seen.current.add(`g:${order.sendId}`);
-      toast(guestOrderAnnouncement(order, areaId), { id: `guest-order-${order.sendId}`, icon: <ShoppingBag size={18} color={VIOLET} aria-hidden />, duration: 12_000 });
+      toast(guestOrderAnnouncement(order, areaId), { id: `guest-order-${order.sendId}`, icon: <Smartphone size={18} color={VIOLET} aria-hidden />, duration: 12_000 });
     }
     writeSeen(seen.current);
   }, [orders, userId, areaId]);

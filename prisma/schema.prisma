@@ -220,6 +220,9 @@ model BusinessSetting {
   // Keep a tablet's screen on while the app is open (Part 6g Step 6). Browsers
   // only allow it on HTTPS pages.
   restaurantTabletWakeLock        Boolean             @default(true)
+  // The tablet's PAY asks for a tip (Settings › Restaurant › Payments). Off:
+  // no tip step on a tablet. The desktop Payment pop-up always has its field.
+  restaurantTabletTips            Boolean             @default(false)
   // Touch POS: lock the screen (PIN to carry on) after this many seconds
   // without a tap; 0 never.
   restaurantPosLockSeconds        Int                 @default(0)
@@ -1118,6 +1121,11 @@ model DiningArea {
   backgroundScale   Decimal?  @db.Decimal(10, 4)
   backgroundOffset  Json?
   layoutVersion     Int       @default(0)
+  // Last saved in the floor plan editor (or an event layout put on the floor).
+  // Null: never — the floors draw its tables in a grid by number and the
+  // editor starts from that (6g follow-up 3). layoutVersion can't tell: a
+  // table added on the Tables page moves it on too.
+  floorPlanSavedAt  DateTime?
   // Locked: the editor won't move or change anything until it's unlocked.
   isLocked          Boolean   @default(false)
   // New table numbers here start with it ("T" → T6).

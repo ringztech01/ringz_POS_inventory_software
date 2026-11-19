@@ -4,6 +4,7 @@ import { useEffect, useReducer, type CSSProperties } from "react";
 import toast from "react-hot-toast";
 import { Copy, Delete, X } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
+import { copyText } from "@/lib/copyText";
 import { formatDisplay, INITIAL, keyFromKeyboard, press, type CalcKey } from "./calculator";
 import PosButton from "./PosButton";
 import { POS } from "./theme";
@@ -59,13 +60,11 @@ export default function PosCalculator({ onClose }: { onClose: () => void }) {
     return () => document.removeEventListener("keydown", onKey);
   }, [onClose]);
 
+  // copyText: the clipboard where the browser allows it (HTTPS), else the
+  // older copy command — tills open the app over plain http on the Wi-Fi.
   async function copy() {
-    try {
-      await navigator.clipboard.writeText(state.display);
-      toast.success(`Copied ${formatDisplay(state.display)}`);
-    } catch {
-      toast.error("Couldn't copy to the clipboard.");
-    }
+    if (await copyText(state.display)) toast.success(`Copied ${formatDisplay(state.display)}`);
+    else toast.error("Couldn't copy to the clipboard.");
   }
 
   return (

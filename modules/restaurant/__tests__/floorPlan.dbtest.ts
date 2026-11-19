@@ -15,6 +15,8 @@ import { newQrToken } from "../lib/qrToken";
 import { placeInArea } from "../server/services/tables";
 import { saveFloorPlan } from "../server/services/floorPlan";
 import { getFloorEditor } from "../server/queries/floorPlan";
+import { getFloor } from "../server/queries/floor";
+import { autoFloor } from "../lib/floorAuto";
 import type { FloorAreaPlan } from "../schemas/floorPlan";
 import { todayInAppZone } from "@/lib/dateRanges";
 import { appDateTime } from "../lib/time";
@@ -98,6 +100,8 @@ describe("Floor plan schema (database copy)", { skip: enabled ? false : "set RES
     return edit({
       areaId,
       layoutVersion: area.layoutVersion,
+      // As the editor sends it (a never-saved area's grid may need a bigger room).
+      room: area.room,
       tables: area.tables.map(({ id, name, seats, shape, x, y, w, h, rotation }) => ({ id, name, seats, shape, x, y, w, h, rotation })),
       fixtures: area.fixtures.map(({ id, type, label, x, y, w, h, rotation }) => ({ id, type, label, x, y, w, h, rotation })),
     });
@@ -130,7 +134,8 @@ describe("Floor plan schema (database copy)", { skip: enabled ? false : "set RES
     assert.deepEqual(after.tables.map((t) => [t.name, t.seats, t.shape, t.x, t.y, t.rotation]).sort(), [
       [`S${stamp}1`, 4, "SQUARE", 6, 5, 45],
       [`S${stamp}3`, 6, "BOOTH", 1, 5, 0],
-      [`S${stamp}9`, 3, "ROUND", 4.2, 0.4, 0],
+      // Left where the editor opened it: never saved there, so the grid (6g follow-up 3).
+      [`S${stamp}9`, 3, "ROUND", before.tables[1].x, before.tables[1].y, 0],
     ].sort());
     assert.ok((await prisma.table.findFirstOrThrow({ where: { name: `S${stamp}3` } })).qrToken, "a new table gets its QR token");
     assert.deepEqual(after.fixtures.map((f) => [f.type, f.label]), [["ENTRANCE", "Front door"]]);
@@ -238,6 +243,8 @@ describe("Floor plan schema (database copy)", { skip: enabled ? false : "set RES
       to: before.layoutVersion + 1,
       tables: { count: 2, added: 1, changed: 1, restored: 0, removed: 0 },
       fixtures: { count: 1, removed: 0 },
+      // The editor sends its room with every save.
+      room: before.room,
     });
   });
 
@@ -290,5 +297,44 @@ describe("Floor plan schema (database copy)", { skip: enabled ? false : "set RES
     assert.match(busy[`O${stamp}`] ?? "", /has an open order, so it can't be removed/);
     assert.match(busy[`R${stamp}`] ?? "", /has a booking today \(Okafor at 23:30\)/);
     assert.ok(editor.tables.some((t) => t.busy === null), "the others are free");
+  });
+
+  // 6g follow-up 3: an area never saved in the editor gets its tables drawn
+  // in a neat grid by number — the same grid on every floor and in the
+  // editor — until a save there stores real places.
+  test("never saved in the editor: every floor and the editor draw the same grid by number; a save makes the places real", async () => {
+    const warehouseId = (await prisma.diningArea.findUniqueOrThrow({ where: { id: areaA } })).warehouseId;
+    const area = await prisma.diningArea.create({ data: { name: `Plan G ${stamp}`, warehouseId }, select: { id: true } });
+    // Added on the Tables page, out of order: layoutVersion moves on, but it isn't saved in the editor.
+    for (const n of [3, 1, 10, 2]) await add(`G${stamp}-${n}`, n === 10 ? 8 : 4, area.id);
+    const row = await prisma.diningArea.findUniqueOrThrow({ where: { id: area.id }, select: { layoutVersion: true, floorPlanSavedAt: true, roomWidthM: true, roomHeightM: true } });
+    assert.ok(row.layoutVersion > 0 && row.floorPlanSavedAt === null, "tables added: the version moved, still never saved");
+
+    const floor = await getFloor(area.id);
+    const editor = (await getFloorEditor()).find((a) => a.id === area.id)!;
+    const stored = await prisma.table.findMany({ where: { areaId: area.id, deletedAt: null }, select: { id: true, name: true, w: true, h: true } });
+    const expected = autoFloor(stored.map((t) => ({ id: t.id, name: t.name, w: Number(t.w), h: Number(t.h) })), { widthM: Number(row.roomWidthM), heightM: Number(row.roomHeightM) });
+    assert.equal(floor.planSaved, false);
+    for (const t of floor.tables) assert.deepEqual({ x: t.place.x, y: t.place.y, w: t.place.w, h: t.place.h, rotation: t.place.rotation }, expected.places[t.id], `${t.name} on the floor`);
+    for (const t of editor.tables) assert.deepEqual({ x: t.x, y: t.y, w: t.w, h: t.h, rotation: t.rotation }, expected.places[t.id], `${t.name} in the editor`);
+    assert.deepEqual([editor.room.widthM, editor.room.heightM], [floor.room?.widthM, floor.room?.heightM], "the same room");
+    const mid = (t: (typeof floor.tables)[number]) => Math.round((t.place.y + t.place.h / 2) * 10);
+    const order = [...floor.tables].sort((a, b) => mid(a) - mid(b) || a.place.x - b.place.x).map((t) => t.name.split("-")[1]);
+    assert.deepEqual(order, ["1", "2", "3", "10"], "by table number, left to right, top to bottom");
+
+    // Saved from the editor as it opened: those places are stored, and real from now on.
+    assert.ok((await saveFloorPlan({ areas: [await plan(area.id, (p) => ({ ...p, tables: p.tables.map((t, i) => (i === 0 ? { ...t, x: t.x + 0.1 } : t)) }))] }, (await prisma.user.findFirstOrThrow({ where: { deletedAt: null }, select: { id: true } })).id)).ok);
+    const after = await prisma.diningArea.findUniqueOrThrow({ where: { id: area.id }, select: { floorPlanSavedAt: true } });
+    assert.ok(after.floorPlanSavedAt instanceof Date, "saved in the editor");
+    const saved = await getFloor(area.id);
+    assert.equal(saved.planSaved, true);
+    const db = await prisma.table.findMany({ where: { areaId: area.id, deletedAt: null }, select: { id: true, x: true, y: true } });
+    for (const t of saved.tables) {
+      const d = db.find((x) => x.id === t.id)!;
+      assert.deepEqual([t.place.x, t.place.y], [Number(d.x), Number(d.y)], `${t.name}: the stored place`);
+    }
+    // A table added on the Tables page afterwards keeps the saved plan.
+    await add(`G${stamp}-4`, 2, area.id);
+    assert.equal((await getFloor(area.id)).planSaved, true);
   });
 });

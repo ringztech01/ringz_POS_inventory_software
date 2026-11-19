@@ -292,4 +292,36 @@ describe("Discounts and service charge (database copy)", { skip: enabled ? false
     await discount(orderId, { value: "50" });
     await expectUnchanged("a refused discount");
   });
+
+  // 6g follow-up 1: a tablet's discount (applyDiscount passes alwaysApprove
+  // for a tablet request) needs a manager's PIN at any size, and every one —
+  // removing it too — is logged with who approved it. The desktop's rule
+  // (up to the limit without one) is the tests above, unchanged.
+  test("on a tablet: every discount needs an approver's PIN, under the limit too, and is logged", async () => {
+    await setApprovalPin(adminId, "4821");
+    const orderId = await billedOrder();
+    const tablet = async (input: Partial<OrderDiscountInput>) => applyOrderDiscount({ orderId, version: await versionOf(orderId), type: "PERCENT", value: "5", reason: "Regular guest", ...input }, waiterId, { alwaysApprove: true });
+    const logged = async () => (await prisma.auditLog.findMany({ where: { entityId: orderId, action: { in: ["override.discount", "override.discount.approve"] } }, select: { action: true, userId: true, meta: true }, orderBy: { createdAt: "asc" } })).map((r) => [r.action, r.userId]);
+    const before = await discountRow(orderId);
+
+    assert.deepEqual(await tablet({}), { ok: false, error: "A discount on a tablet needs a manager's PIN.", needsApproval: true, limit: "0%" }, "5% (under the 10% limit) still asks");
+    assert.deepEqual(await tablet({ approval: { approverId: adminId, pin: "1111" } }), { ok: false, error: WRONG_PIN });
+    assert.deepEqual(await tablet({ approval: { approverId: waiterId, pin: "1234" } }).then((r) => r.ok), false, "a waiter can't approve");
+    assert.deepEqual(await discountRow(orderId), before, "nothing changed meanwhile");
+
+    assert.ok((await tablet({ approval: { approverId: adminId, pin: "4821" } })).ok);
+    const row = await discountRow(orderId);
+    assert.deepEqual([row.discountValue.toFixed(2), row.discountById, row.discountApprovedById], ["5.00", waiterId, adminId], "the approver is on the order, under the limit");
+    assert.deepEqual(await logged(), [["override.discount", waiterId], ["override.discount.approve", adminId]]);
+    assert.equal((await getBill(orderId))?.discount?.approvedBy, (await prisma.user.findUniqueOrThrow({ where: { id: adminId }, select: { firstName: true } })).firstName);
+
+    // Over the limit: the same one PIN does.
+    assert.ok((await tablet({ value: "20", approval: { approverId: adminId, pin: "4821" } })).ok);
+    // Removing it: a PIN too, and logged.
+    assert.deepEqual((await tablet({ value: "0", reason: "" })).ok, false);
+    assert.ok((await tablet({ value: "0", reason: "", approval: { approverId: adminId, pin: "4821" } })).ok);
+    const removed = await discountRow(orderId);
+    assert.deepEqual([removed.discountType, removed.discountApprovedById], [null, null]);
+    assert.equal((await logged()).length, 6, "three discounts, each logged for the waiter and the approver");
+  });
 });

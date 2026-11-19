@@ -1,7 +1,8 @@
 import "server-only";
 import { prisma } from "@/lib/db";
 import { menuCardSvg, type MenuCard } from "../../lib/menuCard";
-import { menuLink } from "../../lib/menuAddress";
+import { ipFallback, menuLink } from "../../lib/menuAddress";
+import { currentLanIp } from "../menuAddress";
 import { QR_POINT_TYPE_LABELS } from "../../schemas/menuQr";
 import { businessName } from "../businessName";
 import { qrSvg } from "../qr";
@@ -80,6 +81,8 @@ export async function buildMenuCards(selection: CardSelection, as: "print" | "im
   if (!page.address) return null;
   const rows = [...page.tables, ...page.points].filter((row) => ("all" in selection ? true : row.kind === selection.kind && row.id === selection.id));
   const wifi = page.wifiName ? { name: page.wifiName, password: page.wifiPassword } : null;
+  // A .local address: the IP too, printed under each code (6g follow-up 5).
+  const fallback = ipFallback(page.address, currentLanIp());
   return Promise.all(
     rows.map(async (row) => {
       const link = menuLink(page.address!, row.qrToken);
@@ -89,6 +92,7 @@ export async function buildMenuCards(selection: CardSelection, as: "print" | "im
         subtitle: row.subtitle,
         qrSvg: await qrSvg(link),
         link,
+        fallback: fallback ? menuLink(fallback, row.qrToken) : null,
         wifi,
         accent: page.accent,
       };

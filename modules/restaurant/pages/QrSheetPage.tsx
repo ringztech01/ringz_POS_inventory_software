@@ -4,6 +4,8 @@ import { COLORS, FONTS } from "@/components/layout/theme";
 import { RESTAURANT_PERMISSIONS } from "../manifest";
 import { guardPage } from "../server/guard";
 import { menuOrigin, menuUrl, qrSvg } from "../server/qr";
+import { ipFallback } from "../lib/menuAddress";
+import { currentLanIp } from "../server/menuAddress";
 import { getQrSheetTables } from "../server/queries/tables";
 import PrintSheetButton from "../components/tables/PrintSheetButton";
 
@@ -17,7 +19,10 @@ export default async function QrSheetPage({ searchParams }: { searchParams: Prom
   const { area } = await searchParams;
   const [tables, origin] = await Promise.all([getQrSheetTables(area || undefined), menuOrigin()]);
   // SVG made here from our own URL — safe to inline.
-  const codes = await Promise.all(tables.map(async (table) => ({ ...table, svg: await qrSvg(menuUrl(origin, table.qrToken)) })));
+  // A .local address: the IP too, under each code, for a phone that can't
+  // open .local names (6g follow-up 5).
+  const fallback = ipFallback(origin, currentLanIp());
+  const codes = await Promise.all(tables.map(async (table) => ({ ...table, svg: await qrSvg(menuUrl(origin, table.qrToken)), fallback: fallback ? menuUrl(fallback, table.qrToken) : null })));
   const scope = area && tables[0] ? tables[0].areaName : "All areas";
 
   return (
@@ -73,6 +78,11 @@ export default async function QrSheetPage({ searchParams }: { searchParams: Prom
                 <span style={{ fontFamily: FONTS.display, fontSize: 26, fontWeight: 600, lineHeight: 1.1, marginTop: 4 }}>{code.name}</span>
                 <span style={{ fontSize: 13, color: COLORS.slate }}>{code.areaName}</span>
                 <span style={{ fontSize: 11.5, color: COLORS.slateMid }}>Scan to see the menu</span>
+                {code.fallback && (
+                  <span data-qr-fallback style={{ fontFamily: FONTS.mono, fontSize: 8.5, color: COLORS.slateMid, textAlign: "center", wordBreak: "break-all", lineHeight: 1.3 }}>
+                    Doesn&apos;t open? {code.fallback}
+                  </span>
+                )}
               </div>
             ))}
           </div>

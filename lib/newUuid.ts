@@ -1,7 +1,7 @@
 // A random v4 UUID in the browser. crypto.randomUUID only exists on secure
-// pages (HTTPS or localhost), and tablets and tills on the restaurant's
-// Wi-Fi open the app over http://192.168…; crypto.getRandomValues is there
-// on every page.
+// pages (HTTPS or localhost), and tablets and tills on the shop's or the
+// restaurant's Wi-Fi open the app over http://192.168…; crypto.getRandomValues
+// is there on every page. Retail and the Restaurant module both use it.
 export function newUuid(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
   bytes[6] = (bytes[6] & 0x0f) | 0x40;

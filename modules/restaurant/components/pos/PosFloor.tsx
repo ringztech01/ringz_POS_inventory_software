@@ -18,7 +18,7 @@ import { seatReservation } from "../../server/actions/reservations";
 import type { FloorData, FloorTable, FloorTarget } from "../../server/queries/floor";
 import type { CounterOrder, PosSettings, PosStaff } from "../../server/queries/posScreen";
 import FloorPolling from "../floor/FloorPolling";
-import { GuestOrderBadge, guestOrderByOrder, guestOrderByTable, RequestBell, requestsByTable, useGuestOrderToasts, useRequestToasts } from "../floor/RequestBell";
+import { GuestOrderBadge, guestOrderByOrder, guestOrderByTable, RequestBell, requestsByTable, TakeawayBag, useGuestOrderToasts, useRequestToasts } from "../floor/RequestBell";
 import GuestLinesPanel from "../order/GuestLinesPanel";
 import { confirmGuestLinesAction, rejectGuestLinesAction } from "../../server/actions/guestOrders";
 import TablePickerModal from "../floor/TablePickerModal";
@@ -423,11 +423,15 @@ function Floor({ floor, counter, from, can, prebill }: { floor: FloorData; count
                 <div key={o.id} style={{ position: "relative", display: "flex", flexShrink: 0, paddingTop: counterBadges.has(o.id) ? 6 : 0 }}>
                   <TouchButton
                     data-counter-order={o.label}
+                    data-counter-id={o.id}
                     background={o.type === "BAR_TAB" ? TOUCH.bar : TOUCH.teal}
                     onClick={() => goToOrder(o.id)}
                     style={{ height: 44, padding: "0 12px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "flex-start", gap: 1, flexShrink: 0 }}
                   >
-                    <span style={{ fontSize: 14, fontWeight: 700 }}>{o.label}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                      {o.type === "TAKEAWAY" && <TakeawayBag size={15} />}
+                      {o.label}
+                    </span>
                     <span style={{ fontFamily: TOUCH.mono, fontSize: 11, fontWeight: 600, opacity: 0.9 }}>
                       {o.ref} · {o.lines} {o.lines === 1 ? "item" : "items"} · {o.open}
                       {o.note ? ` · ${o.note}` : ""}

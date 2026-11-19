@@ -45,3 +45,7 @@ export const posSettingsSchema = z.object({
   tabletWakeLock: z.boolean(),
 });
 export type PosSettingsInput = z.output<typeof posSettingsSchema>;
+
+// Settings › Restaurant › Payments: the tablet's tip step.
+export const paymentSettingsSchema = z.object({ tabletTips: z.boolean() });
+export type PaymentSettingsInput = z.output<typeof paymentSettingsSchema>;

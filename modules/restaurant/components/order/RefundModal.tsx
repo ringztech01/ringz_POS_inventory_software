@@ -1,6 +1,6 @@
 "use client";
 
-import { newUuid } from "../../lib/newUuid";
+import { newUuid } from "@/lib/newUuid";
 import { useEffect, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import type { PaymentType } from "@prisma/client";

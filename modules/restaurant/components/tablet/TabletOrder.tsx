@@ -75,6 +75,10 @@ type Props = {
   data: OrderScreenData;
   bill: BillView;
   voidApprovers: Approver[];
+  // Who can approve a discount on the tablet's PAY (6g follow-up 1).
+  discountApprovers: Approver[];
+  // PAY asks for a tip (Settings › Restaurant › Payments).
+  tipsOn: boolean;
   quickNotes: string[];
   columns: number;
   sendToFloor: boolean;
@@ -86,6 +90,7 @@ type Props = {
 };
 
 const OFFLINE = "Offline · that waits for the connection";
+const OFFLINE_PAY = "Offline · PAY waits for the connection";
 let taps = 0;
 
 const Tile = memo(function Tile({ tile, onTap }: { tile: MenuTile; onTap: (tile: MenuTile) => void }) {
@@ -112,7 +117,7 @@ const Tile = memo(function Tile({ tile, onTap }: { tile: MenuTile; onTap: (tile:
   );
 });
 
-export default function TabletOrder({ data, bill, voidApprovers, quickNotes, columns, sendToFloor, canSettle, canWaste, openPay, autoLockSeconds }: Props) {
+export default function TabletOrder({ data, bill, voidApprovers, discountApprovers, tipsOn, quickNotes, columns, sendToFloor, canSettle, canWaste, openPay, autoLockSeconds }: Props) {
   const router = useRouter();
   const { order, menu } = data;
   const orderId = order.id;
@@ -441,10 +446,16 @@ export default function TabletOrder({ data, bill, voidApprovers, quickNotes, col
       {payOpen && (
         <PaySheet
           title={title}
-          due={bill.totals.totalValue}
-          split={!!bill.split}
+          bill={bill}
+          tipsOn={tipsOn}
+          approvers={discountApprovers}
+          busy={saving}
           settled={actions.settled}
-          onSettle={(request) => (online ? actions.settle(request) : Promise.resolve({ ok: false as const, error: "Offline · PAY waits for the connection" }))}
+          onSettle={(request) => (online ? actions.settle(request) : Promise.resolve({ ok: false as const, error: OFFLINE_PAY }))}
+          onSplit={(split) => (online ? actions.split(split) : Promise.resolve({ ok: false as const, error: OFFLINE_PAY }))}
+          onOneBill={() => (online ? actions.removeSplit() : void toast(OFFLINE_PAY, { id: "tablet-offline" }))}
+          onDiscount={(request) => (online ? actions.discount(request) : Promise.resolve({ ok: false as const, error: OFFLINE_PAY }))}
+          onNextPart={actions.clearSettled}
           onDone={() => router.push(TABLET_ROUTES.tables({ areaId: order.areaId }))}
           onClose={() => setPayOpen(false)}
         />

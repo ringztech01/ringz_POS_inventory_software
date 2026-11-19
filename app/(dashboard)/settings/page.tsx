@@ -5,7 +5,7 @@ import { PERMISSIONS } from "@/lib/permissions";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import ForbiddenState from "@/components/ui/ForbiddenState";
 import Link from "next/link";
-import { ChevronRight, MonitorSmartphone, Printer, ScanLine, ShieldCheck, Users, UtensilsCrossed, ScrollText } from "lucide-react";
+import { ChevronRight, MonitorSmartphone, Printer, ScanLine, ShieldCheck, Users, UtensilsCrossed, ScrollText, Wallet } from "lucide-react";
 import { prisma } from "@/lib/db";
 import { BUSINESS_SETTINGS_ID } from "@/lib/business-settings";
 import { isModuleEnabled } from "@/lib/modules/enabled.server";
@@ -28,6 +28,8 @@ export default async function SettingsPage() {
   const canRoles = restaurantOn && (await isSystemAdmin(current));
   // Part 6f Step 7e: the audit log (View Audit Log).
   const canAudit = restaurantOn && permissions.has(PERMISSIONS.VIEW_AUDIT_LOG);
+  // The tablet's payments (the tip step): Restaurant Settings.
+  const canPayments = restaurantOn && permissions.has(restaurantModule.toggle.permission);
   // Part 6f: the restaurant's view, shown under Restaurant › Interface.
   const restaurantView = permissions.has(PERMISSIONS.MANAGE_SETTING) && restaurantOn
     ? ((await prisma.businessSetting.findUnique({ where: { id: BUSINESS_SETTINGS_ID }, select: { restaurantInterface: true } }))?.restaurantInterface ?? "SERVICE")
@@ -97,7 +99,7 @@ export default async function SettingsPage() {
         })}
       </section>
 
-      {(restaurantView || canRoles || canAudit) && (
+      {(restaurantView || canRoles || canAudit || canPayments) && (
         <section aria-label="Restaurant" style={{ background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 12, boxShadow: "0 1px 2px rgba(23,27,28,.06)" }}>
           <div style={{ padding: "18px 24px", borderBottom: `1px solid ${COLORS.border}` }}>
             <h2 style={{ margin: 0, fontSize: 15, fontWeight: 600 }}>Restaurant</h2>
@@ -140,8 +142,20 @@ export default async function SettingsPage() {
               <ChevronRight size={16} strokeWidth={1.8} color={COLORS.slateMid} />
             </Link>
           )}
+          {canPayments && (
+            <Link href="/settings/restaurant/payments" data-settings-payments style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 24px", color: COLORS.ink, textDecoration: "none", borderTop: restaurantView || canRoles ? `1px solid ${COLORS.border}` : undefined }}>
+              <span style={{ width: 40, height: 40, flex: "0 0 auto", borderRadius: 10, background: COLORS.tealTint, color: COLORS.tealDark, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Wallet size={19} strokeWidth={1.6} />
+              </span>
+              <span style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3 }}>
+                <span style={{ fontSize: 14, fontWeight: 600 }}>Payments</span>
+                <span style={{ fontSize: 13, color: COLORS.slateMid }}>Whether a tablet&apos;s PAY asks for a tip. Tips go to the order&apos;s waiter.</span>
+              </span>
+              <ChevronRight size={16} strokeWidth={1.8} color={COLORS.slateMid} />
+            </Link>
+          )}
           {canAudit && (
-            <Link href="/settings/restaurant/audit" data-settings-audit style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 24px", color: COLORS.ink, textDecoration: "none", borderTop: restaurantView || canRoles ? `1px solid ${COLORS.border}` : undefined }}>
+            <Link href="/settings/restaurant/audit" data-settings-audit style={{ display: "flex", alignItems: "center", gap: 16, padding: "18px 24px", color: COLORS.ink, textDecoration: "none", borderTop: restaurantView || canRoles || canPayments ? `1px solid ${COLORS.border}` : undefined }}>
               <span style={{ width: 40, height: 40, flex: "0 0 auto", borderRadius: 10, background: COLORS.tealTint, color: COLORS.tealDark, display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <ScrollText size={19} strokeWidth={1.6} />
               </span>

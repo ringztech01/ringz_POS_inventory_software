@@ -11,7 +11,7 @@ import { DecimalInput, Field, SelectInput } from "@/components/purchases/form-fi
 import { PAYMENT_TYPE_LABELS } from "@/components/purchases/purchase-display";
 import PosButton from "@/components/pos/PosButton";
 import { POS } from "@/components/pos/theme";
-import { newUuid } from "../../lib/newUuid";
+import { newUuid } from "@/lib/newUuid";
 import { MAX_PAYMENT_METHODS, quickCash, tender } from "../../lib/tender";
 
 export type SettleRequest = {

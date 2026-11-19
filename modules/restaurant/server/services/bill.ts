@@ -40,7 +40,9 @@ const NO_DISCOUNT = { discountType: null, discountValue: 0, discountReason: null
 // than the limit (BusinessSetting.restaurantDiscountLimitPercent) needs an
 // approver with Approve Discount and their PIN — recorded on the order. A
 // value of 0 removes the discount.
-export async function applyOrderDiscount(input: OrderDiscountInput, userId: string): Promise<DiscountResult> {
+// `alwaysApprove` (a tablet): every discount, removing one too, needs the
+// approver's PIN whatever its size — checked and logged the same way.
+export async function applyOrderDiscount(input: OrderDiscountInput, userId: string, opts: { alwaysApprove?: boolean } = {}): Promise<DiscountResult> {
   const { orderId, version, type, value, reason, approval } = input;
   const { restaurantDiscountLimitPercent: limit } = await getBusinessSettings();
   return prisma.$transaction(async (tx): Promise<DiscountResult> => {
@@ -48,8 +50,14 @@ export async function applyOrderDiscount(input: OrderDiscountInput, userId: stri
     if (!locked.ok) return locked;
 
     let data;
+    if (opts.alwaysApprove) {
+      if (!approval) return { ok: false, error: "A discount on a tablet needs a manager's PIN.", needsApproval: true, limit: "0%" };
+      const approved = await checkApproverPin(tx, approval.approverId, approval.pin);
+      if (!approved.ok) return approved;
+    }
     if (new Decimal(value).isZero()) {
       data = NO_DISCOUNT;
+      if (opts.alwaysApprove && approval) await logOverride(tx, { kind: "discount", actorId: userId, approverId: approval.approverId, entityType: "Order", entityId: orderId, meta: { type, value: "0", removed: true } });
     } else {
       const lines = await tx.orderItem.findMany({
         where: { orderId },
@@ -58,8 +66,8 @@ export async function applyOrderDiscount(input: OrderDiscountInput, userId: stri
       const check = checkDiscount(summariseBill(lines, 0).subTotal, type, value, limit);
       if (!check.ok) return check;
 
-      let approvedById: string | null = null;
-      if (check.needsApproval) {
+      let approvedById: string | null = opts.alwaysApprove && approval ? approval.approverId : null;
+      if (check.needsApproval && !approvedById) {
         const limitText = `${new Decimal(limit.toString()).toString()}%`;
         if (!approval) return { ok: false, error: `A discount over ${limitText} needs an approver's PIN.`, needsApproval: true, limit: limitText };
         const approved = await checkApproverPin(tx, approval.approverId, approval.pin);

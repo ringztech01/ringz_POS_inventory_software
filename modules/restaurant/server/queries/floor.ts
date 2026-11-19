@@ -11,6 +11,7 @@ import { lineAmount, orderTotals } from "../../lib/orderTotals";
 import type { FixtureType, TableShape } from "../../lib/floorGeometry";
 import { TABLE_STATUSES, tableStatus, type TableStatus } from "../../lib/tableStatus";
 import { activeRequestWhere, type FloorRequest } from "../../lib/tableRequests";
+import { autoFloor, planSaved } from "../../lib/floorAuto";
 import type { FloorGuestOrder, PendingGuestLine } from "../../lib/guestOrdering";
 import { lineDetail, noTableLabel, readModifiers } from "../../lib/orderLines";
 import { formatAppTime, formatOpenFor } from "../../lib/time";
@@ -119,6 +120,10 @@ export type FloorData = {
   // view (Part 7 Step 6). Its floor plan image is never sent here.
   room: { widthM: number; heightM: number } | null;
   fixtures: FloorFixtureView[];
+  // The area's floor plan has been saved in the editor (floorPlanSavedAt).
+  // Not yet: its tables are drawn in a neat grid by number (lib/floorAuto,
+  // 6g follow-up 3) — the editor starts from the same grid.
+  planSaved: boolean;
   targets: FloorTarget[];
   // Guests' Call waiter / Request bill still to deal with (Part 8 Step 6),
   // every area's — the selected area's tables show a bell; the toasts
@@ -138,7 +143,7 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
   const [areas, tables, requestRows] = await Promise.all([
     prisma.diningArea.findMany({
       where: { deletedAt: null },
-      select: { id: true, name: true, roomWidthM: true, roomHeightM: true, layouts: { where: { isActive: true }, select: { name: true }, take: 1 } },
+      select: { id: true, name: true, roomWidthM: true, roomHeightM: true, floorPlanSavedAt: true, layouts: { where: { isActive: true }, select: { name: true }, take: 1 } },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     }),
     prisma.table.findMany({
@@ -184,6 +189,8 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
 
   const sorted = [...states].sort((a, b) => byFloorOrder(a.table, b.table));
   const here = sorted.filter(({ table }) => table.areaId === areaId);
+  const saved = !!shown && planSaved(shown.floorPlanSavedAt);
+  const auto = shown && !saved ? autoFloor(here.map(({ table }) => ({ id: table.id, name: table.name, w: Number(table.w), h: Number(table.h) })), { widthM: Number(shown.roomWidthM), heightM: Number(shown.roomHeightM) }) : null;
   // Every occupied table's open checks (the pickers show their references).
   const orderIds = states.flatMap(({ state }) => state.orders.map((o) => o.id));
   const orders = orderIds.length
@@ -345,7 +352,8 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
     requests,
     guestOrders,
     areas: areas.map((area) => ({ id: area.id, name: area.name, layout: area.layouts[0]?.name ?? null, ...areaCounts(area.id) })),
-    room: shown ? { widthM: Number(shown.roomWidthM), heightM: Number(shown.roomHeightM) } : null,
+    room: auto ? auto.room : shown ? { widthM: Number(shown.roomWidthM), heightM: Number(shown.roomHeightM) } : null,
+    planSaved: saved,
     fixtures: fixtures.map((f) => ({ id: f.id, type: f.type, label: f.label, ...metres(f) })),
     summary: {
       free: legend.Available,
@@ -377,7 +385,7 @@ export async function getFloor(areaParam?: string): Promise<FloorData> {
               time: formatAppTime(state.reservation.startsAt),
             }
           : null,
-        place: { ...metres(table), shape: table.shape },
+        place: { ...(auto?.places[table.id] ?? metres(table)), shape: table.shape },
       };
     }),
     targets: sorted.flatMap(({ table, state }) => (state.orders.length ? state.orders : [null]).map((held) => {

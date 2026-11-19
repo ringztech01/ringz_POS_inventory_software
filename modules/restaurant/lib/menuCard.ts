@@ -4,7 +4,9 @@
 //
 // Top to bottom: the business (its logo, or its name) on the accent colour,
 // "Scan for menu", the table, its area, the code, the Wi-Fi if set, and the
-// link in small type for anyone typing it.
+// link in small type for anyone typing it — and, for a .local link, the same
+// with the IP under it, for a phone that can't open .local names (6g
+// follow-up 5).
 
 export type MenuCard = {
   business: string;
@@ -15,6 +17,8 @@ export type MenuCard = {
   // The QR code as qrcode's SVG.
   qrSvg: string;
   link: string;
+  // The link with the PC's IP, when `link` is a .local name.
+  fallback?: string | null;
   wifi?: { name: string; password: string | null } | null;
   accent: string;
 };
@@ -78,7 +82,9 @@ export function menuCardSvg(card: MenuCard, as: "print" | "image" = "print"): st
     card.subtitle ? line(530, card.subtitle, fitSize(card.subtitle, 42, 30), 500, SLATE) : "",
     placeQr(card.qrSvg, 245, 570, 560),
     wifi,
-    line(1440, card.link, fitSize(card.link, 26, 60), 400, QUIET),
+    ...(card.fallback
+      ? [line(1405, card.link, fitSize(card.link, 26, 60), 400, QUIET), line(1452, `or ${card.fallback}`, fitSize(`or ${card.fallback}`, 26, 60), 400, QUIET)]
+      : [line(1440, card.link, fitSize(card.link, 26, 60), 400, QUIET)]),
     `</svg>`,
   ].join("");
 }

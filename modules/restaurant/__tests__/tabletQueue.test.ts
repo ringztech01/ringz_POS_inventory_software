@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { didLand, isVersionConflict, matchQuantity, queueKey, readStoredQueue, rejectionText, VERSION_CONFLICT, waitingText, type QueueEntry } from "../lib/tabletQueue";
-import { newUuid } from "../lib/newUuid";
+import { newUuid } from "@/lib/newUuid";
 
 const line = (l: Partial<{ productId: string; modifierIds: string[]; note: string | null; quantity: number; cancelled: boolean }> = {}) => ({ productId: "jollof", modifierIds: ["large", "hot"], note: null, quantity: 1, cancelled: false, ...l });
 const entry = { productId: "jollof", modifierIds: ["hot", "large"] };

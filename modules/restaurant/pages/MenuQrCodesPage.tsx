@@ -1,8 +1,9 @@
 import { prisma } from "@/lib/db";
 import { REPORTS } from "@/lib/hardware/assignments";
-import { menuLink } from "../lib/menuAddress";
+import { checkMenuAddress, ipFallback, menuLink } from "../lib/menuAddress";
+import { mdnsStatus } from "@/lib/hardware/mdnsResponder";
 import { guardMenuQrPage } from "../server/guard";
-import { detectedMenuAddresses } from "../server/menuAddress";
+import { currentLanIp, detectedMenuAddresses } from "../server/menuAddress";
 import { qrSvg } from "../server/qr";
 import { getMenuQrPage, type QrCodeRow } from "../server/queries/menuQr";
 import MenuQrCodes, { type QrRowView } from "../components/digitalMenu/MenuQrCodes";
@@ -33,6 +34,9 @@ export default async function MenuQrCodesPage() {
       <MenuQrCodes
         address={page.address}
         choices={choices}
+        check={checkMenuAddress(page.address, choices)}
+        mdns={mdnsStatus()}
+        fallback={page.address ? ipFallback(page.address, currentLanIp()) : null}
         wifiName={page.wifiName ?? ""}
         wifiPassword={page.wifiPassword ?? ""}
         design={page.design}

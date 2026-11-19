@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useCallback, useEffect, useState, useTransition } from "react";
+import { memo, useCallback, useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { signOut } from "next-auth/react";
 import { TAB_NAME_MAX } from "../../schemas/pos";
@@ -14,7 +14,11 @@ import TabletFloor, { LOOK_STYLE, type TabletFloorProps } from "./TabletFloor";
 import TabletSheet, { SheetButton, TabletKeyboard, TabletToast, useTabletToast } from "./TabletSheet";
 import TabletAutoLock from "./TabletAutoLock";
 import { T } from "./tabletTheme";
-import { TabletPolling, useTabletConnection } from "./useTabletConnection";
+import { TabletPolling, useSafeRefresh, useTabletConnection } from "./useTabletConnection";
+import TabletCounter from "./TabletCounter";
+import { RequestBell, requestsByTable, useRequestToasts } from "../floor/RequestBell";
+import type { FloorRequest } from "../../lib/tableRequests";
+import type { CounterOrder } from "../../server/queries/posScreen";
 import { QUEUE_PREFIX, readStoredQueue, waitingText } from "../../lib/tabletQueue";
 
 // The tablet's Tables, upright (Part 6g Step 3; design: RingzPOS
@@ -48,6 +52,13 @@ export type TabletTablesProps = {
   fixtures: TabletFloorProps["fixtures"];
   places: TabletFloorProps["places"];
   summary: TabletFloorProps["summary"];
+  planSaved: boolean;
+  canArrange: boolean;
+  // Guests' Call waiter / Request bill (every area's): a pulsing bell on the
+  // table until someone acknowledges it (6g follow-up 2).
+  requests: FloorRequest[];
+  // The open takeaways and tabs, as on the desktop's Tables screen.
+  counter: CounterOrder[];
 };
 
 type Sheet =
@@ -59,9 +70,12 @@ type Sheet =
   | { kind: "endShift" }
   | { kind: "handover"; to: { id: string; name: string; onShift: boolean }[]; orders: number };
 
-const Tile = memo(function Tile({ tile, dim, onTap }: { tile: TabletTile; dim: boolean; onTap: (tile: TabletTile) => void }) {
+const NO_REQUESTS: FloorRequest[] = [];
+
+const Tile = memo(function Tile({ tile, dim, onTap, requests, onBell }: { tile: TabletTile; dim: boolean; onTap: (tile: TabletTile) => void; requests: FloorRequest[]; onBell: () => void }) {
   const look = LOOK_STYLE[tile.look];
   return (
+    <div style={{ position: "relative", display: "flex", minWidth: 0 }}>
     <button
       type="button"
       className="tb-press"
@@ -69,7 +83,7 @@ const Tile = memo(function Tile({ tile, dim, onTap }: { tile: TabletTile; dim: b
       data-look={tile.look}
       data-dim={dim ? "" : undefined}
       onClick={() => onTap(tile)}
-      style={{ border: "none", borderRadius: 10, background: look.bg, color: T.text, boxShadow: look.ring, opacity: dim ? 0.25 : 1, cursor: "pointer", padding: "16px 18px", display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "stretch", textAlign: "left", fontFamily: "inherit", minWidth: 0 }}
+      style={{ flex: 1, border: "none", borderRadius: 10, background: look.bg, color: T.text, boxShadow: look.ring, opacity: dim ? 0.25 : 1, cursor: "pointer", padding: "16px 18px", display: "flex", flexDirection: "column", justifyContent: "space-between", alignItems: "stretch", textAlign: "left", fontFamily: "inherit", minWidth: 0 }}
     >
       <span style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
         <span style={{ fontSize: 52, fontWeight: 900, lineHeight: 0.95, letterSpacing: "-.02em", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{tile.name}</span>
@@ -83,6 +97,8 @@ const Tile = memo(function Tile({ tile, dim, onTap }: { tile: TabletTile; dim: b
         </span>
       </span>
     </button>
+      <RequestBell requests={requests} tableName={tile.name} size={52} onDone={onBell} style={{ position: "absolute", top: 8, right: 8 }} />
+    </div>
   );
 });
 
@@ -124,7 +140,7 @@ function WaitingOrders({ onOpen }: { onOpen: (orderId: string) => void }) {
   );
 }
 
-export default function TabletTables({ user, areas, areaId, tiles, can, session, autoLockSeconds, areaName, room, fixtures, places, summary }: TabletTablesProps) {
+export default function TabletTables({ user, areas, areaId, tiles, can, session, autoLockSeconds, areaName, room, fixtures, places, summary, requests, counter, planSaved, canArrange }: TabletTablesProps) {
   const router = useRouter();
   const [mineOnly, setMineOnly] = useState(false);
   const [sheet, setSheet] = useState<Sheet | null>(null);
@@ -133,6 +149,11 @@ export default function TabletTables({ user, areas, areaId, tiles, can, session,
   const [toast, say] = useTabletToast();
   const close = useCallback(() => setSheet(null), []);
   const { online } = useTabletConnection();
+  // A bell tapped: the floor again, once the server can be reached.
+  const refresh = useSafeRefresh();
+  const onBell = useCallback(() => void refresh(), [refresh]);
+  const bells = useMemo(() => requestsByTable(requests), [requests]);
+  useRequestToasts(requests, user.id || null, areaId);
   // Going to another screen needs the server: with none, the screen stays.
   const whenOnline = (go: () => void) => (online ? go() : say("Offline · retrying"));
 
@@ -213,7 +234,7 @@ export default function TabletTables({ user, areas, areaId, tiles, can, session,
   const grid = (columns: number) => (
     <div data-table-grid style={{ flex: 1, minHeight: 0, overflowY: "auto", WebkitOverflowScrolling: "touch", padding: "0 16px 16px", display: "grid", gridTemplateColumns: `repeat(${columns}, minmax(0, 1fr))`, gridAutoRows: 164, gap: 10, alignContent: "start" }}>
       {tiles.map((tile) => (
-        <Tile key={tile.id} tile={tile} dim={isDim(tile)} onTap={onTap} />
+        <Tile key={tile.id} tile={tile} dim={isDim(tile)} onTap={onTap} requests={bells.get(tile.id) ?? NO_REQUESTS} onBell={onBell} />
       ))}
       {tiles.length === 0 && <span style={{ gridColumn: "1 / -1", padding: 40, textAlign: "center", fontSize: 20, fontWeight: 700, color: T.quiet }}>No tables in this area yet.</span>}
     </div>
@@ -237,6 +258,11 @@ export default function TabletTables({ user, areas, areaId, tiles, can, session,
           fixtures={fixtures}
           places={places}
           summary={summary}
+          planSaved={planSaved}
+          canArrange={canArrange}
+          bells={bells}
+          onBell={onBell}
+          counter={<TabletCounter counter={counter} layout="list" onOpen={(id) => whenOnline(() => goOrder(id))} />}
           can={can}
           mineOnly={mineOnly}
           isDim={isDim}
@@ -303,6 +329,8 @@ export default function TabletTables({ user, areas, areaId, tiles, can, session,
           </span>
         ))}
       </div>
+
+      <TabletCounter counter={counter} layout="row" onOpen={(id) => whenOnline(() => goOrder(id))} />
 
       {grid(3)}
 

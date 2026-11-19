@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PurchaseLine } from "@/components/purchases/PurchaseForm";
+import { newUuid } from "@/lib/newUuid";
 
 // A cart put on hold: only what's needed to rebuild it. Holding never creates
 // a Sale or moves stock — that happens only at payment (createSale).
@@ -81,7 +82,7 @@ export function useHeldOrders(userId: string) {
 
   const hold = useCallback(
     (order: Omit<HeldOrder, "id" | "heldAt">) =>
-      update((current) => [...current, { ...order, id: crypto.randomUUID(), heldAt: new Date().toISOString() }]),
+      update((current) => [...current, { ...order, id: newUuid(), heldAt: new Date().toISOString() }]),
     [update],
   );
   const remove = useCallback((id: string) => update((current) => current.filter((order) => order.id !== id)), [update]);

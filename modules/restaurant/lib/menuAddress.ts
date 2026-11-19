@@ -2,44 +2,66 @@
 // on the restaurant's network, as a guest's phone on the Wi-Fi reaches it.
 // Pure: the server reads the network cards and the port, this picks from them.
 
-export type NetworkCard = { address: string; family: string | number; internal: boolean };
-export type AddressChoice = { url: string; label: string; kind: "ip" | "name" };
+import { isLinkLocal, lanAddresses, type NetworkCard } from "@/lib/lanAddresses";
 
-// Adapters that aren't the restaurant's network: virtual switches (WSL,
-// Hyper-V, Docker, VirtualBox, VMware), VPNs and Bluetooth.
-const VIRTUAL = /vethernet|wsl|hyper-v|docker|virtualbox|vmware|vbox|loopback|bluetooth|tailscale|zerotier|vpn|tap-|tun/i;
-
-const isIpv4 = (family: string | number) => family === "IPv4" || family === 4;
-const octets = (ip: string) => ip.split(".").map(Number);
-
-// Private ranges a LAN uses (10/8, 172.16/12, 192.168/16).
-export function isPrivateIpv4(ip: string): boolean {
-  const [a, b] = octets(ip);
-  return a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
-}
-
-// 169.254.x.x: the PC gave itself an address because no network did.
-const isLinkLocal = (ip: string) => ip.startsWith("169.254.");
+export { isPrivateIpv4, type NetworkCard } from "@/lib/lanAddresses";
+// "ip": a network card's address; "name": the PC's own name (<name>.local);
+// "app": the app's own name on the Wi-Fi (ringzpos.local, 6g follow-up 5) —
+// it follows the PC when its IP changes.
+export type AddressChoice = { url: string; label: string; kind: "ip" | "name" | "app" };
 
 const withPort = (host: string, port: number | null) => `http://${host}${port && port !== 80 ? `:${port}` : ""}`;
 
-// The addresses a phone on the Wi-Fi could use: each real network card's
-// IPv4 (private ranges first), then the PC's name on the network
-// (<name>.local — iPhones open it; some Android phones can't).
-export function addressChoices(cards: Record<string, NetworkCard[] | undefined>, hostname: string, port: number | null): AddressChoice[] {
-  const ips: { ip: string; card: string }[] = [];
-  for (const [card, list] of Object.entries(cards)) {
-    if (VIRTUAL.test(card)) continue;
-    for (const entry of list ?? []) {
-      if (!isIpv4(entry.family) || entry.internal || isLinkLocal(entry.address)) continue;
-      ips.push({ ip: entry.address, card });
-    }
-  }
-  ips.sort((a, b) => Number(isPrivateIpv4(b.ip)) - Number(isPrivateIpv4(a.ip)) || a.ip.localeCompare(b.ip, "en", { numeric: true }));
-  const choices: AddressChoice[] = ips.map(({ ip, card }) => ({ url: withPort(ip, port), label: `${ip} (${card})`, kind: "ip" }));
+// The addresses a phone on the Wi-Fi could use: the app's own name first
+// when it's answering (`appName`), each real network card's IPv4 (private
+// ranges first), then the PC's name on the network (<name>.local — iPhones
+// open it; some Android phones can't).
+export function addressChoices(cards: Record<string, NetworkCard[] | undefined>, hostname: string, port: number | null, appName: string | null = null): AddressChoice[] {
+  const choices: AddressChoice[] = [];
+  if (appName) choices.push({ url: withPort(appName, port), label: `${appName} (recommended: keeps working if the IP changes)`, kind: "app" });
+  for (const { address, card } of lanAddresses(cards)) choices.push({ url: withPort(address, port), label: `${address} (${card})`, kind: "ip" });
   const name = hostname.trim().toLowerCase().replace(/\.local$/, "");
   if (/^[a-z0-9-]{1,63}$/.test(name)) choices.push({ url: withPort(`${name}.local`, port), label: `${name}.local (the PC's name)`, kind: "name" });
   return choices;
+}
+
+const hostOf = (url: string) => {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+};
+const isIpHost = (host: string) => /^\d{1,3}(\.\d{1,3}){3}$/.test(host);
+
+// The saved address against what this PC is now (6g follow-up 5):
+//   ok      it's one of this PC's addresses (or a name it answers to)
+//   moved   an IP this PC no longer has, or another PC's .local name — the
+//           printed codes don't open; `suggested` is what to save instead
+//   other   a domain name or https address the app can't check
+//   none    nothing saved yet
+export type AddressCheck = { state: "ok" | "moved" | "other" | "none"; suggested: string | null };
+export function checkMenuAddress(saved: string | null, choices: readonly AddressChoice[]): AddressCheck {
+  const suggested = (choices.find((c) => c.kind === "app") ?? choices.find((c) => c.kind === "ip"))?.url ?? null;
+  if (!saved) return { state: "none", suggested };
+  if (choices.some((c) => c.url === saved)) return { state: "ok", suggested };
+  const host = hostOf(saved);
+  if (isIpHost(host) || host.endsWith(".local")) return { state: "moved", suggested: suggested === saved ? null : suggested };
+  return { state: "other", suggested };
+}
+
+// For a .local address, the same with this PC's IP instead (`ip`), for the
+// printed line under each code: a phone that can't open .local names types
+// it. Null: the address is already an IP (or there's no IP to give).
+export function ipFallback(saved: string, ip: string | null): string | null {
+  if (!ip || !hostOf(saved).endsWith(".local")) return null;
+  try {
+    const url = new URL(saved);
+    url.hostname = ip;
+    return `${url.protocol}//${url.host}`;
+  } catch {
+    return null;
+  }
 }
 
 export type ParsedAddress = { ok: true; url: string } | { ok: false; error: string };

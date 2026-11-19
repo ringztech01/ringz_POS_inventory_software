@@ -25,6 +25,8 @@ import type { OrderChangeResult } from "../services/orders";
 import { refundOrder, type RefundResult } from "../services/refund";
 import { settleOrder, type SettleResult } from "../services/settle";
 import { printRestaurantReceipt } from "../services/printing";
+import { getPaymentSettings } from "../services/paymentSettings";
+import { isTabletRequest } from "../tabletDevice";
 
 // Thin wrappers for the bill: permission, input parsing and refresh here;
 // the rules are in services/bill.ts.
@@ -58,7 +60,8 @@ export async function applyDiscount(input: unknown): Promise<DiscountResult> {
     const parsed = orderDiscountSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That discount isn't valid." };
 
-    const result = await applyOrderDiscount(parsed.data, authCheck.userId);
+    // On a tablet every discount needs a manager's PIN (and is logged).
+    const result = await applyOrderDiscount(parsed.data, authCheck.userId, { alwaysApprove: await isTabletRequest() });
     if (result.ok) refresh();
     return result;
   });
@@ -123,6 +126,8 @@ export async function settleBill(input: unknown): Promise<SettleResult & { recei
     if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
     const parsed = settleSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That payment isn't valid." };
+    // A tablet asks for a tip only when Settings › Restaurant › Payments says so.
+    if (Number(parsed.data.tip) > 0 && (await isTabletRequest()) && !(await getPaymentSettings()).tabletTips) return { ok: false, error: "Tips are off on the tablets (Settings › Restaurant › Payments)." };
 
     const result = await settleOrder(parsed.data, authCheck.userId, { deviceId: await currentDeviceId() });
     // A training order (Step 7f): no drawer, no receipt.

@@ -6,7 +6,7 @@ import toast from "react-hot-toast";
 import { AlertTriangle, BellRing, Download, Palette, Pencil, Plus, Printer, RefreshCw, Trash2, Wifi } from "lucide-react";
 import ConfirmDeleteModal from "@/components/ui/ConfirmDeleteModal";
 import { COLORS, FONTS } from "@/components/layout/theme";
-import type { AddressChoice } from "../../lib/menuAddress";
+import type { AddressChoice, AddressCheck } from "../../lib/menuAddress";
 import { QR_POINT_NAME_MAX, QR_POINT_TYPE_LABELS, QR_POINT_TYPES, WIFI_MAX, type MenuDesignChoice } from "../../schemas/menuQr";
 import { saveServiceButtonsAction } from "../../server/actions/tableRequests";
 import GuestOrderingCard, { type GuestOrderingView } from "./GuestOrderingCard";
@@ -31,6 +31,13 @@ export type QrRowView = {
 type Props = {
   address: string | null;
   choices: AddressChoice[];
+  // The saved address against this PC now (6g follow-up 5): moved, the
+  // printed codes don't open — `suggested` is what to save instead.
+  check: AddressCheck;
+  // The app's name on the Wi-Fi (ringzpos.local) and whether it's answering.
+  mdns: { running: boolean; name: string; error: string | null };
+  // A .local address with this PC's IP: what's printed under each code.
+  fallback: string | null;
   wifiName: string;
   wifiPassword: string;
   design: MenuDesignChoice;
@@ -42,6 +49,14 @@ type Props = {
 };
 
 // Amber: a step still to do (no theme colour for it).
+// The host of a saved address ("ringzpos.local"); "" when there's none.
+const hostOf = (url: string | null) => {
+  try {
+    return url ? new URL(url).hostname.toLowerCase() : "";
+  } catch {
+    return "";
+  }
+};
 const AMBER = { fg: "#92400e", bg: "#fffbeb", border: "#fcd34d" };
 const field = { height: 38, border: `1px solid ${COLORS.borderStrong}`, borderRadius: 8, padding: "0 10px", fontSize: 13.5, background: "#fff", color: COLORS.ink } as const;
 const card = { background: "#fff", border: `1px solid ${COLORS.border}`, borderRadius: 12, padding: 22, display: "flex", flexDirection: "column", gap: 12 } as const;
@@ -139,9 +154,12 @@ function DesignSwatch({ swatch: [bg, accent, ink] }: { swatch: [string, string, 
   );
 }
 
-export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, design, serviceButtons, ordering, tables, points, reportsPrinter }: Props) {
+export default function MenuQrCodes({ address, choices, check, mdns, fallback, wifiName, wifiPassword, design, serviceButtons, ordering, tables, points, reportsPrinter }: Props) {
   const router = useRouter();
-  const [typed, setTyped] = useState(address ?? choices.find((c) => c.kind === "ip")?.url ?? "");
+  const [typed, setTyped] = useState(address ?? (choices.find((c) => c.kind === "app") ?? choices.find((c) => c.kind === "ip"))?.url ?? "");
+  // The address just changed here: the printed codes still open the old one.
+  const [reprint, setReprint] = useState<string | null>(null);
+  const saveAddress = (next: string) => act("address", () => saveMenuAddressAction({ address: next }), "Menu address saved.", () => address && next.trim() !== address && setReprint(address));
   const [wifi, setWifi] = useState({ name: wifiName, password: wifiPassword });
   const [busy, setBusy] = useState<string | null>(null);
   const [rotating, setRotating] = useState<QrRowView | null>(null);
@@ -230,11 +248,42 @@ export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, 
         {address ? (
           <span style={{ fontSize: 13.5, color: COLORS.text }}>
             Codes open <b data-menu-address-saved style={{ fontFamily: FONTS.mono, fontSize: 13 }}>{address}/menu/…</b>
+            {fallback && (
+              <>
+                {" "}
+                · printed with <b data-menu-address-fallback style={{ fontFamily: FONTS.mono, fontSize: 13 }}>{fallback}</b> under each code
+              </>
+            )}
           </span>
         ) : (
           <div data-menu-address-missing style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 8, background: AMBER.bg, border: `1px solid ${AMBER.border}`, color: AMBER.fg, fontSize: 13 }}>
             <AlertTriangle size={17} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
             <span>Choose the address phones on the restaurant&apos;s Wi-Fi reach this server at, then save it. Until then no codes can be printed.</span>
+          </div>
+        )}
+        {check.state === "moved" && (
+          <div data-menu-address-moved role="alert" style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "10px 12px", borderRadius: 8, background: AMBER.bg, border: `1px solid ${AMBER.border}`, color: AMBER.fg, fontSize: 13 }}>
+            <AlertTriangle size={17} strokeWidth={1.8} style={{ flexShrink: 0, marginTop: 1 }} />
+            <span style={{ flex: 1 }}>
+              {hostOf(address) === mdns.name
+                ? `${mdns.name} isn't answering on the network${mdns.error ? ` (${mdns.error})` : ""}, so the printed codes won't open.`
+                : `This PC isn't at ${address} any more, so the printed codes won't open.`}{" "}
+              {check.suggested ? `Update the address to ${check.suggested}, then print the codes again.` : "Save the address phones on the Wi-Fi reach this PC at, then print the codes again."}
+            </span>
+            {check.suggested && (
+              <Button tone="primary" disabled={busy !== null} onClick={() => check.suggested && saveAddress(check.suggested)} data={{ "menu-address-update": "" }}>
+                Update address
+              </Button>
+            )}
+          </div>
+        )}
+        {reprint && (
+          <div data-menu-reprint role="status" style={{ display: "flex", gap: 10, alignItems: "center", padding: "10px 12px", borderRadius: 8, background: AMBER.bg, border: `1px solid ${AMBER.border}`, color: AMBER.fg, fontSize: 13 }}>
+            <Printer size={17} strokeWidth={1.8} style={{ flexShrink: 0 }} />
+            <span style={{ flex: 1 }}>The address changed: QR codes printed before still open {reprint}. Print them again and swap the old ones.</span>
+            <Button href="/restaurant/menu-cards?all=1" data={{ "menu-reprint-all": "" }}>
+              <Printer size={15} strokeWidth={1.8} /> Print all
+            </Button>
           </div>
         )}
         {choices.length > 0 && (
@@ -255,12 +304,15 @@ export default function MenuQrCodes({ address, choices, wifiName, wifiPassword, 
         )}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <input aria-label="Menu address" data-menu-address-input value={typed} placeholder="http://192.168.1.20:3000" onChange={(e) => setTyped(e.target.value)} style={{ ...field, flex: "1 1 320px", fontFamily: FONTS.mono, fontSize: 13 }} />
-          <Button tone="primary" disabled={busy !== null || !typed.trim() || typed.trim() === address} onClick={() => act("address", () => saveMenuAddressAction({ address: typed }), "Menu address saved.")} data={{ "menu-address-save": "" }}>
+          <Button tone="primary" disabled={busy !== null || !typed.trim() || typed.trim() === address} onClick={() => saveAddress(typed)} data={{ "menu-address-save": "" }}>
             Save address
           </Button>
         </div>
         <span style={{ fontSize: 12.5, color: COLORS.slateMid }}>
-          Printed codes keep this address. Give the server a fixed IP (or a DHCP reservation on the router) so it doesn&apos;t change; if it does, save the new one and print the cards again. The PC&apos;s name (…local) opens on iPhones but not on every Android phone.
+          {mdns.running
+            ? `${mdns.name} is this app's name on the Wi-Fi: it follows this PC when its IP changes, so printed codes keep working. iPhones open .local names but not every Android phone does, so each printed code also shows the IP to type. `
+            : ""}
+          Printed codes keep the address they were printed with: after it changes, print them again. Give this PC a fixed IP (a DHCP reservation on the router) so the IP under the codes stays right too.
         </span>
       </section>
 

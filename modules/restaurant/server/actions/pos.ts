@@ -8,7 +8,8 @@ import { createSwitchToken } from "@/lib/auth/posSwitch";
 import { isModuleEnabled } from "@/lib/modules/enabled.server";
 import type { ActionResult } from "../../lib/actionResult";
 import { RESTAURANT_PERMISSIONS } from "../../manifest";
-import { newPosOrderSchema, posDrawerSchema, posSettingsSchema, posSwitchSchema } from "../../schemas/pos";
+import { newPosOrderSchema, paymentSettingsSchema, posDrawerSchema, posSettingsSchema, posSwitchSchema } from "../../schemas/pos";
+import { setPaymentSettings } from "../services/paymentSettings";
 import { currentDeviceId } from "@/lib/hardware/device";
 import { openDrawerByHand, type DrawerAnswer } from "@/lib/hardware/drawer";
 import { PERMISSIONS } from "@/lib/permissions";
@@ -150,6 +151,22 @@ export async function savePosSettings(input: unknown): Promise<ActionResult> {
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Those settings can't be saved." };
     const result = await setPosSettings(parsed.data);
     if (result.ok) refresh();
+    return result;
+  });
+}
+
+// Settings › Restaurant › Payments: the tablet's tip step.
+export async function savePaymentSettings(input: unknown): Promise<ActionResult> {
+  return safely("save payment settings", async (): Promise<ActionResult> => {
+    const authCheck = await requirePermission(RESTAURANT_PERMISSIONS.RESTAURANT_SETTINGS);
+    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
+    const parsed = paymentSettingsSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: "Those settings can't be saved." };
+    const result = await setPaymentSettings(parsed.data);
+    if (result.ok) {
+      revalidatePath("/settings/restaurant/payments");
+      revalidatePath("/t", "layout");
+    }
     return result;
   });
 }

@@ -198,7 +198,9 @@ export async function savePlansInTx(
     const goneFixtures = fixtures.filter((f) => !f.deletedAt && !fixtureIds.includes(f.id)).map((f) => f.id);
     if (goneFixtures.length) await tx.floorFixture.updateMany({ where: { id: { in: goneFixtures } }, data: { deletedAt: now } });
     const roomData = plan.room ? { roomWidthM: plan.room.widthM, roomHeightM: plan.room.heightM, gridSizeM: plan.room.gridM } : {};
-    const version = (await tx.diningArea.update({ where: { id: plan.areaId }, data: { ...roomData, layoutVersion: { increment: 1 } }, select: { layoutVersion: true } })).layoutVersion;
+    // Saved in the editor (or a layout put on the floor): its places are real
+    // from now on, not the grid drawn for an unsaved area (6g follow-up 3).
+    const version = (await tx.diningArea.update({ where: { id: plan.areaId }, data: { ...roomData, layoutVersion: { increment: 1 }, floorPlanSavedAt: now }, select: { layoutVersion: true } })).layoutVersion;
     versions[plan.areaId] = version;
     // An event layout on the floor keeps up with its edits (Step 5).
     const active = await tx.floorLayout.findFirst({ where: { areaId: plan.areaId, isActive: true }, select: { id: true, name: true } });

@@ -13,9 +13,10 @@ import TabletOrder from "../../components/tablet/TabletOrder";
 import TabletNewOrder from "../../components/tablet/TabletNewOrder";
 import { getOrderScreen } from "../../server/queries/orderScreen";
 import { getBill } from "../../server/queries/bill";
-import { getVoidApprovers } from "../../server/queries/approvers";
+import { getDiscountApprovers, getVoidApprovers } from "../../server/queries/approvers";
+import { getPaymentSettings } from "../../server/services/paymentSettings";
 import { getQuickNotes } from "../../server/queries/menuGroups";
-import { getPosSettings } from "../../server/queries/posScreen";
+import { getCounterOrders, getPosSettings } from "../../server/queries/posScreen";
 import { getPosSessionInfo } from "../../server/posSessionInfo";
 import { TABLET_TABLES } from "../../lib/tabletDevice";
 import { getCurrentUserPermissions } from "@/lib/auth/permissions.server";
@@ -75,13 +76,16 @@ export async function TabletTablesPage({ searchParams }: { searchParams: Promise
     if (bar && bar !== floor.areaId) floor = await getFloor(bar);
   }
   const current = await getCurrentUserPermissions();
-  // A floor plan saved in the editor (Part 7: each save moves layoutVersion
-  // on); never saved, the landscape view shows the tiles instead.
-  const planned = floor.areaId ? ((await prisma.diningArea.findUnique({ where: { id: floor.areaId }, select: { layoutVersion: true } }))?.layoutVersion ?? 0) > 0 : false;
+  // Every area is drawn in landscape: one never saved in the editor gets its
+  // tables in a grid by number (6g follow-up 3), and a manager who may edit
+  // the floor plan gets a link to arrange it there. Waiters never see it.
+  const canArrange = !current.serviceOnly && current.permissions.has(P.MANAGE_FLOOR_PLAN);
   const settings = await getPosSettings();
-  const [user, session] = await Promise.all([
+  const [user, session, counter] = await Promise.all([
     current.userId ? prisma.user.findUnique({ where: { id: current.userId }, select: { firstName: true, lastName: true, displayName: true } }) : null,
     getPosSessionInfo(current, settings),
+    // The open takeaways and tabs (6g follow-up 2), as the desktop's strip.
+    getCounterOrders(),
   ]);
   const name = user ? user.displayName?.trim() || `${user.firstName} ${user.lastName}`.trim() : "";
   return (
@@ -95,10 +99,14 @@ export async function TabletTablesPage({ searchParams }: { searchParams: Promise
         session={session.shift}
         autoLockSeconds={session.terminal ? session.lockSeconds : 0}
         areaName={floor.areas.find((a) => a.id === floor.areaId)?.name ?? ""}
-        room={planned ? floor.room : null}
+        room={floor.room}
+        planSaved={floor.planSaved}
+        canArrange={canArrange}
         fixtures={floor.fixtures.map((f) => ({ id: f.id, x: f.x, y: f.y, w: f.w, h: f.h, rotation: f.rotation, label: f.label }))}
         places={Object.fromEntries(floor.tables.map((t) => [t.id, t.place]))}
         summary={{ free: floor.summary.free, openOrders: floor.summary.openOrders, openValue: floor.summary.openValue }}
+        requests={floor.requests}
+        counter={counter}
       />
     </TabletShell>
   );
@@ -112,7 +120,7 @@ export async function TabletOrderPage({ params, searchParams }: { params: Promis
   const denied = await guardPage(P.MANAGE_ORDERS);
   if (denied) return <Denied>{denied}</Denied>;
   const [{ orderId }, { pay }] = await Promise.all([params, searchParams]);
-  const [data, bill, voidApprovers, quickNotes, settings, current] = await Promise.all([getOrderScreen(orderId), getBill(orderId), getVoidApprovers(), getQuickNotes(), getPosSettings(), getCurrentUserPermissions()]);
+  const [data, bill, voidApprovers, discountApprovers, payments, quickNotes, settings, current] = await Promise.all([getOrderScreen(orderId), getBill(orderId), getVoidApprovers(), getDiscountApprovers(), getPaymentSettings(), getQuickNotes(), getPosSettings(), getCurrentUserPermissions()]);
   if (!data || !bill) {
     return (
       <TabletShell orientation="portrait">
@@ -131,6 +139,8 @@ export async function TabletOrderPage({ params, searchParams }: { params: Promis
         data={data}
         bill={bill}
         voidApprovers={voidApprovers}
+        discountApprovers={discountApprovers}
+        tipsOn={payments.tabletTips}
         quickNotes={quickNotes}
         columns={settings.tabletColumns}
         sendToFloor={settings.sendToFloor}
