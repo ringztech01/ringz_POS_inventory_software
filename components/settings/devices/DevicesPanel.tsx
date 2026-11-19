@@ -7,14 +7,16 @@ import toast from "react-hot-toast";
 import { MonitorSmartphone } from "lucide-react";
 import { COLORS, FONTS } from "@/components/layout/theme";
 import { renameDevice } from "@/app/(dashboard)/settings/devices/actions";
-import { setDeviceInterface } from "@/modules/restaurant/server/actions/interface";
+import { setDeviceInterface, setDeviceScreen } from "@/modules/restaurant/server/actions/interface";
 import { setPinTerminal } from "@/modules/restaurant/server/actions/pinSignIn";
 
 type View = "SERVICE" | "CLASSIC";
 // terminal (Part 6f Steps 4 and 7c): not paired (null), a PIN terminal, the
 // Kitchen screen or a Bar terminal (on `areaId`).
 type Kind = "POS" | "KITCHEN" | "BAR";
-export type DeviceListRow = { id: string; name: string | null; browser: string; lastSeen: string; view: View | null; terminal: Kind | null; areaId: string | null };
+// screen (Part 6g): Auto (from the browser: `detected`), Tablet or Desktop.
+type Screen = "AUTO" | "TABLET" | "DESKTOP";
+export type DeviceListRow = { id: string; name: string | null; browser: string; lastSeen: string; view: View | null; terminal: Kind | null; areaId: string | null; screen: Screen; detected: "TABLET" | "DESKTOP" };
 type Restaurant = { businessView: View; canPair: boolean; areas: { id: string; name: string }[] };
 const KIND_LABEL: Record<Kind, string> = { POS: "PIN terminal", KITCHEN: "Kitchen screen", BAR: "Bar terminal" };
 const KIND_DONE: Record<Kind, string> = {
@@ -43,7 +45,8 @@ export default function DevicesPanel({ devices, thisDeviceId, restaurant }: { de
               <Link href="/settings/restaurant/interface" style={{ color: COLORS.teal, fontWeight: 600 }}>
                 the business&apos;s view
               </Link>{" "}
-              ({VIEW_LABEL[restaurant.businessView]}). A paired device always opens on the PIN screen — no email or password sign-in on it at all: a <strong>PIN terminal</strong>; the <strong>Kitchen screen</strong> (Kitchen staff and managers, then the kitchen display); a <strong>Bar terminal</strong> (Tables on its area){restaurant.canPair ? "" : ". Only an Administrator pairs one"}.
+              ({VIEW_LABEL[restaurant.businessView]}). <strong>Screens</strong>: a Tablet gets the tablet screens (PIN, Tables, Order) in the Service view, a Desktop the POS screens; Auto goes by the browser (Android tablets and iPads are Tablets)
+. A paired device always opens on the PIN screen — no email or password sign-in on it at all: a <strong>PIN terminal</strong>; the <strong>Kitchen screen</strong> (Kitchen staff and managers, then the kitchen display); a <strong>Bar terminal</strong> (Tables on its area){restaurant.canPair ? "" : ". Only an Administrator pairs one"}.
             </>
           )}
         </p>
@@ -59,6 +62,7 @@ export default function DevicesPanel({ devices, thisDeviceId, restaurant }: { de
                 <th style={{ padding: "10px 16px", fontWeight: 600 }}>Browser</th>
                 <th style={{ padding: "10px 16px", fontWeight: 600 }}>Last seen</th>
                 {restaurant && <th style={{ padding: "10px 16px", fontWeight: 600 }}>Restaurant view</th>}
+                {restaurant && <th style={{ padding: "10px 16px", fontWeight: 600 }}>Screens</th>}
                 {restaurant && <th style={{ padding: "10px 16px", fontWeight: 600 }}>Paired as</th>}
               </tr>
             </thead>
@@ -96,6 +100,15 @@ function DeviceRow({ device, isThis, restaurant, cell }: { device: DeviceListRow
       const result = await setPinTerminal({ deviceId: device.id, on: !!kind, kind: kind ?? undefined, areaId: kind === "BAR" ? (areaId ?? barArea) : null }).catch(() => ({ ok: false as const, error: UNREACHABLE }));
       if (!result.ok) return void toast.error(result.error);
       toast.success(`${name.trim() || "This device"}: ${kind ? KIND_DONE[kind] : "not paired — the email sign-in is back."}`);
+      router.refresh();
+    });
+  }
+  function saveScreen(value: string) {
+    const screen: Screen = value === "TABLET" || value === "DESKTOP" ? value : "AUTO";
+    startWork(async () => {
+      const result = await setDeviceScreen({ deviceId: device.id, screen }).catch(() => ({ ok: false as const, error: UNREACHABLE }));
+      if (!result.ok) return void toast.error(result.error);
+      toast.success(`${name.trim() || "This device"}: ${screen === "AUTO" ? `screens by its browser (${device.detected === "TABLET" ? "a tablet" : "a desktop"})` : screen === "TABLET" ? "the tablet screens" : "the desktop POS screens"}. It switches the next time a screen loads.`);
       router.refresh();
     });
   }
@@ -149,6 +162,22 @@ function DeviceRow({ device, isThis, restaurant, cell }: { device: DeviceListRow
             <option value="">Business default ({VIEW_LABEL[restaurant.businessView]})</option>
             <option value="SERVICE">Service view</option>
             <option value="CLASSIC">Classic view</option>
+          </select>
+        </td>
+      )}
+      {restaurant && (
+        <td style={cell}>
+          <select
+            aria-label="Screens"
+            data-device-screen
+            value={device.screen}
+            disabled={working}
+            onChange={(event) => saveScreen(event.target.value)}
+            style={{ height: 34, border: `1px solid ${COLORS.border}`, borderRadius: 8, padding: "0 8px", fontSize: 13.5, background: "#fff" }}
+          >
+            <option value="AUTO">Auto ({device.detected === "TABLET" ? "Tablet" : "Desktop"})</option>
+            <option value="TABLET">Tablet</option>
+            <option value="DESKTOP">Desktop</option>
           </select>
         </td>
       )}

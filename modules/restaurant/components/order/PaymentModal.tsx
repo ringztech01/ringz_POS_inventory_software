@@ -11,6 +11,7 @@ import { DecimalInput, Field, SelectInput } from "@/components/purchases/form-fi
 import { PAYMENT_TYPE_LABELS } from "@/components/purchases/purchase-display";
 import PosButton from "@/components/pos/PosButton";
 import { POS } from "@/components/pos/theme";
+import { newUuid } from "../../lib/newUuid";
 import { MAX_PAYMENT_METHODS, quickCash, tender } from "../../lib/tender";
 
 export type SettleRequest = {
@@ -63,7 +64,7 @@ export default function PaymentModal({
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // One per opening of the pop-up: a retry of this payment can't settle twice.
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(newUuid);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {

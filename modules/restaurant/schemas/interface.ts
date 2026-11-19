@@ -9,3 +9,10 @@ export const deviceInterfaceSchema = z.object({
   view: restaurantViewSchema.nullable(),
 });
 export type DeviceInterfaceInput = z.infer<typeof deviceInterfaceSchema>;
+
+// Part 6g: a device's screens — Auto (from its browser), Tablet or Desktop.
+export const deviceScreenSchema = z.object({
+  deviceId: z.string().regex(/^[0-9a-f-]{36}$/, "That device isn't known."),
+  screen: z.enum(["AUTO", "TABLET", "DESKTOP"], { message: "Pick Auto, Tablet or Desktop." }),
+});
+export type DeviceScreenInput = z.infer<typeof deviceScreenSchema>;

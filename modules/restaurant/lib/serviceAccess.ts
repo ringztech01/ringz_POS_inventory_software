@@ -46,6 +46,8 @@ const PREFIXES = [
   "/api/auth/",
   // The touch POS, Tables and the POS receipt.
   "/pos",
+  // The tablet screens (Part 6g).
+  "/t",
   // The kitchen display.
   "/restaurant/kitchen",
   // Classic: the floor, the open orders and an order.

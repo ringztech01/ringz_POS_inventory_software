@@ -39,5 +39,9 @@ export const posSettingsSchema = z.object({
   lockSecondsManager: z.number().refine((n): n is (typeof MANAGER_LOCK_CHOICES)[number] => (MANAGER_LOCK_CHOICES as readonly number[]).includes(n), "Pick one of the times."),
   // The light theme instead of the dark frame (every till).
   lightTheme: z.boolean(),
+  // The tablet Order screen's item columns (Part 6g Step 5).
+  tabletColumns: z.union([z.literal(2), z.literal(3), z.literal(4)], { message: "Pick 2, 3 or 4 columns." }),
+  // Keep a tablet's screen on while the app is open (Part 6g Step 6).
+  tabletWakeLock: z.boolean(),
 });
 export type PosSettingsInput = z.output<typeof posSettingsSchema>;

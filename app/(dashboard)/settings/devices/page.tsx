@@ -10,6 +10,7 @@ import DeviceBeacon from "@/components/hardware/DeviceBeacon";
 import DevicesPanel from "@/components/settings/devices/DevicesPanel";
 import { restaurantModule } from "@/modules/restaurant/manifest";
 import { browserOf } from "@/lib/hardware/deviceLabel";
+import { detectedKind } from "@/modules/restaurant/lib/tabletDevice";
 
 const seen = new Intl.DateTimeFormat("en-GB", { timeZone: APP_TIME_ZONE, day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
@@ -25,7 +26,7 @@ export default async function DevicesPage() {
   const { permissions } = current;
   if (!permissions.has(PERMISSIONS.MANAGE_SETTING)) return <ForbiddenState permission={PERMISSIONS.MANAGE_SETTING} />;
   const [devices, thisDeviceId, restaurant, business] = await Promise.all([
-    prisma.device.findMany({ orderBy: [{ lastSeenAt: "desc" }], take: 200, select: { id: true, name: true, userAgent: true, lastSeenAt: true, restaurantInterface: true, pinLogin: true, terminalRole: true, homeAreaId: true } }),
+    prisma.device.findMany({ orderBy: [{ lastSeenAt: "desc" }], take: 200, select: { id: true, name: true, userAgent: true, lastSeenAt: true, restaurantInterface: true, pinLogin: true, terminalRole: true, homeAreaId: true, screen: true, touchScreen: true } }),
     currentDeviceId(),
     isModuleEnabled(restaurantModule.id),
     prisma.businessSetting.findUnique({ where: { id: BUSINESS_SETTINGS_ID }, select: { restaurantInterface: true } }),
@@ -34,7 +35,7 @@ export default async function DevicesPage() {
     <>
       <DeviceBeacon />
       <DevicesPanel
-        devices={devices.map((d) => ({ id: d.id, name: d.name, browser: browserOf(d.userAgent), lastSeen: seen.format(d.lastSeenAt), view: d.restaurantInterface, terminal: d.pinLogin ? d.terminalRole : null, areaId: d.homeAreaId }))}
+        devices={devices.map((d) => ({ id: d.id, name: d.name, browser: browserOf(d.userAgent), lastSeen: seen.format(d.lastSeenAt), view: d.restaurantInterface, terminal: d.pinLogin ? d.terminalRole : null, areaId: d.homeAreaId, screen: d.screen, detected: detectedKind(d.userAgent, d.touchScreen) }))}
         thisDeviceId={thisDeviceId}
         restaurant={restaurant ? { businessView: business?.restaurantInterface ?? "SERVICE", canPair: await isSystemAdmin(current), areas: await prisma.diningArea.findMany({ where: { deletedAt: null }, orderBy: { name: "asc" }, select: { id: true, name: true } }) } : null}
       />

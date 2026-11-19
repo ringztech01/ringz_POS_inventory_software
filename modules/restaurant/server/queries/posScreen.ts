@@ -23,13 +23,13 @@ export async function getPosMenu(): Promise<OrderScreenData["menu"]> {
 // lockSeconds: service staff's auto-lock (0: never — then nobody's screen
 // locks by itself); lockSecondsManager: Managers' and the Administrator's
 // (Part 6f Step 6).
-export type PosSettings = { returnHome: boolean; sendToFloor: boolean; lockSeconds: number; lockSecondsManager: number; lightTheme: boolean };
+export type PosSettings = { returnHome: boolean; sendToFloor: boolean; lockSeconds: number; lockSecondsManager: number; lightTheme: boolean; tabletColumns: 2 | 3 | 4; tabletWakeLock: boolean };
 
 // The touch POS's own settings (Restaurant › Touch POS), read on their own.
 export async function getPosSettings(): Promise<PosSettings> {
   const row = await prisma.businessSetting.findUnique({
     where: { id: BUSINESS_SETTINGS_ID },
-    select: { restaurantPosReturnHome: true, restaurantPosSendToFloor: true, restaurantPosLockSeconds: true, restaurantPosLockSecondsManager: true, restaurantPosLightTheme: true },
+    select: { restaurantPosReturnHome: true, restaurantPosSendToFloor: true, restaurantPosLockSeconds: true, restaurantPosLockSecondsManager: true, restaurantPosLightTheme: true, restaurantTabletColumns: true, restaurantTabletWakeLock: true },
   });
   return {
     returnHome: row?.restaurantPosReturnHome ?? false,
@@ -37,6 +37,8 @@ export async function getPosSettings(): Promise<PosSettings> {
     lockSeconds: row?.restaurantPosLockSeconds ?? 0,
     lockSecondsManager: row?.restaurantPosLockSecondsManager ?? 300,
     lightTheme: row?.restaurantPosLightTheme ?? false,
+    tabletColumns: row?.restaurantTabletColumns === 2 || row?.restaurantTabletColumns === 4 ? row.restaurantTabletColumns : 3,
+    tabletWakeLock: row?.restaurantTabletWakeLock ?? true,
   };
 }
 

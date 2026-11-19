@@ -6,6 +6,7 @@ import { BUSINESS_SETTINGS_ID } from "@/lib/business-settings";
 import { defaultDisplayName } from "../../lib/staffPins";
 import { homeHref } from "../../lib/staffRoles";
 import { resolveView, routesFor, type ServiceRoutes } from "../../lib/serviceRoutes";
+import { deviceKind } from "../../lib/tabletDevice";
 import { afterRight, afterWrong, lockedFor, waitText, type GuessState } from "../../lib/pinLockout";
 import type { PosStaff } from "../queries/posScreen";
 import { checkUserPin, findByPin, WRONG_PIN } from "./approvalPins";
@@ -152,12 +153,15 @@ export async function staffHome(userId: string, routes: ServiceRoutes): Promise<
 // in the device's own view, or the business's. A paired Kitchen screen
 // (Step 7c) opens the kitchen display — the person's station, if theirs is
 // the kitchen; a Bar terminal, Tables on its area with the bar tabs first.
-export async function staffHomeOn(userId: string, deviceId: string | null): Promise<string> {
+// `userAgent`: the browser asking (else the one the device last reported) —
+// on a Tablet in the Service view, home is on the tablet screens (Part 6g).
+export async function staffHomeOn(userId: string, deviceId: string | null, userAgent: string | null = null): Promise<string> {
   const [business, device] = await Promise.all([
     prisma.businessSetting.findUnique({ where: { id: BUSINESS_SETTINGS_ID }, select: { restaurantInterface: true } }),
-    deviceId ? prisma.device.findUnique({ where: { id: deviceId }, select: { restaurantInterface: true, pinLogin: true, terminalRole: true, homeAreaId: true } }) : null,
+    deviceId ? prisma.device.findUnique({ where: { id: deviceId }, select: { restaurantInterface: true, pinLogin: true, terminalRole: true, homeAreaId: true, screen: true, touchScreen: true, userAgent: true } }) : null,
   ]);
-  const routes = routesFor(resolveView(business, device));
+  const tablet = deviceKind(device?.screen, userAgent ?? device?.userAgent, device?.touchScreen ?? false) === "TABLET";
+  const routes = routesFor(resolveView(business, device), { tablet });
   if (device?.pinLogin && device.terminalRole === "KITCHEN") {
     const user = await prisma.user.findUnique({ where: { id: userId }, select: { homeStation: true, userRole: { select: { homeScreen: true, homeStation: true } } } });
     const station = user?.homeStation ?? (user?.userRole?.homeScreen === "KITCHEN" ? user.userRole.homeStation : null);

@@ -7,6 +7,7 @@ import { isModuleEnabled } from "@/lib/modules/enabled.server";
 import PinLoginPage from "@/modules/restaurant/pages/PinLoginPage";
 import { getServiceRoutes } from "@/modules/restaurant/server/serviceView";
 import { signedInLanding } from "@/modules/restaurant/server/services/pinSignIn";
+import { isTabletRequest } from "@/modules/restaurant/server/tabletDevice";
 
 export const metadata: Metadata = {
   title: "Sign in · RingzPOS",
@@ -31,6 +32,8 @@ export default async function LoginPage() {
     redirect(landing ?? "/dashboard");
   }
 
+  // A paired tablet (Part 6g): the tablet's own PIN login.
+  if (terminal && (await isTabletRequest())) redirect("/t/login");
   if (terminal) return <PinLoginPage />;
   return <LoginForm recovery={await isModuleEnabled("restaurant").catch(() => false)} />;
 }

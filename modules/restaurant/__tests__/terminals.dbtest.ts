@@ -58,7 +58,10 @@ describe("Device roles (database copy)", { skip: enabled ? false : "set RESTAURA
   });
 
   test("the Kitchen screen lists only who signs in there, and opens the kitchen display", async () => {
-    const screen = await getPinLoginScreen(device);
+    // The list itself (names shown, everyone, not only who's on shift), whatever the business's settings.
+    const was = await prisma.businessSetting.findUniqueOrThrow({ where: { id: "default" }, select: { restaurantPinHideNames: true, restaurantClockInOut: true } });
+    await prisma.businessSetting.update({ where: { id: "default" }, data: { restaurantPinHideNames: false, restaurantClockInOut: false } });
+    const screen = await getPinLoginScreen(device).finally(() => prisma.businessSetting.update({ where: { id: "default" }, data: was }));
     assert.equal(screen.kind, "KITCHEN");
     assert.ok(screen.staff.some((s) => s.id === kemi));
     assert.ok(!screen.staff.some((s) => s.id === ada), "no Waiter on the kitchen screen's list");

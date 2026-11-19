@@ -215,6 +215,11 @@ model BusinessSetting {
   restaurantQuickNotes            Json?
   // Touch POS: after Send, back to the floor plan (on) or stay on the order.
   restaurantPosSendToFloor        Boolean             @default(true)
+  // The tablet Order screen's item columns (Part 6g Step 5): 2, 3 or 4.
+  restaurantTabletColumns         Int                 @default(3)
+  // Keep a tablet's screen on while the app is open (Part 6g Step 6). Browsers
+  // only allow it on HTTPS pages.
+  restaurantTabletWakeLock        Boolean             @default(true)
   // Touch POS: lock the screen (PIN to carry on) after this many seconds
   // without a tap; 0 never.
   restaurantPosLockSeconds        Int                 @default(0)
@@ -1916,6 +1921,13 @@ model Device {
   // only) or a Bar terminal (opens Tables on its area, homeAreaId).
   terminalRole        TerminalRole         @default(POS)
   homeAreaId          String?
+  // Which screens it gets (Part 6g): AUTO works it out from the browser
+  // (Android tablets and iPads: the tablet screens, /t/…); an admin can
+  // force TABLET or DESKTOP in Settings › Devices. touchScreen: what the
+  // browser said last (an iPad's Safari says it's a Mac; its touch screen
+  // gives it away).
+  screen              DeviceScreen         @default(AUTO)
+  touchScreen         Boolean              @default(false)
 
   overrides DeviceOverride[]
   homeArea  DiningArea?      @relation("DeviceHomeArea", fields: [homeAreaId], references: [id], onDelete: SetNull)
@@ -2201,6 +2213,14 @@ enum TerminalRole {
   POS
   KITCHEN
   BAR
+}
+
+// A device's screens (Part 6g): AUTO (from the browser), TABLET (the
+// tablet screens, /t/…) or DESKTOP (the desktop POS screens).
+enum DeviceScreen {
+  AUTO
+  TABLET
+  DESKTOP
 }
 
 // Each time a menu item is 86'd or comes back (Food › Menu items' Available

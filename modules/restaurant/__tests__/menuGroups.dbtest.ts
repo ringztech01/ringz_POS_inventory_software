@@ -164,10 +164,10 @@ describe("POS buttons (database copy)", { skip: enabled ? false : "set RESTAURAN
   });
 
   test("the touch POS settings: after a dish, after Send, auto-lock", async () => {
-    assert.deepEqual(await getPosSettings(), { returnHome: false, sendToFloor: true, lockSeconds: 0, lockSecondsManager: 300, lightTheme: false }, "the defaults");
-    assert.ok((await setPosSettings({ returnHome: true, sendToFloor: false, lockSeconds: 60, lockSecondsManager: 600, lightTheme: true })).ok);
-    assert.deepEqual(await getPosSettings(), { returnHome: true, sendToFloor: false, lockSeconds: 60, lockSecondsManager: 600, lightTheme: true });
+    assert.deepEqual(await getPosSettings(), { returnHome: false, sendToFloor: true, lockSeconds: 0, lockSecondsManager: 300, lightTheme: false, tabletColumns: 3, tabletWakeLock: true }, "the defaults");
+    assert.ok((await setPosSettings({ returnHome: true, sendToFloor: false, lockSeconds: 60, lockSecondsManager: 600, lightTheme: true, tabletColumns: 4, tabletWakeLock: false })).ok);
+    assert.deepEqual(await getPosSettings(), { returnHome: true, sendToFloor: false, lockSeconds: 60, lockSecondsManager: 600, lightTheme: true, tabletColumns: 4, tabletWakeLock: false });
     assert.equal((await getBusinessSettings()).restaurantPosReturnHome, true, "the menu pad reads it from the business settings");
-    assert.ok((await setPosSettings({ returnHome: false, sendToFloor: true, lockSeconds: 0, lockSecondsManager: 300, lightTheme: false })).ok);
+    assert.ok((await setPosSettings({ returnHome: false, sendToFloor: true, lockSeconds: 0, lockSecondsManager: 300, lightTheme: false, tabletColumns: 3, tabletWakeLock: true })).ok);
   });
 });

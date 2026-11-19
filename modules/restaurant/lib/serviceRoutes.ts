@@ -41,7 +41,16 @@ const query = (params: Record<string, string | null | undefined | false>) => {
   return pairs.length ? `?${pairs.map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&")}` : "";
 };
 
-export function routesFor(view: RestaurantView): ServiceRoutes {
+// The tablet screens (Part 6g): on a device that's a Tablet, the Service
+// view's Tables and order screens are /t/… (a Classic device keeps Classic).
+export const TABLET_ROUTES: Omit<ServiceRoutes, "view"> = {
+  tables: (opts) => `/t/tables${query({ area: opts?.areaId, focus: opts?.focus === "bar" ? "bar" : null })}`,
+  order: (orderId, opts) => `/t/order/${encodeURIComponent(orderId)}${query({ pay: opts?.pay ? "1" : null })}`,
+  pos: "/t/tables",
+};
+
+export function routesFor(view: RestaurantView, opts?: { tablet?: boolean }): ServiceRoutes {
+  if (view === "SERVICE" && opts?.tablet) return { view, ...TABLET_ROUTES };
   if (view === "CLASSIC")
     return {
       view,
@@ -59,4 +68,4 @@ export function routesFor(view: RestaurantView): ServiceRoutes {
 
 // The spec's resolver: the business's setting and this device's → the
 // Tables, Order and POS routes.
-export const resolveServiceRoutes = (business: Picks, device: Picks): ServiceRoutes => routesFor(resolveView(business, device));
+export const resolveServiceRoutes = (business: Picks, device: Picks, opts?: { tablet?: boolean }): ServiceRoutes => routesFor(resolveView(business, device), opts);

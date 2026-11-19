@@ -24,7 +24,17 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   // The guest's digital menu (Part 8, /menu/…, marked by the proxy): phones
   // on the restaurant's Wi-Fi, maybe with no internet — no web fonts from
   // Google, no toasts; system fonts and the page's own styles only.
-  if ((await headers()).get(GUEST_SURFACE_HEADER) === "menu") {
+  const surface = (await headers()).get(GUEST_SURFACE_HEADER);
+  // The tablet screens (Part 6g, /t/…): system fonts only, flat and dark;
+  // no web fonts (a tablet on the restaurant's Wi-Fi may have no internet).
+  if (surface === "tablet") {
+    return (
+      <html lang="en">
+        <body style={{ margin: 0, background: "#0E0F11", color: "#fff", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif", WebkitFontSmoothing: "antialiased" }}>{children}</body>
+      </html>
+    );
+  }
+  if (surface === "menu") {
     return (
       <html lang="en">
         <body style={{ margin: 0, background: "#fafbfb", color: "#171b1c", WebkitFontSmoothing: "antialiased" }}>{children}</body>

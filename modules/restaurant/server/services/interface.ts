@@ -3,7 +3,7 @@ import { writeAudit } from "@/lib/audit";
 import { prisma } from "@/lib/db";
 import { BUSINESS_SETTINGS_ID } from "@/lib/business-settings";
 import { DEFAULT_VIEW, type RestaurantView } from "../../lib/serviceRoutes";
-import type { DeviceInterfaceInput } from "../../schemas/interface";
+import type { DeviceInterfaceInput, DeviceScreenInput } from "../../schemas/interface";
 
 // Part 6f Step 1: the restaurant's view, for the business and per device.
 // Each change goes in the audit log. Open orders aren't touched — the view
@@ -50,6 +50,17 @@ export async function setDeviceInterface(input: DeviceInterfaceInput, userId: st
         { userId, action: "device.interface.set", entityType: "Device", entityId: input.deviceId, meta: { device: device.name, from: device.restaurantInterface ?? "BUSINESS", to: input.view ?? "BUSINESS" } },
         tx,
       );
+    return { ok: true as const };
+  });
+}
+
+// Part 6g: which screens a device gets (Auto: from its browser). Logged.
+export async function setDeviceScreen(input: DeviceScreenInput, userId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  return prisma.$transaction(async (tx) => {
+    const device = await tx.device.findUnique({ where: { id: input.deviceId }, select: { name: true, screen: true } });
+    if (!device) return { ok: false as const, error: "That device is no longer listed — refreshed." };
+    await tx.device.update({ where: { id: input.deviceId }, data: { screen: input.screen } });
+    if (device.screen !== input.screen) await writeAudit({ userId, action: "device.screen.set", entityType: "Device", entityId: input.deviceId, meta: { device: device.name, from: device.screen, to: input.screen } }, tx);
     return { ok: true as const };
   });
 }

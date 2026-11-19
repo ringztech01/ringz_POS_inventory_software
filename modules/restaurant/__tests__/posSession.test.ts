@@ -58,8 +58,10 @@ test("what the browser may send: a takeaway, a named tab, a PIN, the settings", 
   assert.equal(newPosOrderSchema.safeParse({ type: "DINE_IN" }).success, false, "dine-in starts from a table");
   assert.equal(posSwitchSchema.safeParse({ userId: "u1", pin: "123" }).success, false);
   assert.equal(posSwitchSchema.safeParse({ userId: "u1", pin: "1234" }).success, true);
-  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300, lightTheme: false }).success, true);
-  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 0, lightTheme: false }).success, false, "managers: never isn't one of theirs");
-  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 45, lockSecondsManager: 300, lightTheme: false }).success, false);
-  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300 }).success, false, "the theme is part of it");
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300, lightTheme: false, tabletColumns: 3, tabletWakeLock: true }).success, true);
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300, lightTheme: false, tabletColumns: 5, tabletWakeLock: true }).success, false, "the tablet: 2, 3 or 4 columns");
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300, lightTheme: false, tabletWakeLock: true }).success, false, "the tablet's columns are part of it");
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 0, lightTheme: false, tabletColumns: 3, tabletWakeLock: true }).success, false, "managers: never isn't one of theirs");
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 45, lockSecondsManager: 300, lightTheme: false, tabletColumns: 3, tabletWakeLock: true }).success, false);
+  assert.equal(posSettingsSchema.safeParse({ returnHome: false, sendToFloor: true, lockSeconds: 60, lockSecondsManager: 300, tabletColumns: 3, tabletWakeLock: true }).success, false, "the theme is part of it");
 });

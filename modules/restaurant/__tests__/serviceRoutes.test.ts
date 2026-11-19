@@ -70,7 +70,10 @@ test("the settings are guarded on the server: the module on and Manage Setting, 
   assert.match(page, /await requireRestaurant\(\);\s*const denied = await pageGuard\(PERMISSIONS\.MANAGE_SETTING\);/);
   assert.match(readFileSync("app/(dashboard)/settings/restaurant/interface/page.tsx", "utf8"), /pages\/InterfaceSettingsPage/);
   const actions = readFileSync("modules/restaurant/server/actions/interface.ts", "utf8");
-  assert.equal((actions.match(/await requireCorePermission\(PERMISSIONS\.MANAGE_SETTING\)/g) ?? []).length, 2);
+  // Every action in it (the business's view, a device's view, a device's screens — Part 6g).
+  const exported = (actions.match(/^export async function /gm) ?? []).length;
+  assert.ok(exported >= 3);
+  assert.equal((actions.match(/await requireCorePermission\(PERMISSIONS\.MANAGE_SETTING\)/g) ?? []).length, exported);
   assert.match(readFileSync("app/(dashboard)/settings/devices/actions.ts", "utf8"), /await requirePermission\(PERMISSIONS\.MANAGE_SETTING\)/);
   assert.match(readFileSync("app/(dashboard)/settings/devices/page.tsx", "utf8"), /permissions\.has\(PERMISSIONS\.MANAGE_SETTING\)/);
 });

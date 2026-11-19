@@ -241,7 +241,7 @@ export async function setQuickNotes(notes: string[]): Promise<ActionResult> {
 // Touch POS settings (Restaurant › Touch POS): after a dish is added, after
 // Send, auto-lock and the theme.
 export async function setPosSettings(input: PosSettingsInput): Promise<ActionResult> {
-  const data = { restaurantPosReturnHome: input.returnHome, restaurantPosSendToFloor: input.sendToFloor, restaurantPosLockSeconds: input.lockSeconds, restaurantPosLockSecondsManager: input.lockSecondsManager, restaurantPosLightTheme: input.lightTheme };
+  const data = { restaurantPosReturnHome: input.returnHome, restaurantPosSendToFloor: input.sendToFloor, restaurantPosLockSeconds: input.lockSeconds, restaurantPosLockSecondsManager: input.lockSecondsManager, restaurantPosLightTheme: input.lightTheme, restaurantTabletColumns: input.tabletColumns, restaurantTabletWakeLock: input.tabletWakeLock };
   await prisma.businessSetting.upsert({ where: { id: BUSINESS_SETTINGS_ID }, create: { id: BUSINESS_SETTINGS_ID, ...data }, update: data });
   return { ok: true };
 }

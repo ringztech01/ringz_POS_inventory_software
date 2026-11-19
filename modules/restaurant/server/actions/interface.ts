@@ -3,10 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { PERMISSIONS } from "@/lib/permissions";
 import type { ActionResult } from "../../lib/actionResult";
-import { deviceInterfaceSchema, interfaceSchema } from "../../schemas/interface";
+import { deviceInterfaceSchema, deviceScreenSchema, interfaceSchema } from "../../schemas/interface";
 import { requireCorePermission } from "../guard";
 import { safely } from "../safely";
-import { setDeviceInterface as setDeviceInterfaceService, setRestaurantInterface as setRestaurantInterfaceService } from "../services/interface";
+import { setDeviceInterface as setDeviceInterfaceService, setDeviceScreen as setDeviceScreenService, setRestaurantInterface as setRestaurantInterfaceService } from "../services/interface";
 
 // Part 6f Step 1. Both: the module on, signed in, Manage Setting (checked
 // here on the server). The next screen load picks the change up; every
@@ -34,6 +34,19 @@ export async function setDeviceInterface(input: unknown): Promise<ActionResult> 
     const parsed = deviceInterfaceSchema.safeParse(input);
     if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That device isn't known." };
     const result = await setDeviceInterfaceService(parsed.data, authCheck.userId);
+    if (result.ok) refresh();
+    return result;
+  });
+}
+
+// Part 6g: Auto, Tablet or Desktop for this device. Manage Setting.
+export async function setDeviceScreen(input: unknown): Promise<ActionResult> {
+  return safely("set device screen", async (): Promise<ActionResult> => {
+    const authCheck = await requireCorePermission(PERMISSIONS.MANAGE_SETTING);
+    if (authCheck.error !== undefined) return { ok: false, error: authCheck.error };
+    const parsed = deviceScreenSchema.safeParse(input);
+    if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "That device isn't known." };
+    const result = await setDeviceScreenService(parsed.data, authCheck.userId);
     if (result.ok) refresh();
     return result;
   });

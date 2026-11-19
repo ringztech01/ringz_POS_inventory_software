@@ -65,6 +65,23 @@ export default function PosSettingsForm({ initial }: { initial: PosSettings }) {
           Stay on the order
         </Choice>
       </Section>
+      <Section title="Tablet item columns" hint="The dishes across a tablet's Order screen (Part 6g). Fewer columns, bigger buttons.">
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 16 }}>
+          {([2, 3, 4] as const).map((n) => (
+            <Choice key={n} name="tabletColumns" value={n as 2 | 3 | 4} current={settings.tabletColumns} onPick={set("tabletColumns")}>
+              {n} columns{n === 3 ? " (default)" : ""}
+            </Choice>
+          ))}
+        </div>
+      </Section>
+      <Section title="Keep the tablet's screen on" hint="While the tablet app is open. Browsers only allow this on an https:// address; on an http:// one, set a long screen timeout in the tablet's own settings.">
+        <Choice name="tabletWakeLock" value={true} current={settings.tabletWakeLock} onPick={set("tabletWakeLock")}>
+          On
+        </Choice>
+        <Choice name="tabletWakeLock" value={false} current={settings.tabletWakeLock} onPick={set("tabletWakeLock")}>
+          Off
+        </Choice>
+      </Section>
       <Section title="Theme" hint="Every till. The dark frame reads best under bar lighting; the light one in daylight.">
         <Choice name="lightTheme" value={false} current={settings.lightTheme} onPick={set("lightTheme")}>
           Dark

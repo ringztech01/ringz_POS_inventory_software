@@ -1,5 +1,6 @@
 "use client";
 
+import { newUuid } from "../../lib/newUuid";
 import { useEffect, useState } from "react";
 import { Minus, Plus, X } from "lucide-react";
 import type { PaymentType } from "@prisma/client";
@@ -49,7 +50,7 @@ export default function RefundModal({
   const [reason, setReason] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [idempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey] = useState(newUuid);
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
